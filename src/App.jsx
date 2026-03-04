@@ -3,8 +3,9 @@ import { supabase } from './supabase';
 import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
-  ArrowRight, Wifi, Database, FileText, AlertCircle, UserCheck, Fingerprint
+  ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component {
@@ -210,6 +211,7 @@ function TeacherPortal({ setRole, user }) {
   const [activeTab, setActiveTab] = useState('launch');
   const [quizzes, setQuizzes] = useState([]);
   const [reports, setReports] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [session, setSession] = useState(null);
   const [responses, setResponses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -221,12 +223,14 @@ function TeacherPortal({ setRole, user }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true);
-      const [resQuizzes, resReports] = await Promise.all([
+      const [resQuizzes, resReports, resClass] = await Promise.all([
         supabase.from('quizzes').select('*').order('created_at', { ascending: false }),
-        supabase.from('reports').select('*').order('ts', { ascending: false })
+        supabase.from('reports').select('*').order('ts', { ascending: false }),
+        supabase.from('classes').select(`*, students(*)`).order('created_at', { ascending: false })
       ]);
       if (resQuizzes.data) setQuizzes(resQuizzes.data);
       if (resReports.data) setReports(resReports.data);
+      if (resClass.data) setClasses(resClass.data);
       setLoadingData(false);
     };
     fetchData();
@@ -282,7 +286,14 @@ function TeacherPortal({ setRole, user }) {
     localStorage.setItem('AssessMe_RoomCode', newCode);
     setResponses([]); // clear prior
 
-    const data = { id: newCode, user_id: user.id, type, quiz, is_active: true, ts: Date.now() };
+    const data = {
+      id: newCode,
+      user_id: user.id,
+      type,
+      quiz: { ...quiz, current_question_idx: 0, show_results: false },
+      is_active: true,
+      ts: Date.now()
+    };
     const { error } = await supabase.from('rooms').insert(data);
     if (error) alert("Error creating room: " + error.message);
     else setActiveTab('results');
@@ -335,7 +346,7 @@ function TeacherPortal({ setRole, user }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Launch', 'Quizzes', 'Results', 'Reports'].map(t => (
+            {['Launch', 'Quizzes', 'Results', 'Reports', 'Classes'].map(t => (
               <button
                 key={t} onClick={() => setActiveTab(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -359,22 +370,25 @@ function TeacherPortal({ setRole, user }) {
       </header>
 
       {/* MOBILE Navigation */}
-      <nav className="md:hidden flex overflow-x-auto p-3 border-b bg-white gap-2 shadow-sm sticky top-16 z-40 no-scrollbar w-full">
-        {['Launch', 'Quizzes', 'Results', 'Reports'].map(t => (
-          <button
-            key={t} onClick={() => setActiveTab(t.toLowerCase())}
-            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-transparent hover:border-slate-200'}`}
-          >
-            {t}
-          </button>
-        ))}
-      </nav>
+      <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full">
+        <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
+          {['launch', 'quizzes', 'results', 'reports', 'classes'].map(tab => (
+            <button
+              key={tab} onClick={() => setActiveTab(tab)}
+              className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
+        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
         {activeTab === 'results' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
-        {activeTab === 'reports' && <ReportsTab reports={reports} />}
+        {activeTab === 'reports' && <ReportsTab reports={reports} classes={classes} />}
+        {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
       </main>
     </div>
   );
@@ -382,9 +396,10 @@ function TeacherPortal({ setRole, user }) {
 
 // --- Teacher Sections ---
 
-function LaunchTab({ quizzes, onLaunch, session, roomCode, setActiveTab }) {
+function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab }) {
   const [selected, setSelected] = useState('');
   const [type, setType] = useState(null);
+  const [assignedClasses, setAssignedClasses] = useState([]);
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -399,8 +414,14 @@ function LaunchTab({ quizzes, onLaunch, session, roomCode, setActiveTab }) {
 
   const start = () => {
     const q = quizzes.find(x => x.id === selected);
-    if (q) onLaunch(q, type);
+    // Attach assigned_classes to the quiz object we are launching
+    if (q) onLaunch({ ...q, assigned_classes: assignedClasses }, type);
     setType(null);
+    setAssignedClasses([]);
+  };
+
+  const toggleClass = (id) => {
+    setAssignedClasses(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
   };
 
   if (type) return (
@@ -418,6 +439,28 @@ function LaunchTab({ quizzes, onLaunch, session, roomCode, setActiveTab }) {
         ))}
         {quizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">Your library is empty. Go to Quizzes to create one.</p>}
       </div>
+
+      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Cohorts (Optional)</h2>
+      <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
+        {classes.length === 0 ? (
+          <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. All students can join.</p>
+        ) : (
+          classes.map(c => (
+            <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+              <input
+                type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
+                checked={assignedClasses.includes(c.id)}
+                onChange={() => toggleClass(c.id)}
+              />
+              <div>
+                <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
+              </div>
+            </label>
+          ))
+        )}
+      </div>
+
       <div className="flex gap-3">
         <button onClick={() => setType(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button onClick={start} disabled={!selected} className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50">Launch</button>
@@ -426,18 +469,18 @@ function LaunchTab({ quizzes, onLaunch, session, roomCode, setActiveTab }) {
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
       {[
-        { id: 'quiz', name: 'Quiz', icon: <CheckSquare size={48} />, color: 'bg-blue-600' },
-        { id: 'race', name: 'Space Race', icon: <Rocket size={48} />, color: 'bg-purple-600' },
-        { id: 'exit', name: 'Exit Ticket', icon: <LogOut size={48} />, color: 'bg-orange-500' }
+        { id: 'student_paced', name: 'Student-Paced Quiz', icon: <Users size={48} />, color: 'bg-blue-600', desc: 'Students progress at their own speed' },
+        { id: 'teacher_paced', name: 'Teacher-Paced Quiz', icon: <Activity size={48} />, color: 'bg-purple-600', desc: 'Control the flow and show live results' }
       ].map(c => (
         <button
           key={c.id} onClick={() => setType(c.id)}
-          className={`${c.color} text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95`}
+          className={`${c.color} text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center`}
         >
           <div className="p-4 bg-white/10 rounded-2xl">{c.icon}</div>
           <span className="text-3xl font-black">{c.name}</span>
+          <span className="text-sm font-medium opacity-80">{c.desc}</span>
         </button>
       ))}
     </div>
@@ -515,6 +558,59 @@ function QuizEditor({ quiz, onSave, onCancel }) {
 
   const add = (type) => setQs([...qs, { id: Date.now(), type, text: '', options: type === 'mc' ? ['', '', '', ''] : (type === 'tf' ? ['True', 'False'] : []), correct: 0 }]);
 
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Type', 'Question', 'Option_1', 'Option_2', 'Option_3', 'Option_4', 'Correct_Answer'],
+      ['mc', 'What is 2 + 2?', '1', '2', '3', '4', '4'],
+      ['tf', 'The sky is blue.', '', '', '', '', 'True'],
+      ['sa', 'What color is the sun?', '', '', '', '', 'Yellow']
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Quiz_Template");
+    XLSX.writeFile(wb, "AssessMe_Quiz_Template.xlsx");
+  };
+
+  const importExcel = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        const newQs = [];
+        data.forEach((row, i) => {
+          let type = String(row['Type'] || '').toLowerCase().trim();
+          if (!['mc', 'tf', 'sa'].includes(type)) return;
+
+          let q = { id: Date.now() + i, type, text: String(row['Question'] || ''), options: [], correct: 0 };
+
+          if (type === 'mc') {
+            q.options = [String(row['Option_1'] || ''), String(row['Option_2'] || ''), String(row['Option_3'] || ''), String(row['Option_4'] || '')];
+            const ansStr = String(row['Correct_Answer'] || '').trim();
+            const idx = q.options.findIndex(o => o.trim() === ansStr);
+            q.correct = idx >= 0 ? idx : 0;
+          } else if (type === 'tf') {
+            q.options = ['True', 'False'];
+            const ansStr = String(row['Correct_Answer'] || '').toLowerCase().trim();
+            q.correct = ansStr === 'false' ? 1 : 0;
+          } else if (type === 'sa') {
+            q.correct = String(row['Correct_Answer'] || '');
+          }
+          newQs.push(q);
+        });
+
+        if (newQs.length > 0) setQs([...qs, ...newQs]);
+      } catch (err) {
+        alert("Failed to parse Quiz Excel file.");
+      }
+      e.target.value = null;
+    };
+    reader.readAsBinaryString(f);
+  };
+
   return (
     <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in duration-300">
       <div className="p-8 bg-slate-50 border-b flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -547,7 +643,7 @@ function QuizEditor({ quiz, onSave, onCancel }) {
             {q.type === 'mc' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {q.options.map((opt, oIdx) => (
-                  <div key={oIdx} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${q.correct === oIdx ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-slate-100 bg-white'}`}>
+                  <div key={oIdx} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${q.correct === oIdx ? 'border-blue-600 bg-blue-50' : 'border-slate-100 bg-white'}`}>
                     <input type="radio" className="w-5 h-5 accent-blue-600" checked={q.correct === oIdx} onChange={() => { const n = [...qs]; n[idx].correct = oIdx; setQs(n); }} />
                     <input className="bg-transparent w-full font-bold text-slate-600 focus:outline-none" value={opt} onChange={e => { const n = [...qs]; n[idx].options[oIdx] = e.target.value; setQs(n); }} placeholder="Choice..." />
                   </div>
@@ -570,10 +666,20 @@ function QuizEditor({ quiz, onSave, onCancel }) {
             )}
           </div>
         ))}
-        <div className="flex justify-center gap-4 py-10 border-t border-dashed border-slate-200">
-          <button onClick={() => add('mc')} className="px-6 py-3 border-2 border-slate-200 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">Multi Choice</button>
-          <button onClick={() => add('tf')} className="px-6 py-3 border-2 border-slate-200 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">True/False</button>
-          <button onClick={() => add('sa')} className="px-6 py-3 border-2 border-slate-200 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">Short Answer</button>
+        <div className="flex flex-col md:flex-row justify-center items-center gap-4 py-10 border-t border-dashed border-slate-200">
+          <div className="flex gap-2">
+            <button onClick={() => add('mc')} className="px-6 py-3 border-2 border-slate-200 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">Multi Choice</button>
+            <button onClick={() => add('tf')} className="px-6 py-3 border-2 border-slate-200 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">True/False</button>
+            <button onClick={() => add('sa')} className="px-6 py-3 border-2 border-slate-200 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">Short Answer</button>
+          </div>
+          <div className="hidden md:block w-px h-8 bg-slate-200 mx-2"></div>
+          <div className="flex gap-2">
+            <button onClick={downloadTemplate} className="px-6 py-3 bg-green-50 text-green-600 hover:bg-green-100 rounded-2xl font-black transition-all text-xs uppercase tracking-widest flex items-center gap-2"><Download size={14} /> Template</button>
+            <label className="cursor-pointer px-6 py-3 bg-green-600 text-white hover:bg-green-700 rounded-2xl font-black shadow-lg shadow-green-100 transition-all text-xs uppercase tracking-widest flex items-center gap-2">
+              <Upload size={14} /> Import Excel
+              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={importExcel} />
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -587,12 +693,44 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
 
   if (!session) return <div className="text-center py-40 text-slate-300 font-black uppercase tracking-widest">No Active Sessions</div>;
 
+  const handleTeacherNext = async () => {
+    if (session.quiz.current_question_idx < session.quiz.questions.length - 1) {
+      await supabase.from('rooms').update({
+        quiz: {
+          ...session.quiz,
+          current_question_idx: session.quiz.current_question_idx + 1,
+          show_results: false
+        }
+      }).eq('id', session.id);
+    }
+  };
+
+  const handleTeacherPrev = async () => {
+    if (session.quiz.current_question_idx > 0) {
+      await supabase.from('rooms').update({
+        quiz: {
+          ...session.quiz,
+          current_question_idx: session.quiz.current_question_idx - 1,
+          show_results: false
+        }
+      }).eq('id', session.id);
+    }
+  };
+
+  const toggleResults = async () => {
+    await supabase.from('rooms').update({
+      quiz: { ...session.quiz, show_results: !session.quiz.show_results }
+    }).eq('id', session.id);
+  };
+
   return (
     <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border flex flex-col min-h-[70vh]">
-      <div className="bg-slate-900 text-white p-8 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0">
+      <div className="bg-slate-900 text-white p-8 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0 z-10">
         <div>
           <h2 className="text-2xl font-black">{session.quiz.title}</h2>
-          <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">Live • {responses.length} Active Participants</p>
+          <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
+            Live • {session.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'} • {responses.length} Participants
+          </p>
         </div>
         <div className="flex gap-4">
           <button onClick={() => setShowQR(!showQR)} className="bg-slate-800 hover:bg-slate-700 px-6 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all">
@@ -603,7 +741,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
       </div>
 
       {showQR && (
-        <div className="p-10 bg-blue-50 border-b flex flex-col md:flex-row items-center justify-center gap-12 text-center md:text-left animate-in slide-in-from-top duration-300 shrink-0">
+        <div className="p-10 bg-blue-50 border-b flex flex-col md:flex-row items-center justify-center gap-12 text-center md:text-left animate-in slide-in-from-top duration-300 shrink-0 z-0 relative">
           <img src={qr} className="w-44 h-44 border-8 border-white rounded-[2rem] shadow-2xl" />
           <div>
             <h3 className="text-3xl font-black text-slate-800 mb-2">Join Class</h3>
@@ -613,77 +751,447 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
         </div>
       )}
 
-      <div className="flex-1 overflow-x-auto">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 sticky top-0 shadow-sm z-10">
-            <tr>
-              <th className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-widest whitespace-nowrap">Participant</th>
-              <th className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-widest min-w-[150px]">Score/Progress</th>
-              {session.quiz.questions.map((_, i) => <th key={i} className="p-6 text-center font-black text-slate-400 text-[10px] uppercase">Q{i + 1}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {responses.map(r => (
-              <tr key={r.student_name} className="hover:bg-slate-50 transition-colors">
-                <td className="p-6">
-                  <div className="font-black text-slate-800 text-lg leading-none whitespace-nowrap">{r.student_name}</div>
-                  <div className="text-[10px] font-black text-blue-500 uppercase flex items-center gap-1 mt-1 tracking-wider">
-                    <UserCheck size={12} /> {r.student_id}
+      {session.type === 'teacher_paced' ? (
+        <TeacherPacedDashboard
+          session={session}
+          responses={responses}
+          onNext={handleTeacherNext}
+          onPrev={handleTeacherPrev}
+          onToggleResults={toggleResults}
+        />
+      ) : (
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 sticky top-0 shadow-sm z-10">
+              <tr>
+                <th className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-widest whitespace-nowrap">Participant</th>
+                <th className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-widest min-w-[150px]">Score/Progress</th>
+                {session.quiz.questions.map((_, i) => <th key={i} className="p-6 text-center font-black text-slate-400 text-[10px] uppercase">Q{i + 1}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {responses.map(r => (
+                <tr key={r.student_name} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-6">
+                    <div className="font-black text-slate-800 text-lg leading-none whitespace-nowrap">{r.student_name}</div>
+                    <div className="text-[10px] font-black text-blue-500 uppercase flex items-center gap-1 mt-1 tracking-wider">
+                      <UserCheck size={12} /> {r.student_id}
+                    </div>
+                  </td>
+                  <td className="p-6">
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-600 transition-all duration-700 ease-out" style={{ width: `${(Object.keys(r.answers || {}).length / session.quiz.questions.length) * 100}%` }}></div>
+                    </div>
+                  </td>
+                  {session.quiz.questions.map((q, idx) => {
+                    const ans = r.answers?.[idx];
+                    const ok = ans !== undefined && (q.type === 'sa' ? (q.correct && String(ans).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(ans) === String(q.correct)));
+                    return (
+                      <td key={idx} className="p-6 text-center">
+                        {ans === undefined ? (
+                          <div className="w-3 h-3 bg-slate-100 rounded-full mx-auto"></div>
+                        ) : (
+                          ok ? <CheckCircle className="text-green-500 mx-auto" size={24} /> : <XCircle className="text-red-400 mx-auto" size={24} />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {responses.length === 0 && <tr><td colSpan={100} className="p-32 text-center text-slate-300 font-bold uppercase tracking-widest">Waiting for connections...</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleResults }) {
+  const qIdx = session?.quiz?.current_question_idx || 0;
+  const q = session.quiz.questions[qIdx];
+  const total = session.quiz.questions.length;
+
+  // Calculate responses for current question
+  const responsesForCurrent = responses.filter(r => r.answers && r.answers[qIdx] !== undefined);
+  const respCount = responsesForCurrent.length;
+  const totalCount = responses.length;
+
+  // Chart Data
+  let chartData = [];
+  if (q.type === 'mc' || q.type === 'tf') {
+    const labels = q.type === 'mc' ? ['A', 'B', 'C', 'D'].slice(0, q.options.length) : ['True', 'False'];
+    chartData = labels.map((label, idx) => {
+      const count = responsesForCurrent.filter(r => r.answers[qIdx] === idx).length;
+      return {
+        label,
+        count,
+        percent: respCount > 0 ? (count / respCount) * 100 : 0,
+        isCorrect: q.correct === idx
+      };
+    });
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-slate-50">
+      <div className="bg-white border-b px-8 py-4 flex justify-between items-center z-10 shadow-sm relative text-center">
+        <div className="flex-1">
+          <div className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Participants</div>
+          <div className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Users size={20} className="text-blue-500" /> {totalCount}</div>
+        </div>
+        <div className="w-px h-10 bg-slate-200"></div>
+        <div className="flex-1">
+          <div className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Responses for Q{qIdx + 1}</div>
+          <div className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><CheckSquare size={20} className="text-orange-500" /> {respCount} <span className="text-sm text-slate-400">/ {totalCount}</span></div>
+        </div>
+      </div>
+
+      <div className="flex-1 p-8 overflow-y-auto w-full max-w-4xl mx-auto flex flex-col items-center">
+        <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Question {qIdx + 1} of {total}</div>
+        <h2 className="text-3xl font-black text-slate-800 text-center mb-10 w-full max-w-2xl">{q.text}</h2>
+
+        {session.quiz?.show_results ? (
+          <div className="w-full bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 animate-in fade-in zoom-in duration-300">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8 text-center flex items-center justify-center gap-2"><BarChart2 size={18} /> Live Results</h3>
+
+            {(q.type === 'mc' || q.type === 'tf') && (
+              <div className="flex items-end justify-center gap-6 md:gap-12 h-64 border-b-2 border-slate-100 pb-4 relative">
+                <div className="absolute inset-x-0 bottom-1/4 border-b border-dashed border-slate-200 z-0"></div>
+                <div className="absolute inset-x-0 bottom-2/4 border-b border-dashed border-slate-200 z-0"></div>
+                <div className="absolute inset-x-0 bottom-3/4 border-b border-dashed border-slate-200 z-0"></div>
+                {chartData.map((d, i) => (
+                  <div key={i} className="flex flex-col items-center gap-4 z-10 w-16 md:w-24 group">
+                    <div className="text-xs font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity bg-white px-2 py-1 rounded shadow-sm relative top-2">{d.count} ({Math.round(d.percent)}%)</div>
+                    <div
+                      className={`w-full rounded-t-xl transition-all duration-1000 ease-out shadow-lg ${d.isCorrect ? 'bg-green-500 shadow-green-500/30' : 'bg-slate-300 shadow-slate-300/30'}`}
+                      style={{ height: `${Math.max(d.percent, 2)}%` }}
+                    ></div>
+                    <div className="text-sm font-black text-slate-700 w-full text-center flex flex-col gap-1 items-center">
+                      <span className={`w-8 h-8 flex items-center justify-center rounded-lg text-white text-xs ${d.isCorrect ? 'bg-green-600' : 'bg-slate-700'}`}>{d.label}</span>
+                    </div>
                   </div>
-                </td>
-                <td className="p-6">
-                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-600 transition-all duration-700 ease-out" style={{ width: `${(Object.keys(r.answers || {}).length / session.quiz.questions.length) * 100}%` }}></div>
-                  </div>
-                </td>
-                {session.quiz.questions.map((q, idx) => {
-                  const ans = r.answers?.[idx];
-                  const ok = ans !== undefined && (q.type === 'sa' ? (q.correct && String(ans).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(ans) === String(q.correct)));
+                ))}
+              </div>
+            )}
+
+            {q.type === 'sa' && (
+              <div className="space-y-4 max-h-96 overflow-y-auto pr-4">
+                {responsesForCurrent.map((r, i) => {
+                  const ans = String(r.answers[qIdx]).trim();
+                  const ok = q.correct && ans.toLowerCase() === String(q.correct).toLowerCase().trim();
                   return (
-                    <td key={idx} className="p-6 text-center">
-                      {ans === undefined ? (
-                        <div className="w-3 h-3 bg-slate-100 rounded-full mx-auto"></div>
-                      ) : (
-                        ok ? <CheckCircle className="text-green-500 mx-auto" size={24} /> : <XCircle className="text-red-400 mx-auto" size={24} />
-                      )}
-                    </td>
+                    <div key={i} className={`p-5 rounded-2xl border-2 font-bold text-slate-700 flex justify-between items-center ${ok ? 'border-green-200 bg-green-50' : 'border-slate-100 bg-slate-50'}`}>
+                      <div>
+                        {ans}
+                        <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">{r.student_name}</div>
+                      </div>
+                      {ok && <CheckCircle className="text-green-500" size={20} />}
+                    </div>
                   );
                 })}
-              </tr>
+                {responsesForCurrent.length === 0 && <p className="text-center text-slate-400 font-bold italic py-10">No responses submitted yet.</p>}
+              </div>
+            )}
+
+            <div className="mt-8 text-center text-xs font-bold text-slate-400 bg-slate-50 py-3 rounded-xl border border-slate-100">
+              Students {session.quiz?.show_results ? 'cannot edit' : 'can edit'} their responses while results are shown.
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+            {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => (
+              <div key={i} className="bg-white p-6 rounded-[2rem] border-4 border-slate-50 text-xl font-black text-slate-700 shadow-sm flex items-center gap-6">
+                <span className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-xs text-slate-400 shrink-0 uppercase">{String.fromCharCode(65 + i)}</span>
+                {o}
+              </div>
             ))}
-            {responses.length === 0 && <tr><td colSpan={100} className="p-32 text-center text-slate-300 font-bold uppercase tracking-widest">Waiting for connections...</td></tr>}
-          </tbody>
-        </table>
+            {q.type === 'sa' && (
+              <div className="col-span-full bg-white p-8 rounded-[2rem] border-4 border-slate-50 text-center text-slate-400 italic font-bold h-32 flex items-center justify-center">
+                Awaiting short answers from students...
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white border-t p-6 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] relative z-10">
+        <button
+          onClick={onPrev}
+          disabled={qIdx === 0}
+          className="w-full sm:w-auto px-8 py-4 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-2xl font-black transition-colors flex items-center justify-center gap-2"
+        >
+          <ArrowLeft size={20} /> Previous
+        </button>
+
+        <button
+          onClick={onToggleResults}
+          className={`w-full sm:w-auto px-10 py-4 text-white rounded-[2rem] font-black text-lg transition-transform active:scale-95 shadow-xl flex items-center justify-center gap-3 ${session.quiz?.show_results ? 'bg-orange-500 shadow-orange-500/20' : 'bg-purple-600 shadow-purple-600/20'}`}
+        >
+          {session.quiz?.show_results ? <><Activity size={20} /> Hide Results</> : <><BarChart2 size={20} /> Show Results</>}
+        </button>
+
+        <button
+          onClick={onNext}
+          disabled={qIdx >= total - 1}
+          className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-black transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+        >
+          Next <ArrowRight size={20} />
+        </button>
       </div>
     </div>
   );
 }
 
-function ReportsTab({ reports }) {
-  if (reports.length === 0) return <div className="text-center p-32 bg-white rounded-[3rem] text-slate-300 font-black uppercase tracking-widest border border-dashed">No Cloud Analytics Yet</div>;
+function ReportsTab({ reports, classes }) {
+  const [view, setView] = useState('history'); // history, gradebook
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const exportToExcel = (report) => {
+    try {
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Overview
+      const overviewData = [
+        ['Report Title', report.title],
+        ['Date', new Date(report.ts).toLocaleString()],
+        ['Type', report.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'],
+        ['Total Participants', report.responses?.length || 0],
+        ['Total Questions', report.questions?.length || 0],
+        []
+      ];
+
+      // Sheet 2: Detailed Results
+      const headers = ['Student ID', 'Student Name', 'Overall Score (%)', ...report.questions.map((_, i) => `Q${i + 1} Answer`), ...report.questions.map((_, i) => `Q${i + 1} Correct?`)];
+      const resultsData = [headers];
+
+      (report.responses || []).forEach(r => {
+        let correctCount = 0;
+        const ansRow = [];
+        const isCorrectRow = [];
+
+        report.questions.forEach((q, qIdx) => {
+          const rawAns = r.answers?.[qIdx];
+          let formattedAns = rawAns;
+          if (rawAns !== undefined && q.type !== 'sa') {
+            formattedAns = q.options && q.type === 'mc' ? String.fromCharCode(65 + rawAns)
+              : (q.type === 'tf' ? (rawAns === 0 ? 'True' : 'False') : rawAns);
+          }
+          ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
+
+          const isOk = rawAns !== undefined && (q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct)));
+          isCorrectRow.push(isOk ? 'Yes' : 'No');
+          if (isOk) correctCount++;
+        });
+
+        const score = Math.round((correctCount / report.questions.length) * 100);
+        resultsData.push([
+          r.student_id,
+          r.student_name,
+          score,
+          ...ansRow,
+          ...isCorrectRow
+        ]);
+      });
+
+      const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
+      const wsResults = XLSX.utils.aoa_to_sheet(resultsData);
+
+      XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
+      XLSX.utils.book_append_sheet(wb, wsResults, "Student Results");
+
+      // Save
+      XLSX.writeFile(wb, `AssessMe_Report_${report.title.replace(/\s+/g, '_')}_${new Date(report.ts).getTime()}.xlsx`);
+    } catch (e) {
+      alert("Error exporting to Excel: " + e.message);
+    }
+  };
+
+  const exportGradebook = (cls, assignedReports, matrix) => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...assignedReports.map(r => r.title)];
+
+      const rows = [headers];
+      matrix.forEach(row => {
+        const studentData = [row.student_id, row.name, row.average];
+        assignedReports.forEach(r => {
+          studentData.push(row.scores[r.id] !== undefined ? row.scores[r.id] : 'N/A');
+        });
+        rows.push(studentData);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, "Gradebook");
+      XLSX.writeFile(wb, `AssessMe_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
+    } catch (e) {
+      alert("Error exporting Gradebook: " + e.message);
+    }
+  };
+
+  // Gradebook Logic
+  let gradebookClass = null;
+  let assignedReports = [];
+  let gradeMatrix = []; // array of { student_id, name, scores: { reportId: score }, average }
+
+  if (view === 'gradebook' && selectedClassId) {
+    gradebookClass = classes.find(c => c.id === selectedClassId);
+    if (gradebookClass) {
+      // Find all reports assigned to this class
+      assignedReports = reports.filter(r => r.assigned_classes?.includes(selectedClassId));
+
+      // Build matrix
+      gradeMatrix = (gradebookClass.students || []).map(stu => {
+        const scores = {};
+        let totalScore = 0;
+        let attemptCount = 0;
+
+        assignedReports.forEach(rep => {
+          const stuResp = (rep.responses || []).find(res => res.student_id === stu.student_id);
+          if (stuResp) {
+            // Calculate score
+            let correctCount = 0;
+            rep.questions.forEach((q, qIdx) => {
+              const rawAns = stuResp.answers?.[qIdx];
+              if (rawAns !== undefined) {
+                const isOk = q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct));
+                if (isOk) correctCount++;
+              }
+            });
+            const score = Math.round((correctCount / rep.questions.length) * 100);
+            scores[rep.id] = score;
+            totalScore += score;
+            attemptCount++;
+          }
+        });
+
+        return {
+          ...stu,
+          scores,
+          average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name));
+    }
+  }
+
+  // If no reports anywhere
+  if (reports.length === 0 && classes.length === 0) return <div className="text-center p-32 bg-white rounded-[3rem] text-slate-300 font-black uppercase tracking-widest border border-dashed">No Analytics Yet</div>;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      {reports.map(r => (
-        <div key={r.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h3 className="text-xl font-black text-slate-800 group-hover:text-blue-600 transition-colors tracking-tight">{r.title}</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{new Date(r.ts).toLocaleDateString()}</p>
+    <div className="space-y-6">
+      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-sm mx-auto">
+        <button
+          onClick={() => setView('history')}
+          className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+        >
+          Session History
+        </button>
+        <button
+          onClick={() => setView('gradebook')}
+          className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+        >
+          Cohort Gradebook
+        </button>
+      </div>
+
+      {view === 'history' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pt-4">
+          {reports.map(r => (
+            <div key={r.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all flex flex-col justify-between group">
+              <div>
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800 group-hover:text-blue-600 transition-colors tracking-tight">{r.title}</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{new Date(r.ts).toLocaleDateString()}</p>
+                  </div>
+                  <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-50 text-blue-600'}`}>{r.type === 'teacher_paced' ? 'Teacher' : 'Student'}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 py-4 border-y border-slate-50 mb-6">
+                  <div className="text-center border-r border-slate-50">
+                    <div className="text-2xl font-black text-slate-800">{(r.responses || []).length}</div>
+                    <div className="text-[9px] font-black text-slate-400 uppercase">Participants</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-slate-800">{(r.questions || []).length}</div>
+                    <div className="text-[9px] font-black text-slate-400 uppercase">Items</div>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => exportToExcel(r)}
+                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-black text-sm rounded-xl transition-colors shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"
+              >
+                <Download size={16} /> Export Excel
+              </button>
             </div>
-            <span className="bg-blue-50 text-blue-600 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{r.type}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-4 py-4 border-y border-slate-50">
-            <div className="text-center border-r border-slate-50">
-              <div className="text-2xl font-black text-slate-800">{(r.responses || []).length}</div>
-              <div className="text-[9px] font-black text-slate-400 uppercase">Participants</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-black text-slate-800">{(r.questions || []).length}</div>
-              <div className="text-[9px] font-black text-slate-400 uppercase">Items</div>
-            </div>
-          </div>
+          ))}
         </div>
-      ))}
+      ) : (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="flex-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Cohort</label>
+              <select
+                className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none"
+                value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}
+              >
+                <option value="">-- Choose Class --</option>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            {gradebookClass && (
+              <button
+                onClick={() => exportGradebook(gradebookClass, assignedReports, gradeMatrix)}
+                className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95"
+              >
+                <Download size={18} /> Export Gradebook
+              </button>
+            )}
+          </div>
+
+          {!selectedClassId ? (
+            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">
+              Select a class above to view the combined gradebook matrix.
+            </div>
+          ) : gradebookClass ? (
+            <div className="overflow-x-auto custom-scroll border rounded-[2rem]">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
+                    <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
+                    <th className="p-4 border-b border-slate-200 w-32">ID</th>
+                    <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average</th>
+                    {assignedReports.map(r => (
+                      <th key={r.id} className="p-4 border-b border-slate-200 min-w-[120px]">
+                        <div className="truncate w-full max-w-[150px]" title={r.title}>{r.title}</div>
+                        <div className="text-slate-300 font-medium text-[8px] mt-1">{new Date(r.ts).toLocaleDateString()}</div>
+                      </th>
+                    ))}
+                    {assignedReports.length === 0 && <th className="p-4 border-b border-slate-200">No activities recorded yet.</th>}
+                  </tr>
+                </thead>
+                <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
+                  {gradeMatrix.map((row, i) => (
+                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="p-4 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 whitespace-nowrap truncate max-w-xs" title={row.name}>{row.name}</td>
+                      <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
+                      <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{row.average}%</td>
+                      {assignedReports.map(r => (
+                        <td key={r.id} className="p-4 text-slate-500">
+                          {row.scores[r.id] !== undefined ? `${row.scores[r.id]}%` : '-'}
+                        </td>
+                      ))}
+                      {assignedReports.length === 0 && <td className="p-4"></td>}
+                    </tr>
+                  ))}
+                  {gradeMatrix.length === 0 && (
+                    <tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -694,8 +1202,15 @@ function ReportsTab({ reports }) {
 // ==========================================
 function StudentPortal({ setRole, initialRoom }) {
   const [room, setRoom] = useState(initialRoom);
-  const [name, setName] = useState('');
   const [sid, setSid] = useState('');
+  const [name, setName] = useState(''); // Will be auto-filled if restricted
+
+  // States for restricted entry flow
+  const [checkingId, setCheckingId] = useState(false);
+  const [idError, setIdError] = useState('');
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [tempSession, setTempSession] = useState(null); // hold room data before full join
+
   const [joined, setJoined] = useState(false);
   const [session, setSession] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -736,70 +1251,164 @@ function StudentPortal({ setRole, initialRoom }) {
         answers: next,
         ts: Date.now()
       });
-      if (idx < session.quiz.questions.length - 1) setTimeout(() => setIdx(p => p + 1), 300);
     } catch (e) { console.error("Network Error", e); }
   };
 
-  if (!joined) return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
-      <form onSubmit={e => { e.preventDefault(); setJoined(true); }} className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100">
-        <div className="text-center mb-10">
-          <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-            <Users size={40} />
+  const handleNext = () => setIdx(p => p + 1);
+
+  // Auto-sync Student idx with Teacher in Teacher-Paced mode
+  useEffect(() => {
+    if (session && session.type === 'teacher_paced' && session.quiz?.current_question_idx !== undefined) {
+      setIdx(session.quiz.current_question_idx);
+    }
+  }, [session]);
+
+  const attemptJoin = async (e) => {
+    e.preventDefault();
+    setCheckingId(true);
+    setIdError('');
+
+    const code = room.toUpperCase();
+    const { data: roomData, error } = await supabase.from('rooms').select('*').eq('id', code).single();
+
+    if (!roomData) {
+      setIdError("Room not found.");
+      setCheckingId(false);
+      return;
+    }
+
+    const assigned = roomData.quiz?.assigned_classes;
+    if (assigned && assigned.length > 0) {
+      if (!sid.trim()) {
+        setIdError("Student ID is required for this room.");
+        setCheckingId(false);
+        return;
+      }
+
+      // Check if student is in any of the assigned classes
+      const { data: stuData, error: stuErr } = await supabase.from('students')
+        .select('*')
+        .in('class_id', assigned)
+        .eq('student_id', sid.trim());
+
+      if (!stuData || stuData.length === 0) {
+        setIdError("ID not found in assigned cohorts. Please check your ID.");
+        setCheckingId(false);
+        return;
+      }
+
+      // Found the student - ask for confirmation
+      setName(stuData[0].name);
+      setTempSession(roomData);
+      setNeedsConfirmation(true);
+      setCheckingId(false);
+    } else {
+      // Open room
+      if (!name.trim()) {
+        setIdError("Your Name is required for this open room.");
+        setCheckingId(false);
+        return;
+      }
+      setJoined(true);
+    }
+  };
+
+  const confirmJoin = () => {
+    setNeedsConfirmation(false);
+    setJoined(true);
+  };
+
+  if (!joined) {
+    if (needsConfirmation) {
+      return (
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+          <div className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 text-center animate-in zoom-in duration-300">
+            <div className="w-20 h-20 bg-green-50 text-green-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+              <UserCheck size={40} />
+            </div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Is this you?</h2>
+            <p className="text-slate-500 font-bold mt-4 text-xl bg-slate-50 py-3 rounded-2xl border border-slate-100">{name}</p>
+            <div className="mt-8 space-y-3">
+              <button onClick={confirmJoin} className="w-full bg-green-500 hover:bg-green-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-green-100 transition-all active:scale-95">Yes, Start Quiz</button>
+              <button onClick={() => setNeedsConfirmation(false)} className="w-full bg-white hover:bg-slate-50 text-slate-400 py-4 rounded-[2rem] font-black tracking-widest uppercase transition-colors">No, go back</button>
+            </div>
           </div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
-          <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2">Verified Join Required</p>
         </div>
-        <div className="space-y-5">
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase ml-4 mb-2 block tracking-widest">Access Room</label>
-            <input
-              className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] text-center text-2xl font-black uppercase tracking-[0.3em] text-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all"
-              placeholder="CODE" value={room} onChange={e => setRoom(e.target.value.toUpperCase())} required
-            />
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <form onSubmit={attemptJoin} className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
+          <div className="text-center mb-10">
+            <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative">
+              <Users size={40} />
+              <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />
+            </div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
+            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} /> {idError}</span> : "Enter details below"}</p>
           </div>
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase ml-4 mb-2 block tracking-widest">Full Name</label>
-            <input
-              className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all"
-              placeholder="Name..." value={name} onChange={e => setName(e.target.value)} required
-            />
+          <div className="space-y-4">
+            <div>
+              <input
+                className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] text-center text-xl font-black uppercase tracking-[0.2em] text-blue-600 focus:outline-none focus:border-blue-200 transition-all placeholder:text-blue-200"
+                placeholder="ROOM CODE" value={room} onChange={e => setRoom(e.target.value.toUpperCase())} required
+              />
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                placeholder="Full Name (if open)" value={name} onChange={e => setName(e.target.value)}
+              />
+              <input
+                className="flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                placeholder="ID #" value={sid} onChange={e => setSid(e.target.value)}
+              />
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
+              If your teacher assigned a cohort, you MUST enter your exact Student ID number. You can leave Name blank.
+            </p>
+            <button type="submit" disabled={checkingId} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-100 mt-2 transition-transform active:scale-95 flex justify-center items-center">
+              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : 'ENTER ROOM'}
+            </button>
           </div>
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase ml-4 mb-2 block tracking-widest">Student ID Number</label>
-            <input
-              className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all"
-              placeholder="ID-000000" value={sid} onChange={e => setSid(e.target.value)} required
-            />
-          </div>
-          <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white py-5 rounded-[2rem] font-black text-2xl shadow-xl shadow-orange-100 mt-6 active:scale-95 transition-all">JOIN NOW</button>
-        </div>
-        <button type="button" onClick={() => setRole(null)} className="w-full mt-8 text-slate-300 font-black text-[10px] uppercase tracking-widest hover:text-slate-500">Exit to Menu</button>
-      </form>
-    </div>
-  );
+          <button type="button" onClick={() => setRole(null)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
+            <X size={24} />
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   if (!session) return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-10 text-center">
-      <div className="w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-10"></div>
+      <div className="w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-10 shadow-[0_0_30px_rgba(59,130,246,0.3)]"></div>
       <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic">Synchronizing...</h2>
       <p className="text-blue-200/50 max-w-xs font-bold uppercase text-[10px] tracking-widest">Connected to Cloud Room {room}. Activity pending teacher launch.</p>
     </div>
   );
 
   const total = session.quiz.questions?.length || 1;
-  if (Object.keys(answers).length >= session.quiz.questions?.length) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8 text-center">
-      <div className="bg-white p-16 rounded-[4rem] shadow-2xl max-w-sm border border-slate-100">
-        <CheckCircle size={100} className="text-green-500 mx-auto mb-8 shadow-green-100 shadow-2xl rounded-full" />
-        <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tighter">Done!</h2>
-        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Response Securely Logged to Cloud. Awaiting Session Completion.</p>
+  const isFinished = session.type === 'student_paced' ? idx >= total : false;
+
+  if (isFinished) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8 text-center animate-in zoom-in duration-500">
+      <div className="bg-white p-16 flex flex-col items-center rounded-[4rem] shadow-2xl max-w-sm border border-slate-100 relative overflow-hidden">
+        <div className="absolute top-0 right-1/2 translate-x-1/2 -mt-4 w-32 h-32 bg-green-500/10 blur-3xl rounded-full"></div>
+        <CheckCircle size={100} className="text-green-500 bg-white mx-auto mb-8 rounded-full relative z-10" />
+        <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tighter relative z-10">Done!</h2>
+        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest relative z-10">Response Securely Logged to Cloud. You can safely close this window.</p>
+        <button onClick={() => setRole(null)} className="mt-8 text-slate-400 font-bold text-xs hover:text-slate-600 transition-colors">Return Home</button>
       </div>
     </div>
   );
 
   const q = session.quiz.questions[idx];
+  // Calculate progress purely on answered questions
   const progress = (Object.keys(answers).length / total) * 100;
+
+  // Lock editing if teacher is showing results
+  const isLocked = session.type === 'teacher_paced' && session.quiz?.show_results;
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -811,23 +1420,541 @@ function StudentPortal({ setRole, initialRoom }) {
       <div className="h-3 w-full bg-slate-50">
         <div className="h-full bg-orange-500 transition-all duration-500 ease-out shadow-[0_0_15px_rgba(249,115,22,0.5)]" style={{ width: `${progress}%` }}></div>
       </div>
-      <main className="flex-1 p-8 max-w-2xl mx-auto w-full pt-20">
+      <main className="flex-1 p-8 max-w-2xl mx-auto w-full pt-10 pb-32">
+        {session.type === 'teacher_paced' && (
+          <div className="flex items-center justify-center gap-2 mb-8 bg-purple-50 text-purple-600 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest w-fit mx-auto">
+            <Activity size={14} /> Teacher Paced Mode Focus
+          </div>
+        )}
         <h2 className="text-3xl font-black text-slate-800 mb-12 leading-tight tracking-tight">{q.text}</h2>
         <div className="space-y-5">
-          {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => (
-            <button key={i} onClick={() => submit(idx, i)} className="w-full text-left bg-white p-7 rounded-[2.5rem] border-4 border-slate-50 hover:border-blue-500 hover:bg-blue-50 transition-all font-black text-xl text-slate-700 shadow-sm flex items-center gap-6 group">
-              <span className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-xs text-slate-400 shrink-0 font-black group-hover:bg-blue-600 group-hover:text-white transition-colors uppercase">{String.fromCharCode(65 + i)}</span>
-              {o}
-            </button>
-          ))}
+          {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => {
+            const isSelected = answers[idx] === i;
+            let bgColorInfo = '';
+
+            if (isLocked) {
+              if (q.correct === i) {
+                bgColorInfo = 'border-green-500 bg-green-50 text-green-900 shadow-green-500/20'; // Correct answer explicitly shown
+              } else if (isSelected) {
+                bgColorInfo = 'border-red-400 bg-red-50 text-red-900 shadow-red-500/20 opacity-70'; // Incorrect answer student selected
+              } else {
+                bgColorInfo = 'border-slate-100 bg-slate-50 text-slate-400 opacity-50'; // Unselected wrong options
+              }
+            } else {
+              bgColorInfo = isSelected ? 'border-orange-500 bg-orange-50 text-orange-900 shadow-orange-500/20' : 'border-slate-50 hover:border-orange-500 hover:bg-orange-50 text-slate-700';
+            }
+
+            return (
+              <button
+                key={i}
+                onClick={() => !isLocked && submit(idx, i)}
+                disabled={isLocked}
+                className={`w-full text-left bg-white p-7 rounded-[2.5rem] border-4 transition-all font-black text-xl shadow-sm flex items-center gap-6 group ${bgColorInfo} ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}
+              >
+                <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs shrink-0 font-black transition-colors uppercase ${isLocked && q.correct === i ? 'bg-green-600 text-white' : (isSelected && !isLocked ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-orange-600 group-hover:text-white')}`}>
+                  {String.fromCharCode(65 + i)}
+                </span>
+                {o}
+                {isLocked && q.correct === i && <CheckCircle className="ml-auto text-green-500" size={24} />}
+                {isLocked && isSelected && q.correct !== i && <XCircle className="ml-auto text-red-400" size={24} />}
+              </button>
+            );
+          })}
           {q.type === 'sa' && (
             <div className="space-y-6">
-              <textarea id="sa-box" className="w-full bg-slate-50 border-4 border-slate-100 rounded-[2.5rem] p-8 text-2xl font-bold focus:border-blue-500 focus:bg-white focus:outline-none shadow-inner min-h-[220px] transition-all" placeholder="Response..." />
-              <button onClick={() => submit(idx, document.getElementById('sa-box').value)} className="w-full py-6 bg-blue-600 text-white rounded-[2.5rem] font-black text-2xl shadow-2xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest">Submit Response</button>
+              <textarea
+                id="sa-box"
+                defaultValue={answers[idx] || ''}
+                disabled={isLocked}
+                className={`w-full border-4 rounded-[2.5rem] p-8 text-2xl font-bold focus:outline-none shadow-inner min-h-[220px] transition-all ${isLocked ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white text-slate-800'}`}
+                placeholder={isLocked ? "Editing locked by teacher" : "Response..."}
+              />
+              {!isLocked && (
+                <button onClick={() => submit(idx, document.getElementById('sa-box').value)} className="w-full py-6 bg-orange-600 text-white rounded-[2.5rem] font-black text-2xl shadow-2xl shadow-orange-100 transition-all active:scale-95 uppercase tracking-widest">{answers[idx] !== undefined ? 'Update Response' : 'Submit Response'}</button>
+              )}
+              {isLocked && q.correct && (
+                <div className="p-6 bg-green-50 rounded-[2rem] border-2 border-green-200 text-green-800 font-bold">
+                  <div className="text-[10px] uppercase tracking-widest text-green-600 mb-1">Correct Answer:</div>
+                  {q.correct}
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {session.type === 'student_paced' && (
+          <div className="mt-12">
+            <button
+              onClick={handleNext}
+              disabled={answers[idx] === undefined || (q.type === 'sa' && !answers[idx])}
+              className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+            >
+            </button>
+          </div>
+        )}
       </main>
+    </div >
+  );
+}
+
+// ==========================================
+//               CLASSES & ROSTERS
+// ==========================================
+function ClassesTab({ classes, setClasses, user }) {
+  const [selectedClass, setSelectedClass] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  if (isCreating) {
+    return <CreateClassView user={user} onCancel={() => setIsCreating(false)} onSaved={(newClass) => {
+      setClasses([newClass, ...classes]);
+      setIsCreating(false);
+    }} />;
+  }
+
+  if (selectedClass) {
+    return <ClassDetailView
+      cls={classes.find(c => c.id === selectedClass) || selectedClass}
+      onBack={() => setSelectedClass(null)}
+      onUpdate={(updated) => {
+        setClasses(classes.map(c => c.id === updated.id ? updated : c));
+        setSelectedClass(updated);
+      }}
+      onDeleted={(id) => {
+        setClasses(classes.filter(c => c.id !== id));
+        setSelectedClass(null);
+      }}
+    />;
+  }
+
+  return (
+    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
+      <div className="p-8 border-b flex justify-between items-center bg-slate-50 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="relative z-10">
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Student Cohorts</h2>
+          <p className="text-slate-400 font-bold mt-1">Manage classes and verified rosters</p>
+        </div>
+        <button onClick={() => setIsCreating(true)} className="relative z-10 bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-blue-100 hover:bg-blue-700 hover:scale-105 active:scale-95 transition-all">
+          <Plus size={18} /> New Cohort
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-8 bg-slate-50/50 min-h-[400px]">
+        {classes.map(c => (
+          <button
+            key={c.id}
+            onClick={() => setSelectedClass(c.id)}
+            className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-500 hover:shadow-xl transition-all text-left flex flex-col group relative overflow-hidden h-48"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 group-hover:bg-blue-50 rounded-bl-[4rem] -mr-4 -mt-4 transition-colors z-0"></div>
+            <div className="relative z-10 flex-1">
+              <h3 className="text-xl font-black text-slate-800 group-hover:text-blue-600 transition-colors mb-2 pr-10">{c.name}</h3>
+              <p className="text-xs font-bold text-slate-400">{new Date(c.created_at).toLocaleDateString()}</p>
+            </div>
+            <div className="relative z-10 flex items-center justify-between mt-4 pt-4 border-t border-slate-50">
+              <div className="flex items-center gap-2 text-slate-500 font-black">
+                <Users size={16} />
+                <span>{(c.students || []).length} Students</span>
+              </div>
+              <ArrowRight size={18} className="text-slate-300 group-hover:text-blue-500 transition-colors transform group-hover:translate-x-1" />
+            </div>
+          </button>
+        ))}
+        {classes.length === 0 && (
+          <div className="col-span-full flex flex-col items-center justify-center text-center p-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-[2.5rem]">
+            <Users size={48} className="text-slate-200 mb-4" />
+            <p className="font-black text-xl mb-2 text-slate-600">No Cohorts Found</p>
+            <p className="font-bold text-sm">Create a new cohort to restrict quiz access to specific students.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CreateClassView({ user, onCancel, onSaved }) {
+  const [name, setName] = useState('');
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [preview, setPreview] = useState([]);
+
+  const handleFile = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setFile(f);
+
+    // Preview the Excel file
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        // Find ID and Name columns
+        if (data.length > 0) {
+          const headers = data[0].map(h => String(h).toLowerCase().trim());
+          let idIdx = headers.findIndex(h => h.includes('id') || h === 'student id');
+          let nameIdx = headers.findIndex(h => h.includes('name') || h === 'student name');
+
+          if (idIdx === -1) idIdx = 0; // fallback to col 1
+          if (nameIdx === -1) nameIdx = 1; // fallback to col 2
+
+          const parsedStudents = [];
+          for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            if (row[idIdx] && String(row[idIdx]).trim() !== '') {
+              parsedStudents.push({
+                student_id: String(row[idIdx]).trim(),
+                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown'
+              });
+            }
+          }
+          setPreview(parsedStudents.filter(s => s.student_id));
+        }
+      } catch (err) {
+        setError("Failed to parse Excel file. Make sure it has ID and Name columns.");
+      }
+    };
+    reader.readAsBinaryString(f);
+  };
+
+  const downloadRosterTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['ID', 'Name'],
+      ['1001', 'Alice Smith'],
+      ['1002', 'Bob Johnson']
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Roster_Template");
+    XLSX.writeFile(wb, "AssessMe_Roster_Template.xlsx");
+  };
+
+  const submit = async () => {
+    if (!name.trim()) return setError("Class Name is required");
+    setUploading(true);
+    setError('');
+
+    try {
+      // Create Class
+      const { data: newClass, error: classErr } = await supabase.from('classes')
+        .insert({ user_id: user.id, name })
+        .select()
+        .single();
+
+      if (classErr) throw classErr;
+
+      // Insert Students if uploaded
+      if (preview.length > 0) {
+        const studentsToInsert = preview.map(s => ({
+          class_id: newClass.id,
+          student_id: s.student_id,
+          name: s.name
+        }));
+
+        const { error: stuErr } = await supabase.from('students').insert(studentsToInsert);
+        if (stuErr) throw stuErr;
+        newClass.students = studentsToInsert;
+      } else {
+        newClass.students = [];
+      }
+
+      onSaved(newClass);
+    } catch (e) {
+      setError(e.message);
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300">
+      <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+        <h2 className="text-2xl font-black text-slate-800">Create New Cohort</h2>
+        <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
+      </div>
+
+      <div className="p-8 space-y-8 max-w-2xl">
+        {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl font-bold flex items-center gap-2"><AlertCircle size={18} />{error}</div>}
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Cohort Name <span className="text-red-500">*</span></label>
+          <input
+            className="w-full text-2xl font-black text-slate-800 border-b-4 border-slate-100 focus:border-blue-600 focus:outline-none transition-all pb-2 bg-transparent"
+            placeholder="e.g. Fall 2026 Biology" value={name} onChange={e => setName(e.target.value)}
+          />
+        </div>
+
+        <div className="pt-4 border-t border-slate-100">
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-4 block tracking-widest">Initial Roster (Optional Excel/CSV)</label>
+
+          {!file ? (
+            <div className="space-y-4">
+              <label className="w-full border-4 border-dashed border-slate-200 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 hover:border-blue-300 transition-all group">
+                <UploadCloud size={48} className="text-slate-300 mb-4 group-hover:text-blue-500 transition-colors" />
+                <span className="text-lg font-black text-slate-600 mb-1">Click to browse Excel/CSV files</span>
+                <span className="text-xs font-bold text-slate-400">Must contain 'ID' and 'Name' columns</span>
+                <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleFile} />
+              </label>
+              <div className="text-center">
+                <button onClick={downloadRosterTemplate} className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition-colors uppercase tracking-widest inline-flex items-center gap-2"><Download size={14} /> Download Template</button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border-2 border-slate-100 rounded-[2rem] p-6 mb-4">
+              <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                  <FileText className="text-blue-500" size={24} />
+                  <div>
+                    <div className="font-black text-slate-700">{file.name}</div>
+                    <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">{preview.length} Valid Students Found</div>
+                  </div>
+                </div>
+                <button onClick={() => { setFile(null); setPreview([]); }} className="text-red-400 hover:bg-red-50 p-2 rounded-xl transition-colors"><Trash2 size={18} /></button>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto no-scrollbar space-y-2">
+                {preview.map((s, i) => (
+                  <div key={i} className="flex justify-between bg-white p-3 rounded-xl border border-slate-100 font-bold text-sm text-slate-600">
+                    <span>{s.name}</span>
+                    <span className="font-mono text-slate-400 text-xs">{s.student_id}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-8 flex justify-end gap-3">
+          <button onClick={onCancel} className="px-6 py-3 font-black text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">Discard</button>
+          <button disabled={uploading || !name.trim()} onClick={submit} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+            {uploading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <CheckCircle size={18} />}
+            Save Cohort
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
+  const [students, setStudents] = useState(cls.students || []);
+  const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  // Temporary state for inline edit
+  const [editName, setEditName] = useState('');
+  const [editSid, setEditSid] = useState('');
+
+  const appendFromExcel = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setLoading(true);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (data.length > 0) {
+          const headers = data[0].map(h => String(h).toLowerCase().trim());
+          let idIdx = headers.findIndex(h => h.includes('id') || h === 'student id');
+          let nameIdx = headers.findIndex(h => h.includes('name') || h === 'student name');
+          if (idIdx === -1) idIdx = 0;
+          if (nameIdx === -1) nameIdx = 1;
+
+          const parsedStudents = [];
+          for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            if (row[idIdx] && String(row[idIdx]).trim() !== '') {
+              parsedStudents.push({
+                class_id: cls.id,
+                student_id: String(row[idIdx]).trim(),
+                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown'
+              });
+            }
+          }
+
+          if (parsedStudents.length > 0) {
+            const { data: inserted, error } = await supabase.from('students').insert(parsedStudents).select();
+            if (error) throw error;
+            const nextStudents = [...students, ...inserted];
+            setStudents(nextStudents);
+            onUpdate({ ...cls, students: nextStudents });
+          }
+        }
+      } catch (err) {
+        alert("Failed to append: " + err.message);
+      }
+      setLoading(false);
+      e.target.value = null; // reset input
+    };
+    reader.readAsBinaryString(f);
+  };
+
+  const downloadRosterTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['ID', 'Name'],
+      ['1001', 'Alice Smith'],
+      ['1002', 'Bob Johnson']
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Roster_Template");
+    XLSX.writeFile(wb, "AssessMe_Roster_Template.xlsx");
+  };
+
+  const addSingleStudent = async () => {
+    setLoading(true);
+    const newId = `ID-${Math.floor(Math.random() * 1000)}`;
+    const newStudent = { class_id: cls.id, student_id: newId, name: 'New Student' };
+
+    const { data, error } = await supabase.from('students').insert([newStudent]).select().single();
+    setLoading(false);
+    if (error) return alert("Failed to add: " + error.message);
+
+    const nextStudents = [data, ...students];
+    setStudents(nextStudents);
+    onUpdate({ ...cls, students: nextStudents });
+    startEdit(data);
+  };
+
+  const deleteStudent = async (id) => {
+    if (!window.confirm("Remove this student?")) return;
+    const { error } = await supabase.from('students').delete().eq('id', id);
+    if (error) return alert("Failed to delete: " + error.message);
+
+    const nextStudents = students.filter(s => s.id !== id);
+    setStudents(nextStudents);
+    onUpdate({ ...cls, students: nextStudents });
+  };
+
+  const clearRoster = async () => {
+    if (!window.confirm("ARE YOU SURE? This removes all students from this cohort.")) return;
+    setLoading(true);
+    const { error } = await supabase.from('students').delete().eq('class_id', cls.id);
+    setLoading(false);
+    if (error) return alert("Failed to clear: " + error.message);
+
+    setStudents([]);
+    onUpdate({ ...cls, students: [] });
+  };
+
+  const triggerDeleteClass = async () => {
+    if (!window.confirm("Delete entire cohort and its roster? This action is permanent!")) return;
+    setLoading(true);
+    const { error } = await supabase.from('classes').delete().eq('id', cls.id);
+    setLoading(false);
+    if (error) alert("Failed to delete class: " + error.message);
+    else onDeleted(cls.id);
+  };
+
+  const startEdit = (s) => {
+    setEditingId(s.id);
+    setEditName(s.name);
+    setEditSid(s.student_id);
+  };
+
+  const saveEdit = async (s) => {
+    if (!editName.trim() || !editSid.trim()) return alert("Name and ID cannot be empty.");
+
+    const { error } = await supabase.from('students').update({ name: editName, student_id: editSid }).eq('id', s.id);
+    if (error) return alert("Failed to save: " + error.message);
+
+    const nextStudents = students.map(x => x.id === s.id ? { ...x, name: editName, student_id: editSid } : x);
+    setStudents(nextStudents);
+    onUpdate({ ...cls, students: nextStudents });
+    setEditingId(null);
+  };
+
+  return (
+    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden animate-in slide-in-from-right-8 duration-300">
+      <div className="p-8 border-b bg-slate-50 flex justify-between items-center sticky top-0 z-10">
+        <div className="flex items-center gap-6">
+          <button onClick={onBack} className="p-3 bg-white hover:bg-slate-100 rounded-2xl shadow-sm transition-colors text-slate-500">
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">{cls.name}</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">{students.length} Registered Students</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={triggerDeleteClass} className="px-5 py-2.5 bg-white border-2 border-slate-100 text-red-500 hover:bg-red-50 hover:border-red-200 rounded-xl font-black text-sm transition-all flex items-center gap-2">
+            <Trash2 size={16} /> Delete Cohort
+          </button>
+        </div>
+      </div>
+
+      <div className="p-8 bg-slate-50/30 flex justify-between items-center border-b border-slate-100 flex-wrap gap-4">
+        <div className="flex gap-3">
+          <button onClick={addSingleStudent} disabled={loading} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm transition-all shadow-md shadow-blue-100 flex items-center gap-2">
+            <Plus size={16} /> Add 1 Student
+          </button>
+          <label className="px-6 py-3 bg-white border-2 border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 rounded-xl font-black text-sm transition-all cursor-pointer flex items-center gap-2">
+            <Upload size={16} /> Append CSV/Excel
+            <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={appendFromExcel} disabled={loading} />
+          </label>
+          <button onClick={downloadRosterTemplate} disabled={loading} className="px-6 py-3 bg-slate-50 text-blue-600 hover:bg-blue-100 rounded-xl font-black text-sm transition-all flex items-center gap-2">
+            <Download size={14} /> Template
+          </button>
+        </div>
+        {students.length > 0 && (
+          <button onClick={clearRoster} disabled={loading} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest flex items-center gap-1">
+            <Trash2 size={14} /> Clear Roster
+          </button>
+        )}
+      </div>
+
+      <div className="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto no-scrollbar">
+        {students.map((s, idx) => {
+          const isEditing = editingId === s.id;
+
+          return (
+            <div key={s.id} className={`p-6 flex items-center justify-between transition-colors ${isEditing ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
+              {isEditing ? (
+                <div className="flex-1 flex flex-col md:flex-row gap-4 mr-6">
+                  <input className="flex-[2] p-3 text-sm font-bold bg-white border-2 border-blue-200 rounded-lg focus:outline-none" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full Name" />
+                  <input className="flex-1 p-3 text-sm font-bold bg-white border-2 border-blue-200 rounded-lg focus:outline-none font-mono" value={editSid} onChange={e => setEditSid(e.target.value)} placeholder="Student ID" />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center gap-6">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-xs font-black shrink-0">{idx + 1}</div>
+                  <div>
+                    <div className="text-slate-800 font-bold">{s.name}</div>
+                    <div className="text-slate-400 text-xs font-mono mt-1 w-fit bg-slate-100 px-2 py-0.5 rounded">{s.student_id}</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                {isEditing ? (
+                  <>
+                    <button onClick={() => setEditingId(null)} className="px-4 py-2 text-xs font-black text-slate-400 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+                    <button onClick={() => saveEdit(s)} className="px-4 py-2 text-xs font-black bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-md transition-colors">Save</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => startEdit(s)} className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={18} /></button>
+                    <button onClick={() => deleteStudent(s.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><X size={18} /></button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {students.length === 0 && (
+          <div className="p-20 text-center text-slate-400 font-bold italic">
+            Roster is empty. Add students manually or upload an Excel file.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
