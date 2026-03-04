@@ -285,6 +285,7 @@ function TeacherPortal({ setRole, user }) {
     setRoomCode(newCode);
     localStorage.setItem('AssessMe_RoomCode', newCode);
     setResponses([]); // clear prior
+    setSession(null); // clear prior session to reset dashboard
 
     const data = {
       id: newCode,
@@ -822,7 +823,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
   if (q.type === 'mc' || q.type === 'tf') {
     const labels = q.type === 'mc' ? ['A', 'B', 'C', 'D'].slice(0, q.options.length) : ['True', 'False'];
     chartData = labels.map((label, idx) => {
-      const count = responsesForCurrent.filter(r => r.answers[qIdx] === idx).length;
+      const count = responsesForCurrent.filter(r => Number(r.answers[qIdx]) === idx).length;
       return {
         label,
         count,
@@ -1205,6 +1206,9 @@ function StudentPortal({ setRole, initialRoom }) {
   const [sid, setSid] = useState('');
   const [name, setName] = useState(''); // Will be auto-filled if restricted
 
+  // Stable random ID for open rooms
+  const [localId] = useState(() => Math.random().toString(36).substring(2, 9));
+
   // States for restricted entry flow
   const [checkingId, setCheckingId] = useState(false);
   const [idError, setIdError] = useState('');
@@ -1240,7 +1244,7 @@ function StudentPortal({ setRole, initialRoom }) {
     const next = { ...answers, [qIdx]: ans };
     setAnswers(next);
 
-    const respId = `${room.toUpperCase()}_${sid || Math.random().toString(36).substring(7)}`;
+    const respId = `${room.toUpperCase()}_${sid || localId}`;
 
     try {
       await supabase.from('responses').upsert({
