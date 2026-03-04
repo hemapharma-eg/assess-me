@@ -759,6 +759,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
           onNext={handleTeacherNext}
           onPrev={handleTeacherPrev}
           onToggleResults={toggleResults}
+          onEnd={onEnd}
         />
       ) : (
         <div className="flex-1 overflow-x-auto">
@@ -808,7 +809,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
   );
 }
 
-function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleResults }) {
+function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleResults, onEnd }) {
   const qIdx = session?.quiz?.current_question_idx || 0;
   const q = session.quiz.questions[qIdx];
   const total = session.quiz.questions.length;
@@ -861,11 +862,12 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
                 <div className="absolute inset-x-0 bottom-2/4 border-b border-dashed border-slate-200 z-0"></div>
                 <div className="absolute inset-x-0 bottom-3/4 border-b border-dashed border-slate-200 z-0"></div>
                 {chartData.map((d, i) => (
-                  <div key={i} className="flex flex-col items-center gap-4 z-10 w-16 md:w-24 group">
-                    <div className="text-xs font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity bg-white px-2 py-1 rounded shadow-sm relative top-2">{d.count} ({Math.round(d.percent)}%)</div>
+                  <div key={i} className="flex flex-col items-center gap-2 z-10 w-16 md:w-24 group">
+                    <div className="text-sm font-black text-slate-700">{d.count}</div>
+                    <div className="text-[10px] font-bold text-slate-400">({Math.round(d.percent)}%)</div>
                     <div
                       className={`w-full rounded-t-xl transition-all duration-1000 ease-out shadow-lg ${d.isCorrect ? 'bg-green-500 shadow-green-500/30' : 'bg-slate-300 shadow-slate-300/30'}`}
-                      style={{ height: `${Math.max(d.percent, 2)}%` }}
+                      style={{ height: `${Math.max(d.percent, 4)}%` }}
                     ></div>
                     <div className="text-sm font-black text-slate-700 w-full text-center flex flex-col gap-1 items-center">
                       <span className={`w-8 h-8 flex items-center justify-center rounded-lg text-white text-xs ${d.isCorrect ? 'bg-green-600' : 'bg-slate-700'}`}>{d.label}</span>
@@ -931,13 +933,21 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
           {session.quiz?.show_results ? <><Activity size={20} /> Hide Results</> : <><BarChart2 size={20} /> Show Results</>}
         </button>
 
-        <button
-          onClick={onNext}
-          disabled={qIdx >= total - 1}
-          className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-black transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
-        >
-          Next <ArrowRight size={20} />
-        </button>
+        {qIdx >= total - 1 ? (
+          <button
+            onClick={onEnd}
+            className="w-full sm:w-auto px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black transition-colors shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
+          >
+            End Quiz <XCircle size={20} />
+          </button>
+        ) : (
+          <button
+            onClick={onNext}
+            className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+          >
+            Next <ArrowRight size={20} />
+          </button>
+        )}
       </div>
     </div>
   );
