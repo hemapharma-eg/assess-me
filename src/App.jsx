@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
-  ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X
+  ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -297,7 +297,10 @@ function TeacherPortal({ setRole, user }) {
     };
     const { error } = await supabase.from('rooms').insert(data);
     if (error) alert("Error creating room: " + error.message);
-    else setActiveTab('results');
+    else {
+      setSession(data); // immediately populate so Results tab renders
+      setActiveTab('results');
+    }
   };
 
   const onEnd = async () => {
@@ -956,12 +959,12 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
 function ReportsTab({ reports, classes }) {
   const [view, setView] = useState('history'); // history, gradebook
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [openReport, setOpenReport] = useState(null); // for detail view
+
   const exportToExcel = (report) => {
     try {
-      // Create workbook
       const wb = XLSX.utils.book_new();
-
-      // Sheet 1: Overview
       const overviewData = [
         ['Report Title', report.title],
         ['Date', new Date(report.ts).toLocaleString()],
@@ -970,96 +973,141 @@ function ReportsTab({ reports, classes }) {
         ['Total Questions', report.questions?.length || 0],
         []
       ];
-
-      // Sheet 2: Detailed Results
       const headers = ['Student ID', 'Student Name', 'Overall Score (%)', ...report.questions.map((_, i) => `Q${i + 1} Answer`), ...report.questions.map((_, i) => `Q${i + 1} Correct?`)];
       const resultsData = [headers];
-
       (report.responses || []).forEach(r => {
         let correctCount = 0;
         const ansRow = [];
         const isCorrectRow = [];
-
         report.questions.forEach((q, qIdx) => {
           const rawAns = r.answers?.[qIdx];
           let formattedAns = rawAns;
           if (rawAns !== undefined && q.type !== 'sa') {
-            formattedAns = q.options && q.type === 'mc' ? String.fromCharCode(65 + rawAns)
-              : (q.type === 'tf' ? (rawAns === 0 ? 'True' : 'False') : rawAns);
+            formattedAns = q.options && q.type === 'mc' ? String.fromCharCode(65 + Number(rawAns)) : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
           }
           ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
-
           const isOk = rawAns !== undefined && (q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct)));
           isCorrectRow.push(isOk ? 'Yes' : 'No');
           if (isOk) correctCount++;
         });
-
         const score = Math.round((correctCount / report.questions.length) * 100);
-        resultsData.push([
-          r.student_id,
-          r.student_name,
-          score,
-          ...ansRow,
-          ...isCorrectRow
-        ]);
+        resultsData.push([r.student_id, r.student_name, score, ...ansRow, ...isCorrectRow]);
       });
-
       const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
       const wsResults = XLSX.utils.aoa_to_sheet(resultsData);
-
       XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
       XLSX.utils.book_append_sheet(wb, wsResults, "Student Results");
-
-      // Save
       XLSX.writeFile(wb, `AssessMe_Report_${report.title.replace(/\s+/g, '_')}_${new Date(report.ts).getTime()}.xlsx`);
-    } catch (e) {
-      alert("Error exporting to Excel: " + e.message);
-    }
+    } catch (e) { alert("Error exporting to Excel: " + e.message); }
   };
 
-  const exportGradebook = (cls, assignedReports, matrix) => {
+  // Helper to compute student scores for a report
+  const computeScores = (report) => {
+    return (report.responses || []).map(r => {
+      let correctCount = 0;
+      const perQ = report.questions.map((q, qIdx) => {
+        const rawAns = r.answers?.[qIdx];
+        let display = 'N/A';
+        let isOk = false;
+        if (rawAns !== undefined) {
+          if (q.type === 'mc') display = String.fromCharCode(65 + Number(rawAns));
+          else if (q.type === 'tf') display = Number(rawAns) === 0 ? 'True' : 'False';
+          else display = String(rawAns);
+          isOk = q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct));
+          if (isOk) correctCount++;
+        }
+        return { display, isOk };
+      });
+      return { ...r, perQ, total: Math.round((correctCount / report.questions.length) * 100) };
+    }).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
+  };
+
+  // Detail view for a single report
+  if (openReport) {
+    const scored = computeScores(openReport);
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-8 border-b bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setOpenReport(null)} className="p-3 bg-white hover:bg-slate-100 rounded-2xl shadow-sm transition-colors text-slate-500"><ArrowLeft size={20} /></button>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">{openReport.title}</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">
+                  {new Date(openReport.ts).toLocaleString()} • {openReport.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'} • {scored.length} Students • {openReport.questions.length} Questions
+                </p>
+              </div>
+            </div>
+            <button onClick={() => exportToExcel(openReport)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
+              <Download size={16} /> Export Excel
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
+                  <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10">#</th>
+                  <th className="p-4 border-b border-slate-200 sticky left-10 bg-slate-50 z-10">Student Name</th>
+                  <th className="p-4 border-b border-slate-200">ID</th>
+                  {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
+                  <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
+                {scored.map((s, i) => (
+                  <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="p-4 text-slate-400 sticky left-0 bg-white z-10">{i + 1}</td>
+                    <td className="p-4 sticky left-10 bg-white z-10 whitespace-nowrap">{s.student_name || 'Anonymous'}</td>
+                    <td className="p-4 font-mono text-slate-400 text-xs">{s.student_id || '-'}</td>
+                    {s.perQ.map((pq, qi) => (
+                      <td key={qi} className={`p-4 text-center ${pq.display === 'N/A' ? 'text-slate-300' : pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
+                        {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
+                      </td>
+                    ))}
+                    <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
+                  </tr>
+                ))}
+                {scored.length === 0 && <tr><td colSpan={openReport.questions.length + 4} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const exportGradebook = (cls, assignedReps, matrix) => {
     try {
       const wb = XLSX.utils.book_new();
-      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...assignedReports.map(r => r.title)];
-
+      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...assignedReps.map(r => r.title)];
       const rows = [headers];
       matrix.forEach(row => {
         const studentData = [row.student_id, row.name, row.average];
-        assignedReports.forEach(r => {
-          studentData.push(row.scores[r.id] !== undefined ? row.scores[r.id] : 'N/A');
-        });
+        assignedReps.forEach(r => { studentData.push(row.scores[r.id] !== undefined ? row.scores[r.id] : 'N/A'); });
         rows.push(studentData);
       });
-
       const ws = XLSX.utils.aoa_to_sheet(rows);
       XLSX.utils.book_append_sheet(wb, ws, "Gradebook");
       XLSX.writeFile(wb, `AssessMe_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
-    } catch (e) {
-      alert("Error exporting Gradebook: " + e.message);
-    }
+    } catch (e) { alert("Error exporting Gradebook: " + e.message); }
   };
 
   // Gradebook Logic
   let gradebookClass = null;
   let assignedReports = [];
-  let gradeMatrix = []; // array of { student_id, name, scores: { reportId: score }, average }
+  let gradeMatrix = [];
 
   if (view === 'gradebook' && selectedClassId) {
     gradebookClass = classes.find(c => c.id === selectedClassId);
     if (gradebookClass) {
-      // Find all reports assigned to this class
       assignedReports = reports.filter(r => r.assigned_classes?.includes(selectedClassId));
-
-      // Build matrix
       gradeMatrix = (gradebookClass.students || []).map(stu => {
         const scores = {};
         let totalScore = 0;
         let attemptCount = 0;
-
         assignedReports.forEach(rep => {
           const stuResp = (rep.responses || []).find(res => res.student_id === stu.student_id);
           if (stuResp) {
-            // Calculate score
             let correctCount = 0;
             rep.questions.forEach((q, qIdx) => {
               const rawAns = stuResp.answers?.[qIdx];
@@ -1074,95 +1122,77 @@ function ReportsTab({ reports, classes }) {
             attemptCount++;
           }
         });
-
-        return {
-          ...stu,
-          scores,
-          average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0
-        };
+        return { ...stu, scores, average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0 };
       }).sort((a, b) => a.name.localeCompare(b.name));
     }
   }
 
-  // If no reports anywhere
   if (reports.length === 0 && classes.length === 0) return <div className="text-center p-32 bg-white rounded-[3rem] text-slate-300 font-black uppercase tracking-widest border border-dashed">No Analytics Yet</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-sm mx-auto">
-        <button
-          onClick={() => setView('history')}
-          className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-        >
-          Session History
-        </button>
-        <button
-          onClick={() => setView('gradebook')}
-          className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-        >
-          Cohort Gradebook
-        </button>
+        <button onClick={() => setView('history')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
+        <button onClick={() => setView('gradebook')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
       </div>
 
       {view === 'history' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pt-4">
-          {reports.map(r => (
-            <div key={r.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all flex flex-col justify-between group">
-              <div>
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-800 group-hover:text-blue-600 transition-colors tracking-tight">{r.title}</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{new Date(r.ts).toLocaleDateString()}</p>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
+            <div className="text-slate-400 font-bold text-sm self-center whitespace-nowrap">{reports.length} Session{reports.length !== 1 ? 's' : ''}</div>
+          </div>
+          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
+            <div className="divide-y divide-slate-100">
+              {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).map(r => (
+                <div key={r.id} className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}><BarChart2 size={18} /></div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-black text-slate-800 truncate">{r.title}</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{new Date(r.ts).toLocaleDateString()} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {r.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'}</p>
+                    </div>
                   </div>
-                  <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-50 text-blue-600'}`}>{r.type === 'teacher_paced' ? 'Teacher' : 'Student'}</span>
+                  <div className="flex items-center gap-6">
+                    <div className="text-center">
+                      <div className="text-xl font-black text-slate-800">{(r.responses || []).length}</div>
+                      <div className="text-[8px] font-black text-slate-400 uppercase">Students</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xl font-black text-slate-800">{(r.questions || []).length}</div>
+                      <div className="text-[8px] font-black text-slate-400 uppercase">Q's</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setOpenReport(r)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-md shadow-blue-100"><Eye size={14} /> Open</button>
+                      <button onClick={() => exportToExcel(r)} className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-md shadow-green-100"><Download size={14} /> Excel</button>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 py-4 border-y border-slate-50 mb-6">
-                  <div className="text-center border-r border-slate-50">
-                    <div className="text-2xl font-black text-slate-800">{(r.responses || []).length}</div>
-                    <div className="text-[9px] font-black text-slate-400 uppercase">Participants</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-black text-slate-800">{(r.questions || []).length}</div>
-                    <div className="text-[9px] font-black text-slate-400 uppercase">Items</div>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => exportToExcel(r)}
-                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-black text-sm rounded-xl transition-colors shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"
-              >
-                <Download size={16} /> Export Excel
-              </button>
+              ))}
+              {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).length === 0 && (
+                <div className="p-20 text-center text-slate-300 font-bold italic">No sessions match your filter.</div>
+              )}
             </div>
-          ))}
+          </div>
         </div>
       ) : (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex-1">
               <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Cohort</label>
-              <select
-                className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none"
-                value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}
-              >
+              <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
                 <option value="">-- Choose Class --</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             {gradebookClass && (
-              <button
-                onClick={() => exportGradebook(gradebookClass, assignedReports, gradeMatrix)}
-                className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95"
-              >
+              <button onClick={() => exportGradebook(gradebookClass, assignedReports, gradeMatrix)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
                 <Download size={18} /> Export Gradebook
               </button>
             )}
           </div>
-
           {!selectedClassId ? (
-            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">
-              Select a class above to view the combined gradebook matrix.
-            </div>
+            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">Select a class above to view the combined gradebook matrix.</div>
           ) : gradebookClass ? (
             <div className="overflow-x-auto custom-scroll border rounded-[2rem]">
               <table className="w-full text-left border-collapse">
@@ -1171,32 +1201,21 @@ function ReportsTab({ reports, classes }) {
                     <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
                     <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average</th>
-                    {assignedReports.map(r => (
-                      <th key={r.id} className="p-4 border-b border-slate-200 min-w-[120px]">
-                        <div className="truncate w-full max-w-[150px]" title={r.title}>{r.title}</div>
-                        <div className="text-slate-300 font-medium text-[8px] mt-1">{new Date(r.ts).toLocaleDateString()}</div>
-                      </th>
-                    ))}
+                    {assignedReports.map(r => (<th key={r.id} className="p-4 border-b border-slate-200 min-w-[120px]"><div className="truncate w-full max-w-[150px]" title={r.title}>{r.title}</div><div className="text-slate-300 font-medium text-[8px] mt-1">{new Date(r.ts).toLocaleDateString()}</div></th>))}
                     {assignedReports.length === 0 && <th className="p-4 border-b border-slate-200">No activities recorded yet.</th>}
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
                   {gradeMatrix.map((row, i) => (
                     <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-4 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 whitespace-nowrap truncate max-w-xs" title={row.name}>{row.name}</td>
+                      <td className="p-4 sticky left-0 bg-white z-10 whitespace-nowrap truncate max-w-xs" title={row.name}>{row.name}</td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
                       <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{row.average}%</td>
-                      {assignedReports.map(r => (
-                        <td key={r.id} className="p-4 text-slate-500">
-                          {row.scores[r.id] !== undefined ? `${row.scores[r.id]}%` : '-'}
-                        </td>
-                      ))}
+                      {assignedReports.map(r => (<td key={r.id} className="p-4 text-slate-500">{row.scores[r.id] !== undefined ? `${row.scores[r.id]}%` : '-'}</td>))}
                       {assignedReports.length === 0 && <td className="p-4"></td>}
                     </tr>
                   ))}
-                  {gradeMatrix.length === 0 && (
-                    <tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>
-                  )}
+                  {gradeMatrix.length === 0 && (<tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
                 </tbody>
               </table>
             </div>
