@@ -1237,7 +1237,19 @@ function ReportsTab({ reports, classes }) {
   if (view === 'gradebook' && selectedClassId) {
     gradebookClass = classes.find(c => c.id === selectedClassId);
     if (gradebookClass) {
-      assignedReports = reports.filter(r => r.assigned_classes?.includes(selectedClassId));
+      const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
+
+      assignedReports = reports.filter(r => {
+        // Automatically include if explicitly assigned
+        if (r.assigned_classes?.includes(selectedClassId)) return true;
+
+        // Also include 'Open' quizzes (none assigned) if any student from this class participated
+        if (!r.assigned_classes || r.assigned_classes.length === 0) {
+          return (r.responses || []).some(resp => classStudentIds.includes(resp.student_id));
+        }
+
+        return false;
+      });
       gradeMatrix = (gradebookClass.students || []).map(stu => {
         const scores = {};
         let totalScore = 0;
