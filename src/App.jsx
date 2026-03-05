@@ -1195,7 +1195,7 @@ function ReportsTab({ reports, classes }) {
                 })}
                 {scored.length > 0 && (
                   <tr className="bg-slate-50/50 border-t-4 border-slate-200">
-                    <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">Difficulty Index:</td>
+                    <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">% Correct</td>
                     {difficultyIndices.map((di, i) => (
                       <td key={i} className={`p-4 text-center font-black ${di === null ? 'text-slate-300' : (di >= 80 ? 'text-green-600' : di >= 50 ? 'text-orange-500' : 'text-red-500')}`}>
                         {di !== null ? `${di}%` : '-'}
