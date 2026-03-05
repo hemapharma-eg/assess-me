@@ -1252,8 +1252,18 @@ function ReportsTab({ reports, classes }) {
       gradeMatrix = (gradebookClass.students || []).map(stu => {
         const scores = {}; // Keys will be Quiz Title, Values will be HIGHEST score
 
+        // Check if there are other students in this cohort with the exact same ID
+        const hasDuplicateId = (gradebookClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
+
         assignedReports.forEach(rep => {
-          const stuResp = (rep.responses || []).find(res => res.student_id === stu.student_id);
+          const stuResp = (rep.responses || []).find(res => {
+            if (res.student_id !== stu.student_id) return false;
+            // If the ID is duplicated in the cohort, we MUST also match the name exactly to avoid assigning scores to the wrong person.
+            if (hasDuplicateId) {
+              return res.student_name === stu.name;
+            }
+            return true;
+          });
           if (stuResp) {
             let correctCount = 0;
             rep.questions.forEach((q, qIdx) => {
