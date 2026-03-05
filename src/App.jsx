@@ -280,7 +280,7 @@ function TeacherPortal({ setRole, user }) {
     };
   }, [roomCode]);
 
-  const onLaunch = async (quiz, type, lockScreen = false) => {
+  const onLaunch = async (quiz, type) => {
     const newCode = Math.random().toString(36).substring(2, 7).toUpperCase();
     setRoomCode(newCode);
     localStorage.setItem('AssessMe_RoomCode', newCode);
@@ -293,7 +293,6 @@ function TeacherPortal({ setRole, user }) {
       type,
       quiz: { ...quiz, current_question_idx: 0, show_results: false },
       is_active: true,
-      lock_screen: lockScreen,
       ts: Date.now()
     };
     const { error } = await supabase.from('rooms').insert(data);
@@ -408,7 +407,6 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
-  const [lockScreen, setLockScreen] = useState(false);
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -442,13 +440,13 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         });
       }
 
-      onLaunch({ ...launchedQuiz, assigned_classes: assignedClasses }, type, lockScreen);
+      onLaunch({ ...launchedQuiz, assigned_classes: assignedClasses }, type);
     }
     setType(null);
     setAssignedClasses([]);
     setShuffleQuestions(false);
     setShuffleChoices(false);
-    setLockScreen(false);
+    setShuffleChoices(false);
   };
 
   const toggleClass = (id) => {
@@ -502,12 +500,6 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
           <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
           <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
         </label>
-        {type === 'student_paced' && (
-          <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={lockScreen} onChange={e => setLockScreen(e.target.checked)} />
-            <span className="font-bold text-slate-700 text-sm">Enable Lock Screen Mode</span>
-          </label>
-        )}
       </div>
 
       <div className="flex gap-3">
@@ -1216,11 +1208,15 @@ function ReportsTab({ reports, classes }) {
   const exportGradebook = (cls, assignedReps, matrix) => {
     try {
       const wb = XLSX.utils.book_new();
-      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...assignedReps.map(r => r.title)];
+
+      // Group reports by unique titles for column headers
+      const uniqueQuizTitles = Array.from(new Set(assignedReps.map(r => r.title)));
+
+      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...uniqueQuizTitles];
       const rows = [headers];
       matrix.forEach(row => {
         const studentData = [row.student_id, row.name, row.average];
-        assignedReps.forEach(r => { studentData.push(row.scores[r.id] !== undefined ? row.scores[r.id] : 'N/A'); });
+        uniqueQuizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
         rows.push(studentData);
       });
       const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1250,10 +1246,12 @@ function ReportsTab({ reports, classes }) {
 
         return false;
       });
+      // We want to group by Quiz Title in the gradebook to handle multiple attempts
+      const uniqueQuizTitles = Array.from(new Set(assignedReports.map(r => r.title)));
+
       gradeMatrix = (gradebookClass.students || []).map(stu => {
-        const scores = {};
-        let totalScore = 0;
-        let attemptCount = 0;
+        const scores = {}; // Keys will be Quiz Title, Values will be HIGHEST score
+
         assignedReports.forEach(rep => {
           const stuResp = (rep.responses || []).find(res => res.student_id === stu.student_id);
           if (stuResp) {
@@ -1266,11 +1264,22 @@ function ReportsTab({ reports, classes }) {
               }
             });
             const score = Math.round((correctCount / rep.questions.length) * 100);
-            scores[rep.id] = score;
-            totalScore += score;
-            attemptCount++;
+
+            // Only keep the highest score for this specific quiz title
+            if (scores[rep.title] === undefined || score > scores[rep.title]) {
+              scores[rep.title] = score;
+            }
           }
         });
+
+        // Calculate average based on the highest scores of unique quizzes taken
+        let totalScore = 0;
+        let attemptCount = 0;
+        Object.values(scores).forEach(highestScore => {
+          totalScore += highestScore;
+          attemptCount++;
+        });
+
         return { ...stu, scores, average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0 };
       }).sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -1349,7 +1358,12 @@ function ReportsTab({ reports, classes }) {
                     <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
                     <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average</th>
-                    {assignedReports.map(r => (<th key={r.id} className="p-4 border-b border-slate-200 min-w-[120px]"><div className="truncate w-full max-w-[150px]" title={r.title}>{r.title}</div><div className="text-slate-300 font-medium text-[8px] mt-1">{new Date(r.ts).toLocaleDateString()}</div></th>))}
+                    {Array.from(new Set(assignedReports.map(r => r.title))).map(title => (
+                      <th key={title} className="p-4 border-b border-slate-200 min-w-[120px]">
+                        <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
+                        <div className="text-slate-300 font-medium text-[8px] mt-1">Best Score</div>
+                      </th>
+                    ))}
                     {assignedReports.length === 0 && <th className="p-4 border-b border-slate-200">No activities recorded yet.</th>}
                   </tr>
                 </thead>
@@ -1359,7 +1373,9 @@ function ReportsTab({ reports, classes }) {
                       <td className="p-4 sticky left-0 bg-white z-10 whitespace-nowrap truncate max-w-xs" title={row.name}>{row.name}</td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
                       <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{row.average}%</td>
-                      {assignedReports.map(r => (<td key={r.id} className="p-4 text-slate-500">{row.scores[r.id] !== undefined ? `${row.scores[r.id]}%` : '-'}</td>))}
+                      {Array.from(new Set(assignedReports.map(r => r.title))).map(title => (
+                        <td key={title} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
+                      ))}
                       {assignedReports.length === 0 && <td className="p-4"></td>}
                     </tr>
                   ))}
@@ -1449,25 +1465,6 @@ function StudentPortal({ setRole, initialRoom }) {
       setIdx(session.quiz.current_question_idx);
     }
   }, [session]);
-
-  // Lock Screen Monitor
-  useEffect(() => {
-    if (!joined || !session || !session.lock_screen) return;
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        alert("SECURITY WARNING: You have left the quiz window. This action has been recorded.");
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleVisibilityChange);
-    };
-  }, [joined, session]);
 
   const attemptJoin = async (e) => {
     e.preventDefault();
@@ -1677,14 +1674,12 @@ function StudentPortal({ setRole, initialRoom }) {
             <div className="space-y-6">
               <textarea
                 id="sa-box"
-                defaultValue={answers[idx] || ''}
+                value={answers[idx] || ''}
+                onChange={(e) => submit(idx, e.target.value)}
                 disabled={isLocked}
                 className={`w-full border-4 rounded-[2.5rem] p-8 text-2xl font-bold focus:outline-none shadow-inner min-h-[220px] transition-all ${isLocked ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white text-slate-800'}`}
-                placeholder={isLocked ? "Editing locked by teacher" : "Response..."}
+                placeholder={isLocked ? "Editing locked by teacher" : "Start typing your answer here... It saves automatically!"}
               />
-              {!isLocked && (
-                <button onClick={() => submit(idx, document.getElementById('sa-box').value)} className="w-full py-6 bg-orange-600 text-white rounded-[2.5rem] font-black text-2xl shadow-2xl shadow-orange-100 transition-all active:scale-95 uppercase tracking-widest">{answers[idx] !== undefined ? 'Update Response' : 'Submit Response'}</button>
-              )}
               {isLocked && q.correct && (
                 <div className="p-6 bg-green-50 rounded-[2rem] border-2 border-green-200 text-green-800 font-bold">
                   <div className="text-[10px] uppercase tracking-widest text-green-600 mb-1">Correct Answer:</div>
