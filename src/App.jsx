@@ -1844,9 +1844,9 @@ function CreateClassView({ user, onCancel, onSaved }) {
           email: s.email
         }));
 
-        const { error: stuErr } = await supabase.from('students').insert(studentsToInsert);
+        const { data: insertedStudents, error: stuErr } = await supabase.from('students').insert(studentsToInsert).select();
         if (stuErr) throw stuErr;
-        newClass.students = studentsToInsert;
+        newClass.students = insertedStudents;
       } else {
         newClass.students = [];
       }

@@ -1,5 +1,14 @@
 -- Copy and paste this directly into the Supabase SQL Editor
--- This will set up all tables and security needed for the AssessMe App
+-- THIS SCRIPT WILL FULLY OVERWRITE YOUR OLD TABLES
+-- WARNING: All existing data in these tables will be deleted.
+
+-- 0. Drop existing tables safely to start fresh
+DROP TABLE IF EXISTS public.responses CASCADE;
+DROP TABLE IF EXISTS public.rooms CASCADE;
+DROP TABLE IF EXISTS public.reports CASCADE;
+DROP TABLE IF EXISTS public.quizzes CASCADE;
+DROP TABLE IF EXISTS public.students CASCADE;
+DROP TABLE IF EXISTS public.classes CASCADE;
 
 -- 1. Quizzes table
 CREATE TABLE public.quizzes (
@@ -88,7 +97,6 @@ CREATE POLICY "Anyone can read active rooms" ON public.rooms
     FOR SELECT USING (true); -- allowed so students can fetch room code
 
 -- Responses: Open to public insertions so anonymous students can respond
--- In a real app we'd restrict update so they can only update their own row, but for simplicity:
 CREATE POLICY "Anyone can manage responses" ON public.responses
     FOR ALL USING (true);
 
@@ -97,7 +105,6 @@ CREATE POLICY "Users can manage their own classes" ON public.classes
     FOR ALL USING (auth.uid() = user_id);
 
 -- Students: Owners of the class can access
--- To keep it simple, we allow anyone authenticated to read, but you can restrict via join
 CREATE POLICY "Anyone can manage students" ON public.students
     FOR ALL USING (true);
 
