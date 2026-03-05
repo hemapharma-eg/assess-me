@@ -1998,17 +1998,40 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           if (nameIdx === -1) nameIdx = 1;
           if (emailIdx === -1) emailIdx = 2;
 
+          const existingIds = new Set(students.map(s => String(s.student_id).toLowerCase().trim()));
+          const existingEmails = new Set(students.map(s => String(s.email).toLowerCase().trim()).filter(Boolean));
+          let duplicatesSkipped = 0;
+
           const parsedStudents = [];
           for (let i = 1; i < data.length; i++) {
             const row = data[i];
-            if (row[idIdx] && String(row[idIdx]).trim() !== '') {
+            const sid = row[idIdx] ? String(row[idIdx]).trim() : '';
+            const semail = row[emailIdx] ? String(row[emailIdx]).trim() : '';
+            const sname = row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown';
+
+            if (sid !== '') {
+              const sidLower = sid.toLowerCase();
+              const semailLower = semail.toLowerCase();
+
+              if (existingIds.has(sidLower) || (semailLower && existingEmails.has(semailLower))) {
+                duplicatesSkipped++;
+                continue;
+              }
+
+              existingIds.add(sidLower);
+              if (semailLower) existingEmails.add(semailLower);
+
               parsedStudents.push({
                 class_id: cls.id,
-                student_id: String(row[idIdx]).trim(),
-                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown',
-                email: row[emailIdx] ? String(row[emailIdx]).trim() : ''
+                student_id: sid,
+                name: sname,
+                email: semail
               });
             }
+          }
+
+          if (duplicatesSkipped > 0) {
+            alert(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this cohort.`);
           }
 
           if (parsedStudents.length > 0) {
@@ -2093,6 +2116,15 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 
   const saveEdit = async (s) => {
     if (!editName.trim() || !editSid.trim()) return alert("Name and ID cannot be empty.");
+
+    // Uniqueness Checks
+    const isDuplicateId = students.find(x => x.id !== s.id && String(x.student_id).toLowerCase().trim() === editSid.toLowerCase().trim());
+    if (isDuplicateId) return alert("Error: That Student ID is already used by another student in this cohort.");
+
+    if (editEmail.trim()) {
+      const isDuplicateEmail = students.find(x => x.id !== s.id && x.email && String(x.email).toLowerCase().trim() === editEmail.toLowerCase().trim());
+      if (isDuplicateEmail) return alert("Error: That Email is already used by another student in this cohort.");
+    }
 
     const { error } = await supabase.from('students').update({ name: editName, student_id: editSid, email: editEmail }).eq('id', s.id);
     if (error) return alert("Failed to save: " + error.message);
