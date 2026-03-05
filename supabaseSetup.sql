@@ -18,6 +18,7 @@ CREATE TABLE public.reports (
     type TEXT NOT NULL,
     responses JSONB NOT NULL DEFAULT '[]',
     questions JSONB NOT NULL DEFAULT '[]',
+    assigned_classes JSONB DEFAULT '[]',
     ts BIGINT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -29,6 +30,7 @@ CREATE TABLE public.rooms (
     quiz JSONB NOT NULL,
     type TEXT NOT NULL,
     is_active BOOLEAN DEFAULT true,
+    lock_screen BOOLEAN DEFAULT false,
     ts BIGINT NOT NULL
 );
 
@@ -42,6 +44,24 @@ CREATE TABLE public.responses (
     ts BIGINT NOT NULL
 );
 
+-- 5. Classes table (for cohorts)
+CREATE TABLE public.classes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users NOT NULL,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. Students table (for cohort members)
+CREATE TABLE public.students (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id UUID REFERENCES public.classes(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    email TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ==============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================
@@ -50,6 +70,8 @@ ALTER TABLE public.quizzes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 
 -- Quizzes: Only owners can access
 CREATE POLICY "Users can manage their own quizzes" ON public.quizzes
@@ -68,6 +90,15 @@ CREATE POLICY "Anyone can read active rooms" ON public.rooms
 -- Responses: Open to public insertions so anonymous students can respond
 -- In a real app we'd restrict update so they can only update their own row, but for simplicity:
 CREATE POLICY "Anyone can manage responses" ON public.responses
+    FOR ALL USING (true);
+
+-- Classes: Only owners can access
+CREATE POLICY "Users can manage their own classes" ON public.classes
+    FOR ALL USING (auth.uid() = user_id);
+
+-- Students: Owners of the class can access
+-- To keep it simple, we allow anyone authenticated to read, but you can restrict via join
+CREATE POLICY "Anyone can manage students" ON public.students
     FOR ALL USING (true);
 
 

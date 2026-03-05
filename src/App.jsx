@@ -280,7 +280,7 @@ function TeacherPortal({ setRole, user }) {
     };
   }, [roomCode]);
 
-  const onLaunch = async (quiz, type) => {
+  const onLaunch = async (quiz, type, lockScreen = false) => {
     const newCode = Math.random().toString(36).substring(2, 7).toUpperCase();
     setRoomCode(newCode);
     localStorage.setItem('AssessMe_RoomCode', newCode);
@@ -293,6 +293,7 @@ function TeacherPortal({ setRole, user }) {
       type,
       quiz: { ...quiz, current_question_idx: 0, show_results: false },
       is_active: true,
+      lock_screen: lockScreen,
       ts: Date.now()
     };
     const { error } = await supabase.from('rooms').insert(data);
@@ -404,6 +405,9 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   const [selected, setSelected] = useState('');
   const [type, setType] = useState(null);
   const [assignedClasses, setAssignedClasses] = useState([]);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [shuffleChoices, setShuffleChoices] = useState(false);
+  const [lockScreen, setLockScreen] = useState(false);
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -418,10 +422,32 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
 
   const start = () => {
     const q = quizzes.find(x => x.id === selected);
-    // Attach assigned_classes to the quiz object we are launching
-    if (q) onLaunch({ ...q, assigned_classes: assignedClasses }, type);
+    if (q) {
+      let launchedQuiz = JSON.parse(JSON.stringify(q));
+
+      if (shuffleQuestions) {
+        launchedQuiz.questions = [...launchedQuiz.questions].sort(() => Math.random() - 0.5);
+      }
+
+      if (shuffleChoices) {
+        launchedQuiz.questions.forEach(question => {
+          if (question.type === 'mc' && question.options) {
+            const originalOptions = [...question.options];
+            const originalCorrectValue = originalOptions[question.correct];
+
+            question.options = [...originalOptions].sort(() => Math.random() - 0.5);
+            question.correct = question.options.findIndex(opt => opt === originalCorrectValue);
+          }
+        });
+      }
+
+      onLaunch({ ...launchedQuiz, assigned_classes: assignedClasses }, type, lockScreen);
+    }
     setType(null);
     setAssignedClasses([]);
+    setShuffleQuestions(false);
+    setShuffleChoices(false);
+    setLockScreen(false);
   };
 
   const toggleClass = (id) => {
@@ -462,6 +488,24 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
               </div>
             </label>
           ))
+        )}
+      </div>
+
+      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Quiz Settings</h2>
+      <div className="space-y-2 mb-10">
+        <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+          <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} />
+          <span className="font-bold text-slate-700 text-sm">Shuffle Questions</span>
+        </label>
+        <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+          <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
+          <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
+        </label>
+        {type === 'student_paced' && (
+          <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+            <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={lockScreen} onChange={e => setLockScreen(e.target.checked)} />
+            <span className="font-bold text-slate-700 text-sm">Enable Lock Screen Mode</span>
+          </label>
         )}
       </div>
 
@@ -961,6 +1005,11 @@ function ReportsTab({ reports, classes }) {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [openReport, setOpenReport] = useState(null); // for detail view
+  const [selectedForEmail, setSelectedForEmail] = useState([]);
+
+  useEffect(() => {
+    if (openReport) setSelectedForEmail([]);
+  }, [openReport]);
 
   const exportToExcel = (report) => {
     try {
@@ -1005,6 +1054,15 @@ function ReportsTab({ reports, classes }) {
   const computeScores = (report) => {
     return (report.responses || []).map(r => {
       let correctCount = 0;
+      let email = '';
+      for (const c of classes) {
+        const s = (c.students || []).find(st => st.student_id === r.student_id);
+        if (s && s.email) {
+          email = s.email;
+          break;
+        }
+      }
+
       const perQ = report.questions.map((q, qIdx) => {
         const rawAns = r.answers?.[qIdx];
         let display = 'N/A';
@@ -1018,13 +1076,29 @@ function ReportsTab({ reports, classes }) {
         }
         return { display, isOk };
       });
-      return { ...r, perQ, total: Math.round((correctCount / report.questions.length) * 100) };
+      return { ...r, perQ, total: Math.round((correctCount / report.questions.length) * 100), email };
     }).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
   };
 
   // Detail view for a single report
   if (openReport) {
     const scored = computeScores(openReport);
+
+    // Calculate difficulty index per question
+    const difficultyIndices = openReport.questions.map((_, qIdx) => {
+      let correctAttempts = 0;
+      let totalAttempts = 0;
+
+      scored.forEach(s => {
+        if (s.perQ[qIdx].display !== 'N/A') {
+          totalAttempts++;
+          if (s.perQ[qIdx].isOk) correctAttempts++;
+        }
+      });
+
+      return totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : null;
+    });
+
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
@@ -1038,36 +1112,95 @@ function ReportsTab({ reports, classes }) {
                 </p>
               </div>
             </div>
-            <button onClick={() => exportToExcel(openReport)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
-              <Download size={16} /> Export Excel
-            </button>
+            <div className="flex gap-2">
+              {selectedForEmail.length > 0 && (
+                <a
+                  href={`mailto:?bcc=${selectedForEmail.map(id => scored.find(s => s.student_id === id)?.email).filter(Boolean).join(',')}&subject=Your Quiz Results: ${openReport.title}&body=Hello Class,%0D%0A%0D%0AYour scores for the recent quiz "${openReport.title}" are now available.`}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                >
+                  Email Selected ({selectedForEmail.length})
+                </a>
+              )}
+              <button onClick={() => exportToExcel(openReport)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
+                <Download size={16} /> Export Excel
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
-                  <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10">#</th>
-                  <th className="p-4 border-b border-slate-200 sticky left-10 bg-slate-50 z-10">Student Name</th>
+                  <th className="p-4 border-b border-slate-200 text-center sticky left-0 bg-slate-50 z-20">
+                    <input
+                      type="checkbox"
+                      className="accent-blue-600 rounded cursor-pointer"
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedForEmail(scored.filter(s => s.email).map(s => s.student_id));
+                        else setSelectedForEmail([]);
+                      }}
+                      checked={scored.filter(s => s.email).length > 0 && selectedForEmail.length === scored.filter(s => s.email).length}
+                      title="Select all students with emails"
+                    />
+                  </th>
+                  <th className="p-4 border-b border-slate-200 z-10">#</th>
+                  <th className="p-4 border-b border-slate-200 z-10">Student Name</th>
                   <th className="p-4 border-b border-slate-200">ID</th>
                   {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
                   <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>
+                  <th className="p-4 border-b border-slate-200 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                {scored.map((s, i) => (
-                  <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="p-4 text-slate-400 sticky left-0 bg-white z-10">{i + 1}</td>
-                    <td className="p-4 sticky left-10 bg-white z-10 whitespace-nowrap">{s.student_name || 'Anonymous'}</td>
-                    <td className="p-4 font-mono text-slate-400 text-xs">{s.student_id || '-'}</td>
-                    {s.perQ.map((pq, qi) => (
-                      <td key={qi} className={`p-4 text-center ${pq.display === 'N/A' ? 'text-slate-300' : pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
-                        {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
+                {scored.map((s, i) => {
+                  const hasEmail = !!s.email;
+                  return (
+                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="p-4 text-center sticky left-0 bg-white z-10">
+                        {hasEmail && (
+                          <input
+                            type="checkbox"
+                            className="accent-blue-600 rounded cursor-pointer"
+                            checked={selectedForEmail.includes(s.student_id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedForEmail([...selectedForEmail, s.student_id]);
+                              else setSelectedForEmail(selectedForEmail.filter(id => id !== s.student_id));
+                            }}
+                          />
+                        )}
+                      </td>
+                      <td className="p-4 text-slate-400">{i + 1}</td>
+                      <td className="p-4 whitespace-nowrap">{s.student_name || 'Anonymous'}</td>
+                      <td className="p-4 font-mono text-slate-400 text-xs">{s.student_id || '-'}</td>
+                      {s.perQ.map((pq, qi) => (
+                        <td key={qi} className={`p-4 text-center ${pq.display === 'N/A' ? 'text-slate-300' : pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
+                          {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
+                        </td>
+                      ))}
+                      <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
+                      <td className="p-4 text-center">
+                        <a
+                          href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
+                          title={hasEmail ? "Send Email" : "No email address found"}
+                        >
+                          Email
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {scored.length > 0 && (
+                  <tr className="bg-slate-50/50 border-t-4 border-slate-200">
+                    <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">Difficulty Index:</td>
+                    {difficultyIndices.map((di, i) => (
+                      <td key={i} className={`p-4 text-center font-black ${di === null ? 'text-slate-300' : (di >= 80 ? 'text-green-600' : di >= 50 ? 'text-orange-500' : 'text-red-500')}`}>
+                        {di !== null ? `${di}%` : '-'}
                       </td>
                     ))}
-                    <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
+                    <td colSpan="2"></td>
                   </tr>
-                ))}
-                {scored.length === 0 && <tr><td colSpan={openReport.questions.length + 4} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
+                )}
+                {scored.length === 0 && <tr><td colSpan={openReport.questions.length + 6} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1164,7 +1297,6 @@ function ReportsTab({ reports, classes }) {
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setOpenReport(r)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-md shadow-blue-100"><Eye size={14} /> Open</button>
-                      <button onClick={() => exportToExcel(r)} className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-md shadow-green-100"><Download size={14} /> Excel</button>
                     </div>
                   </div>
                 </div>
@@ -1295,6 +1427,25 @@ function StudentPortal({ setRole, initialRoom }) {
       setIdx(session.quiz.current_question_idx);
     }
   }, [session]);
+
+  // Lock Screen Monitor
+  useEffect(() => {
+    if (!joined || !session || !session.lock_screen) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        alert("SECURITY WARNING: You have left the quiz window. This action has been recorded.");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleVisibilityChange);
+    };
+  }, [joined, session]);
 
   const attemptJoin = async (e) => {
     e.preventDefault();
@@ -1522,6 +1673,7 @@ function StudentPortal({ setRole, initialRoom }) {
               disabled={answers[idx] === undefined || (q.type === 'sa' && !answers[idx])}
               className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
             >
+              Next <ArrowRight size={20} />
             </button>
           </div>
         )}
@@ -1632,9 +1784,11 @@ function CreateClassView({ user, onCancel, onSaved }) {
           const headers = data[0].map(h => String(h).toLowerCase().trim());
           let idIdx = headers.findIndex(h => h.includes('id') || h === 'student id');
           let nameIdx = headers.findIndex(h => h.includes('name') || h === 'student name');
+          let emailIdx = headers.findIndex(h => h.includes('email') || h === 'student email');
 
           if (idIdx === -1) idIdx = 0; // fallback to col 1
           if (nameIdx === -1) nameIdx = 1; // fallback to col 2
+          if (emailIdx === -1) emailIdx = 2; // fallback to col 3
 
           const parsedStudents = [];
           for (let i = 1; i < data.length; i++) {
@@ -1642,7 +1796,8 @@ function CreateClassView({ user, onCancel, onSaved }) {
             if (row[idIdx] && String(row[idIdx]).trim() !== '') {
               parsedStudents.push({
                 student_id: String(row[idIdx]).trim(),
-                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown'
+                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown',
+                email: row[emailIdx] ? String(row[emailIdx]).trim() : ''
               });
             }
           }
@@ -1657,9 +1812,9 @@ function CreateClassView({ user, onCancel, onSaved }) {
 
   const downloadRosterTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['ID', 'Name'],
-      ['1001', 'Alice Smith'],
-      ['1002', 'Bob Johnson']
+      ['ID', 'Name', 'Email'],
+      ['1001', 'Alice Smith', 'alice@school.edu'],
+      ['1002', 'Bob Johnson', 'bob@school.edu']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Roster_Template");
@@ -1685,7 +1840,8 @@ function CreateClassView({ user, onCancel, onSaved }) {
         const studentsToInsert = preview.map(s => ({
           class_id: newClass.id,
           student_id: s.student_id,
-          name: s.name
+          name: s.name,
+          email: s.email
         }));
 
         const { error: stuErr } = await supabase.from('students').insert(studentsToInsert);
@@ -1750,9 +1906,12 @@ function CreateClassView({ user, onCancel, onSaved }) {
 
               <div className="max-h-48 overflow-y-auto no-scrollbar space-y-2">
                 {preview.map((s, i) => (
-                  <div key={i} className="flex justify-between bg-white p-3 rounded-xl border border-slate-100 font-bold text-sm text-slate-600">
-                    <span>{s.name}</span>
-                    <span className="font-mono text-slate-400 text-xs">{s.student_id}</span>
+                  <div key={i} className="flex flex-col md:flex-row justify-between bg-white p-3 rounded-xl border border-slate-100 font-bold text-sm text-slate-600 gap-2">
+                    <span className="truncate">{s.name}</span>
+                    <div className="flex gap-4 opacity-70">
+                      {s.email && <span className="text-xs truncate">{s.email}</span>}
+                      <span className="font-mono text-xs">{s.student_id}</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1780,6 +1939,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   // Temporary state for inline edit
   const [editName, setEditName] = useState('');
   const [editSid, setEditSid] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   const appendFromExcel = (e) => {
     const f = e.target.files[0];
@@ -1799,8 +1959,10 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           const headers = data[0].map(h => String(h).toLowerCase().trim());
           let idIdx = headers.findIndex(h => h.includes('id') || h === 'student id');
           let nameIdx = headers.findIndex(h => h.includes('name') || h === 'student name');
+          let emailIdx = headers.findIndex(h => h.includes('email') || h === 'student email');
           if (idIdx === -1) idIdx = 0;
           if (nameIdx === -1) nameIdx = 1;
+          if (emailIdx === -1) emailIdx = 2;
 
           const parsedStudents = [];
           for (let i = 1; i < data.length; i++) {
@@ -1809,7 +1971,8 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
               parsedStudents.push({
                 class_id: cls.id,
                 student_id: String(row[idIdx]).trim(),
-                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown'
+                name: row[nameIdx] ? String(row[nameIdx]).trim() : 'Unknown',
+                email: row[emailIdx] ? String(row[emailIdx]).trim() : ''
               });
             }
           }
@@ -1833,9 +1996,9 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 
   const downloadRosterTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['ID', 'Name'],
-      ['1001', 'Alice Smith'],
-      ['1002', 'Bob Johnson']
+      ['ID', 'Name', 'Email'],
+      ['1001', 'Alice Smith', 'alice@school.edu'],
+      ['1002', 'Bob Johnson', 'bob@school.edu']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Roster_Template");
@@ -1845,7 +2008,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   const addSingleStudent = async () => {
     setLoading(true);
     const newId = `ID-${Math.floor(Math.random() * 1000)}`;
-    const newStudent = { class_id: cls.id, student_id: newId, name: 'New Student' };
+    const newStudent = { class_id: cls.id, student_id: newId, name: 'New Student', email: '' };
 
     const { data, error } = await supabase.from('students').insert([newStudent]).select().single();
     setLoading(false);
@@ -1891,15 +2054,16 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
     setEditingId(s.id);
     setEditName(s.name);
     setEditSid(s.student_id);
+    setEditEmail(s.email || '');
   };
 
   const saveEdit = async (s) => {
     if (!editName.trim() || !editSid.trim()) return alert("Name and ID cannot be empty.");
 
-    const { error } = await supabase.from('students').update({ name: editName, student_id: editSid }).eq('id', s.id);
+    const { error } = await supabase.from('students').update({ name: editName, student_id: editSid, email: editEmail }).eq('id', s.id);
     if (error) return alert("Failed to save: " + error.message);
 
-    const nextStudents = students.map(x => x.id === s.id ? { ...x, name: editName, student_id: editSid } : x);
+    const nextStudents = students.map(x => x.id === s.id ? { ...x, name: editName, student_id: editSid, email: editEmail } : x);
     setStudents(nextStudents);
     onUpdate({ ...cls, students: nextStudents });
     setEditingId(null);
@@ -1954,13 +2118,19 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
                 <div className="flex-1 flex flex-col md:flex-row gap-4 mr-6">
                   <input className="flex-[2] p-3 text-sm font-bold bg-white border-2 border-blue-200 rounded-lg focus:outline-none" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full Name" />
                   <input className="flex-1 p-3 text-sm font-bold bg-white border-2 border-blue-200 rounded-lg focus:outline-none font-mono" value={editSid} onChange={e => setEditSid(e.target.value)} placeholder="Student ID" />
+                  <input className="flex-[2] p-3 text-sm font-bold bg-white border-2 border-blue-200 rounded-lg focus:outline-none" value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="Email (optional)" />
                 </div>
               ) : (
-                <div className="flex-1 flex items-center gap-6">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-xs font-black shrink-0">{idx + 1}</div>
-                  <div>
-                    <div className="text-slate-800 font-bold">{s.name}</div>
-                    <div className="text-slate-400 text-xs font-mono mt-1 w-fit bg-slate-100 px-2 py-0.5 rounded">{s.student_id}</div>
+                <div className="flex-1 flex flex-col md:flex-row md:items-center gap-2 md:gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-xs font-black shrink-0">{idx + 1}</div>
+                    <div>
+                      <div className="text-slate-800 font-bold">{s.name}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="text-slate-400 text-xs font-mono w-fit bg-slate-100 px-2 py-0.5 rounded">{s.student_id}</div>
+                        {s.email && <div className="text-slate-400 text-[10px] truncate max-w-[150px] ml-2">{s.email}</div>}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
