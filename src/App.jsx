@@ -315,7 +315,8 @@ function TeacherPortal({ setRole, user }) {
       type: session.type,
       ts: Date.now(),
       responses: responses,
-      questions: session.quiz.questions
+      questions: session.quiz.questions,
+      assigned_classes: session.quiz.assigned_classes || []
     };
 
     // 1. Save to Reports in DB
@@ -949,12 +950,15 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-            {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => (
-              <div key={i} className="bg-white p-6 rounded-[2rem] border-4 border-slate-50 text-xl font-black text-slate-700 shadow-sm flex items-center gap-6">
-                <span className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-xs text-slate-400 shrink-0 uppercase">{String.fromCharCode(65 + i)}</span>
-                {o}
-              </div>
-            ))}
+            {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => {
+              if (!o || !String(o).trim()) return null;
+              return (
+                <div key={i} className="bg-white p-6 rounded-[2rem] border-4 border-slate-50 text-xl font-black text-slate-700 shadow-sm flex items-center gap-6">
+                  <span className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-xs text-slate-400 shrink-0 uppercase">{String.fromCharCode(65 + i)}</span>
+                  {o}
+                </div>
+              );
+            })}
             {q.type === 'sa' && (
               <div className="col-span-full bg-white p-8 rounded-[2rem] border-4 border-slate-50 text-center text-slate-400 italic font-bold h-32 flex items-center justify-center">
                 Awaiting short answers from students...
@@ -1539,13 +1543,13 @@ function StudentPortal({ setRole, initialRoom }) {
                 placeholder="ROOM CODE" value={room} onChange={e => setRoom(e.target.value.toUpperCase())} required
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
-                className="flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                className="w-full sm:flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
                 placeholder="Full Name (if open)" value={name} onChange={e => setName(e.target.value)}
               />
               <input
-                className="flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
                 placeholder="ID #" value={sid} onChange={e => setSid(e.target.value)}
               />
             </div>
@@ -1613,6 +1617,7 @@ function StudentPortal({ setRole, initialRoom }) {
         <h2 className="text-3xl font-black text-slate-800 mb-12 leading-tight tracking-tight">{q.text}</h2>
         <div className="space-y-5">
           {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => {
+            if (!o || !String(o).trim()) return null;
             const isSelected = answers[idx] === i;
             let bgColorInfo = '';
 
