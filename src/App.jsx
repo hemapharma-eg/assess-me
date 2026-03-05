@@ -1382,6 +1382,7 @@ function StudentPortal({ setRole, initialRoom }) {
 
   const [joined, setJoined] = useState(false);
   const [session, setSession] = useState(null);
+  const [quizEnded, setQuizEnded] = useState(false);
   const [answers, setAnswers] = useState({});
   const [idx, setIdx] = useState(0);
 
@@ -1397,7 +1398,12 @@ function StudentPortal({ setRole, initialRoom }) {
 
     const roomSub = supabase.channel(`student-chan-${code}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${code}` }, s => {
-        setSession(s.eventType === 'DELETE' ? null : s.new);
+        if (s.eventType === 'DELETE') {
+          setSession(null);
+          setQuizEnded(true);
+        } else {
+          setSession(s.new);
+        }
       }).subscribe();
 
     return () => {
@@ -1568,26 +1574,32 @@ function StudentPortal({ setRole, initialRoom }) {
     );
   }
 
+  const total = session?.quiz?.questions?.length || 1;
+  const isFinished = session?.type === 'student_paced' ? idx >= total : false;
+
+  if (quizEnded || isFinished) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
+      <div className="bg-white p-12 md:p-16 flex flex-col items-center rounded-[3.5rem] shadow-2xl w-full max-w-md border border-slate-100 relative overflow-hidden">
+        <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-green-50 to-transparent"></div>
+        <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-8 relative z-10 shadow-inner">
+          <CheckCircle size={48} />
+        </div>
+        <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tighter relative z-10">Thank You!</h2>
+        <p className="text-slate-500 font-bold text-sm leading-relaxed mb-10 relative z-10 px-4">
+          Your answers have been securely synced to the cloud. You are all set and may safely close this page.
+        </p>
+        <button onClick={() => setRole(null)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-[2rem] font-black tracking-widest uppercase transition-colors relative z-10 text-sm shadow-sm">
+          Return Home
+        </button>
+      </div>
+    </div>
+  );
+
   if (!session) return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-10 text-center">
       <div className="w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-10 shadow-[0_0_30px_rgba(59,130,246,0.3)]"></div>
       <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic">Synchronizing...</h2>
       <p className="text-blue-200/50 max-w-xs font-bold uppercase text-[10px] tracking-widest">Connected to Cloud Room {room}. Activity pending teacher launch.</p>
-    </div>
-  );
-
-  const total = session.quiz.questions?.length || 1;
-  const isFinished = session.type === 'student_paced' ? idx >= total : false;
-
-  if (isFinished) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8 text-center animate-in zoom-in duration-500">
-      <div className="bg-white p-16 flex flex-col items-center rounded-[4rem] shadow-2xl max-w-sm border border-slate-100 relative overflow-hidden">
-        <div className="absolute top-0 right-1/2 translate-x-1/2 -mt-4 w-32 h-32 bg-green-500/10 blur-3xl rounded-full"></div>
-        <CheckCircle size={100} className="text-green-500 bg-white mx-auto mb-8 rounded-full relative z-10" />
-        <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tighter relative z-10">Done!</h2>
-        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest relative z-10">Response Securely Logged to Cloud. You can safely close this window.</p>
-        <button onClick={() => setRole(null)} className="mt-8 text-slate-400 font-bold text-xs hover:text-slate-600 transition-colors">Return Home</button>
-      </div>
     </div>
   );
 
