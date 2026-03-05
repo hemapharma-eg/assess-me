@@ -208,7 +208,7 @@ function TeacherPortal({ setRole, user }) {
     return null;
   }
 
-  const [activeTab, setActiveTab] = useState('launch');
+  const [activeTab, setActiveTab] = useState('quizzes');
   const [quizzes, setQuizzes] = useState([]);
   const [reports, setReports] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -351,7 +351,7 @@ function TeacherPortal({ setRole, user }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Launch', 'Quizzes', 'Results', 'Reports', 'Classes'].map(t => (
+            {['Quizzes', 'Classes', 'Launch', 'Results', 'Reports'].map(t => (
               <button
                 key={t} onClick={() => setActiveTab(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -377,7 +377,7 @@ function TeacherPortal({ setRole, user }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['launch', 'quizzes', 'results', 'reports', 'classes'].map(tab => (
+          {['quizzes', 'classes', 'launch', 'results', 'reports'].map(tab => (
             <button
               key={tab} onClick={() => setActiveTab(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
