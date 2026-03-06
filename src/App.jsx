@@ -432,23 +432,26 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
         {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} onDeleteReport={async (r) => {
           if (!window.confirm(`Delete session "${r.title}"?`)) return;
-          // Async pseudo-reports have short room-code IDs; real reports have timestamp IDs
           const isAsync = asyncReports.some(ar => ar.id === r.id);
           if (isAsync) {
-            await supabase.from('rooms').delete().eq('id', r.id);
-            setAsyncReports(prev => prev.filter(ar => ar.id !== r.id));
+            // Only delete responses for this async room, NOT the room itself
+            await supabase.from('responses').delete().eq('room_code', r.id);
+            // Update the pseudo-report in state to have empty responses
+            setAsyncReports(prev => prev.map(ar => ar.id === r.id ? { ...ar, responses: [] } : ar));
           } else {
             await supabase.from('reports').delete().eq('id', r.id);
             setReports(prev => prev.filter(rp => rp.id !== r.id));
           }
         }} onDeleteAllReports={async () => {
           if (!window.confirm('Delete ALL session history? This cannot be undone.')) return;
+          // Delete regular reports from DB
           const reportIds = reports.map(r => r.id);
-          const asyncIds = asyncReports.map(r => r.id);
           if (reportIds.length) await supabase.from('reports').delete().in('id', reportIds);
-          if (asyncIds.length) await supabase.from('rooms').delete().in('id', asyncIds);
           setReports([]);
-          setAsyncReports([]);
+          // For async rooms, only delete responses (keep rooms alive for Asynchronous tab)
+          const asyncRoomIds = asyncReports.map(r => r.id);
+          if (asyncRoomIds.length) await supabase.from('responses').delete().in('room_code', asyncRoomIds);
+          setAsyncReports(prev => prev.map(ar => ({ ...ar, responses: [] })));
         }} />}
       </main>
     </div>
