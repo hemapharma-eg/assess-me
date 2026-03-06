@@ -1963,9 +1963,10 @@ function ReportsTab({ reports, allReports, classes }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-sm mx-auto">
-        <button onClick={() => setView('history')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
-        <button onClick={() => setView('gradebook')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
+      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-[600px] mx-auto overflow-x-auto whitespace-nowrap custom-scroll">
+        <button onClick={() => setView('history')} className={`px-6 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
+        <button onClick={() => setView('gradebook')} className={`px-6 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
+        <button onClick={() => setView('attendance')} className={`px-6 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
       </div>
 
       {view === 'history' ? (
@@ -2031,7 +2032,7 @@ function ReportsTab({ reports, allReports, classes }) {
             </div>
           </div>
         </div>
-      ) : (
+      ) : view === 'gradebook' ? (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex-1">
@@ -2133,7 +2134,62 @@ function ReportsTab({ reports, allReports, classes }) {
             </div>
           ) : null}
         </div>
-      )}
+      ) : view === 'attendance' ? (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="flex-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Cohort</label>
+              <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
+                <option value="">-- Choose Class --</option>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+          {!selectedClassId ? (
+            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">Select a class above to view the attendance record.</div>
+          ) : gradebookClass ? (
+            <div className="overflow-x-auto custom-scroll border rounded-[2rem]">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
+                    <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
+                    <th className="p-4 border-b border-slate-200 w-32">ID</th>
+                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => {
+                       const rep = assignedReports.find(r => r.title === title && r.type === 'attendance');
+                       return (
+                         <th key={title} className="p-4 border-b border-slate-200 min-w-[120px] text-center">
+                           <div className="truncate w-full max-w-[150px] text-slate-700" title={title}>{title}</div>
+                           <div className="text-slate-400 font-black text-[8px] mt-1">{new Date(rep?.ts).toLocaleDateString()} {new Date(rep?.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                         </th>
+                       )
+                    })}
+                    {assignedReports.filter(r => r.type === 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No attendance sessions recorded yet.</th>}
+                  </tr>
+                </thead>
+                <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
+                  {gradeMatrix.map((row, i) => (
+                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs bg-white" title={row.name}>
+                        {row.name}
+                      </td>
+                      <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
+                      
+                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
+                         <td key={`a-${title}`} className={`p-4 font-black text-center ${row.attendanceRecords[title] ? 'text-green-500 bg-green-50/10' : 'text-red-400 bg-red-50/30'}`}>
+                           {row.attendanceRecords[title] ? 'Present' : 'Absent'}
+                         </td>
+                      ))}
+
+                      {assignedReports.filter(r => r.type === 'attendance').length === 0 && <td className="p-4"></td>}
+                    </tr>
+                  ))}
+                  {gradeMatrix.length === 0 && (<tr><td colSpan={10} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2162,6 +2218,17 @@ function StudentPortal({ setRole, initialRoom }) {
   const [answers, setAnswers] = useState({});
   const [idx, setIdx] = useState(0);
   const [attendanceSuccess, setAttendanceSuccess] = useState(false);
+  const [roomType, setRoomType] = useState('');
+
+  useEffect(() => {
+    if (room?.length === 6) {
+      supabase.from('rooms').select('type').eq('id', room.toUpperCase()).single().then(res => {
+        if (res.data) setRoomType(res.data.type);
+      });
+    } else {
+      setRoomType('');
+    }
+  }, [room]);
 
   // Video Quiz States
   const playerRef = useRef(null);
@@ -2318,20 +2385,11 @@ function StudentPortal({ setRole, initialRoom }) {
           return;
         }
         
-        // Success for Cohort Attendance
+        // Ask for confirmation
         const stuName = stuData[0].name;
-        const respId = `${code}_${sid.trim()}|${fingerprint}`;
-        
-        await supabase.from('responses').upsert({
-          id: respId,
-          room_code: code,
-          student_name: stuName,
-          student_id: sid.trim(),
-          answers: {},
-          ts: Date.now()
-        });
-
-        setAttendanceSuccess(true);
+        setName(stuName);
+        setTempSession(roomData);
+        setNeedsConfirmation(true);
         setCheckingId(false);
         return;
       }
@@ -2343,17 +2401,8 @@ function StudentPortal({ setRole, initialRoom }) {
         return;
       }
 
-      const respId = `${code}_${sid.trim()}|${fingerprint}`;
-      await supabase.from('responses').upsert({
-        id: respId,
-        room_code: code,
-        student_name: name.trim(),
-        student_id: sid.trim(),
-        answers: {},
-        ts: Date.now()
-      });
-
-      setAttendanceSuccess(true);
+      setTempSession(roomData);
+      setNeedsConfirmation(true);
       setCheckingId(false);
       return;
     }
@@ -2403,6 +2452,30 @@ function StudentPortal({ setRole, initialRoom }) {
   };
 
   const confirmJoin = async () => {
+    if (tempSession?.type === 'attendance') {
+        const code = tempSession.id;
+        let deviceId = localStorage.getItem('ClassLabX_DeviceID');
+        if (!deviceId) {
+          deviceId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          localStorage.setItem('ClassLabX_DeviceID', deviceId);
+        }
+        const fingerprint = `${deviceId}_${navigator.userAgent}_${navigator.language}_${window.screen.width}x${window.screen.height}`;
+        const respId = `${code}_${sid.trim()}|${fingerprint}`;
+        
+        await supabase.from('responses').upsert({
+          id: respId,
+          room_code: code,
+          student_name: name.trim(),
+          student_id: sid.trim(),
+          answers: {},
+          ts: Date.now()
+        });
+
+        setNeedsConfirmation(false);
+        setAttendanceSuccess(true);
+        return;
+    }
+
     // If it's an async room, fetch previous responses to allow resuming
     if (tempSession?.is_async && sid) {
       const code = tempSession.id;
@@ -2427,7 +2500,7 @@ function StudentPortal({ setRole, initialRoom }) {
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Is this you?</h2>
             <p className="text-slate-500 font-bold mt-4 text-xl bg-slate-50 py-3 rounded-2xl border border-slate-100">{name}</p>
             <div className="mt-8 space-y-3">
-              <button onClick={confirmJoin} className="w-full bg-green-500 hover:bg-green-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-green-100 transition-all active:scale-95">Yes, Start Quiz</button>
+              <button onClick={confirmJoin} className="w-full bg-green-500 hover:bg-green-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-green-100 transition-all active:scale-95">Yes, {tempSession?.type === 'attendance' ? 'Confirm Attendance' : 'Start Quiz'}</button>
               <button onClick={() => setNeedsConfirmation(false)} className="w-full bg-white hover:bg-slate-50 text-slate-400 py-4 rounded-[2rem] font-black tracking-widest uppercase transition-colors">No, go back</button>
             </div>
           </div>
@@ -2470,18 +2543,22 @@ function StudentPortal({ setRole, initialRoom }) {
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                className="w-full sm:flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
-                placeholder="Full Name (if open)" value={name} onChange={e => setName(e.target.value)}
-              />
+              {roomType !== 'attendance' && (
+                <input
+                  className="w-full sm:flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                  placeholder="Full Name (if open)" value={name} onChange={e => setName(e.target.value)}
+                />
+              )}
               <input
                 className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
                 placeholder="ID #" value={sid} onChange={e => setSid(e.target.value)}
               />
             </div>
-            <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
-              If your teacher assigned a cohort, you MUST enter your exact Student ID number. You can leave Name blank.
-            </p>
+            {roomType !== 'attendance' && (
+              <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
+                If your teacher assigned a cohort, you MUST enter your exact Student ID number. You can leave Name blank.
+              </p>
+            )}
             <button type="submit" disabled={checkingId} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-100 mt-2 transition-transform active:scale-95 flex justify-center items-center">
               {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : 'ENTER ROOM'}
             </button>
