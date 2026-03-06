@@ -2044,18 +2044,9 @@ function ReportsTab({ reports, allReports, classes }) {
             </div>
             {gradebookClass && (
               <div className="flex gap-2">
-                {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
-                  <a
-                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=Immediate Action Required: Attendance Warning&body=Dear Student,%0D%0A%0D%0AOur records indicate that your overall attendance has fallen below the required 75% threshold. Please reach out to your instructor immediately to discuss this matter.%0D%0A%0D%0AClassLabX Automated Notification`}
-                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95"
-                  >
-                    <AlertCircle size={18} /> Email At-Risk
-                  </a>
-                )}
                 <button onClick={() => {
                    const qs = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
-                   const as = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)));
-                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as);
+                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, false, []);
                 }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
                   <Download size={18} /> Export Gradebook
                 </button>
@@ -2073,61 +2064,34 @@ function ReportsTab({ reports, allReports, classes }) {
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
                     <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average Score</th>
                     
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && (
-                      <th className="p-4 border-b border-slate-200 text-center text-green-600 w-28">Overall Attendance</th>
-                    )}
-
                     {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
                       <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
                         <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
                         <div className="text-slate-300 font-medium text-[8px] mt-1">Quiz Best Score</div>
                       </th>
                     ))}
-                    
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
-                      <th key={`a-${title}`} className="p-4 border-b border-slate-200 min-w-[100px] border-l-2">
-                        <div className="truncate w-full max-w-[120px]" title={title}>{title}</div>
-                        <div className="text-slate-300 font-medium text-[8px] mt-1">Attendance</div>
-                      </th>
-                    ))}
 
-                    {assignedReports.length === 0 && <th className="p-4 border-b border-slate-200">No activities recorded yet.</th>}
+                    {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No quizzes recorded yet.</th>}
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                  {gradeMatrix.map((row, i) => {
-                    const hasAttendance = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0;
-                    const isAtRisk = hasAttendance && row.attendanceTotal < 75;
-                    return (
-                    <tr key={i} className={`hover:bg-blue-50/30 transition-colors ${isAtRisk ? 'bg-red-50/20' : ''}`}>
-                      <td className={`p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs ${isAtRisk ? 'bg-red-50/40 text-red-700 font-black' : 'bg-white'}`} title={row.name}>
+                  {gradeMatrix.map((row, i) => (
+                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs bg-white" title={row.name}>
                         <div className="flex items-center gap-2">
                            {row.name}
-                           {isAtRisk && <span className="bg-red-500 text-white px-2 py-0.5 rounded-md text-[8px] uppercase tracking-widest font-black shrink-0 shadow-sm animate-pulse">At Risk</span>}
                         </div>
                       </td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
                       <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-slate-400'}`}>{row.average > 0 ? `${row.average}%` : '-'}</td>
                       
-                      {hasAttendance && (
-                        <td className={`p-4 text-center font-black ${row.attendanceTotal >= 75 ? 'text-green-600' : 'text-red-500'}`}>
-                          {row.attendanceTotal}%
-                        </td>
-                      )}
-
                       {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
                         <td key={`q-${title}`} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
                       ))}
 
-                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
-                         <td key={`a-${title}`} className={`p-4 font-black border-l-2 ${row.attendanceRecords[title] ? 'text-green-500' : 'text-red-300'}`}>
-                           {row.attendanceRecords[title] ? 'Present' : 'Absent'}
-                         </td>
-                      ))}
-
-                      {assignedReports.length === 0 && <td className="p-4"></td>}
+                      {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <td className="p-4"></td>}
                     </tr>
-                  )})}
+                  ))}
                   {gradeMatrix.length === 0 && (<tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
                 </tbody>
               </table>
@@ -2144,6 +2108,25 @@ function ReportsTab({ reports, allReports, classes }) {
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
+            {gradebookClass && (
+              <div className="flex gap-2">
+                {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
+                  <a
+                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=Immediate Action Required: Attendance Warning&body=Dear Student,%0D%0A%0D%0AOur records indicate that your overall attendance has fallen below the required 75% threshold. Please reach out to your instructor immediately to discuss this matter.%0D%0A%0D%0AClassLabX Automated Notification`}
+                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95"
+                  >
+                    <AlertCircle size={18} /> Email At-Risk
+                  </a>
+                )}
+                <button onClick={() => {
+                   const qs = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
+                   const as = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)));
+                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as);
+                }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
+                  <Download size={18} /> Export Attendance
+                </button>
+              </div>
+            )}
           </div>
           {!selectedClassId ? (
             <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">Select a class above to view the attendance record.</div>
@@ -2154,6 +2137,9 @@ function ReportsTab({ reports, allReports, classes }) {
                   <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
                     <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
+                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && (
+                      <th className="p-4 border-b border-slate-200 text-center text-green-600 w-28">Overall Attendance</th>
+                    )}
                     {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => {
                        const rep = assignedReports.find(r => r.title === title && r.type === 'attendance');
                        return (
@@ -2167,13 +2153,25 @@ function ReportsTab({ reports, allReports, classes }) {
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                  {gradeMatrix.map((row, i) => (
-                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs bg-white" title={row.name}>
-                        {row.name}
+                  {gradeMatrix.map((row, i) => {
+                    const hasAttendance = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0;
+                    const isAtRisk = hasAttendance && row.attendanceTotal < 75;
+                    return (
+                    <tr key={i} className={`hover:bg-blue-50/30 transition-colors ${isAtRisk ? 'bg-red-50/20' : ''}`}>
+                      <td className={`p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs ${isAtRisk ? 'bg-red-50/40 text-red-700 font-black' : 'bg-white'}`} title={row.name}>
+                        <div className="flex items-center gap-2">
+                           {row.name}
+                           {isAtRisk && <span className="bg-red-500 text-white px-2 py-0.5 rounded-md text-[8px] uppercase tracking-widest font-black shrink-0 shadow-sm animate-pulse">At Risk</span>}
+                        </div>
                       </td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
                       
+                      {hasAttendance && (
+                        <td className={`p-4 text-center font-black ${row.attendanceTotal >= 75 ? 'text-green-600' : 'text-red-500'}`}>
+                          {row.attendanceTotal}%
+                        </td>
+                      )}
+
                       {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
                          <td key={`a-${title}`} className={`p-4 font-black text-center ${row.attendanceRecords[title] ? 'text-green-500 bg-green-50/10' : 'text-red-400 bg-red-50/30'}`}>
                            {row.attendanceRecords[title] ? 'Present' : 'Absent'}
@@ -2182,7 +2180,7 @@ function ReportsTab({ reports, allReports, classes }) {
 
                       {assignedReports.filter(r => r.type === 'attendance').length === 0 && <td className="p-4"></td>}
                     </tr>
-                  ))}
+                  )})}
                   {gradeMatrix.length === 0 && (<tr><td colSpan={10} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
                 </tbody>
               </table>
