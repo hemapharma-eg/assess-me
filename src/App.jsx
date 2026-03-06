@@ -1632,6 +1632,25 @@ function ReportsTab({ reports, allReports, classes }) {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [openReport, setOpenReport] = useState(null); // for detail view
+  const [typeFilter, setTypeFilter] = useState({
+    teacher_paced: true,
+    student_paced: true,
+    attendance: true
+  });
+  const [hiddenSessions, setHiddenSessions] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ClassLabX_HiddenSessions')) || []; }
+    catch { return []; }
+  });
+
+  const toggleHidden = (id) => {
+    setHiddenSessions(prev => {
+      const newHidden = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      localStorage.setItem('ClassLabX_HiddenSessions', JSON.stringify(newHidden));
+      return newHidden;
+    });
+  };
+
+  const deleteReport = async (id, roomId, isAsync) => { /* implementation for deleteReport */ };
   const [selectedForEmail, setSelectedForEmail] = useState([]);
 
   useEffect(() => {
@@ -1976,11 +1995,27 @@ function ReportsTab({ reports, allReports, classes }) {
 
       {view === 'history' ? (
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col md:flex-row gap-4 mb-4">
             <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
-            <div className="flex items-center gap-4">
-              <div className="text-slate-400 font-bold text-sm whitespace-nowrap">{reports.length} Session{reports.length !== 1 ? 's' : ''}</div>
+            <div className="flex flex-wrap gap-2 items-center">
+              {[
+                { id: 'teacher_paced', label: 'Sync', icon: <BarChart2 size={14} />, color: 'purple' },
+                { id: 'student_paced', label: 'Async', icon: <BarChart2 size={14} />, color: 'blue' },
+                { id: 'attendance', label: 'Attendance', icon: <UserCheck size={14} />, color: 'green' }
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setTypeFilter(prev => ({ ...prev, [f.id]: !prev[f.id] }))}
+                  className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-colors border-2 ${typeFilter[f.id] ? `bg-${f.color}-100 text-${f.color}-700 border-${f.color}-200` : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
+                >
+                  {f.icon} {f.label}
+                </button>
+              ))}
             </div>
+          </div>
+          <div className="flex justify-between items-center px-2">
+             <div className="text-slate-400 font-bold text-xs uppercase tracking-widest">{reports.filter(r => !hiddenSessions.includes(r.id)).length} Visible Sessions</div>
+             <button onClick={() => setHiddenSessions([])} className="text-[10px] uppercase font-black tracking-widest text-slate-400 hover:text-blue-500 underline underline-offset-4">Reset Hidden</button>
           </div>
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto custom-scroll">
@@ -1996,7 +2031,11 @@ function ReportsTab({ reports, allReports, classes }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).map(r => (
+                  {reports
+                    .filter(r => !hiddenSessions.includes(r.id))
+                    .filter(r => typeFilter[r.type])
+                    .filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase()))
+                    .map(r => (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 text-center align-middle">
                         <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
@@ -2008,7 +2047,7 @@ function ReportsTab({ reports, allReports, classes }) {
                       </td>
                       <td className="p-3 align-middle">
                         <div className="text-xs font-bold text-slate-500">
-                          {new Date(r.ts).toLocaleDateString()} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(r.ts).toLocaleDateString('en-GB')} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                         <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : r.type === 'attendance' ? 'Attendance' : 'Student Paced'}</div>
                       </td>
@@ -2018,7 +2057,10 @@ function ReportsTab({ reports, allReports, classes }) {
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {(r.questions || []).length}
                       </td>
-                      <td className="p-3 text-right align-middle pr-6">
+                      <td className="p-3 text-right align-middle pr-6 space-x-2">
+                        <button onClick={() => toggleHidden(r.id)} className="px-3 py-2 inline-flex bg-slate-50 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg font-black text-xs transition-all items-center gap-2" title="Hide Session">
+                          <EyeOff size={14} />
+                        </button>
                         <button onClick={() => setOpenReport(r)} className="px-4 py-2 inline-flex bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg font-black text-xs transition-all items-center gap-2">
                           <Eye size={14} /> Open
                         </button>
@@ -2145,12 +2187,18 @@ function ReportsTab({ reports, allReports, classes }) {
                     {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && (
                       <th className="p-4 border-b border-slate-200 text-center text-green-600 w-28">Overall Attendance</th>
                     )}
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => {
+                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)))
+                      .sort((a, b) => {
+                         const repA = assignedReports.find(r => r.title === a && r.type === 'attendance');
+                         const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
+                         return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
+                      })
+                      .map(title => {
                        const rep = assignedReports.find(r => r.title === title && r.type === 'attendance');
                        return (
                          <th key={title} className="p-4 border-b border-slate-200 min-w-[120px] text-center">
                            <div className="truncate w-full max-w-[150px] text-slate-700" title={title}>{title}</div>
-                           <div className="text-slate-400 font-black text-[8px] mt-1">{new Date(rep?.ts).toLocaleDateString()} {new Date(rep?.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                           <div className="text-slate-400 font-black text-[8px] mt-1">{new Date(rep?.ts).toLocaleDateString('en-GB')} {new Date(rep?.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                          </th>
                        )
                     })}
@@ -2177,7 +2225,13 @@ function ReportsTab({ reports, allReports, classes }) {
                         </td>
                       )}
 
-                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
+                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)))
+                         .sort((a, b) => {
+                           const repA = assignedReports.find(r => r.title === a && r.type === 'attendance');
+                           const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
+                           return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
+                         })
+                         .map(title => (
                          <td key={`a-${title}`} className={`p-4 font-black text-center ${row.attendanceRecords[title] ? 'text-green-500 bg-green-50/10' : 'text-red-400 bg-red-50/30'}`}>
                            {row.attendanceRecords[title] ? 'Present' : 'Absent'}
                          </td>
