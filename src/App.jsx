@@ -466,13 +466,7 @@ function ScheduledTab({ user }) {
     setLoading(false);
   };
 
-  const handleUnschedule = async (id) => {
-    if (!window.confirm('Are you sure you want to unschedule this quiz? It will delete the room entirely.')) return;
-    
-    // Deleting the room will automatically cascade and delete responses.
-    await supabase.from('rooms').delete().eq('id', id);
-    setScheduledRooms(prev => prev.filter(r => r.id !== id));
-  };
+
 
   const startEdit = (room) => {
     setEditingRoom(room.id);
@@ -584,7 +578,6 @@ function ScheduledTab({ user }) {
                 ) : (
                   <>
                     <button onClick={() => startEdit(room)} className="px-4 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl font-black transition-colors"><Edit2 size={18} /></button>
-                    <button onClick={() => handleUnschedule(room.id)} className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl font-black transition-colors"><Trash2 size={18} /></button>
                   </>
                 )}
               </div>
