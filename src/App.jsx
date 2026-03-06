@@ -1964,9 +1964,9 @@ function ReportsTab({ reports, allReports, classes }) {
   return (
     <div className="space-y-6">
       <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-[600px] mx-auto overflow-x-auto whitespace-nowrap custom-scroll">
-        <button onClick={() => setView('history')} className={`px-6 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
-        <button onClick={() => setView('gradebook')} className={`px-6 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
-        <button onClick={() => setView('attendance')} className={`px-6 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
+        <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
+        <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
+        <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
       </div>
 
       {view === 'history' ? (
@@ -2221,7 +2221,7 @@ function StudentPortal({ setRole, initialRoom }) {
   const [roomType, setRoomType] = useState('');
 
   useEffect(() => {
-    if (room?.length === 6) {
+    if (room?.trim().length >= 4) {
       supabase.from('rooms').select('type').eq('id', room.toUpperCase()).single().then(res => {
         if (res.data) setRoomType(res.data.type);
       });
