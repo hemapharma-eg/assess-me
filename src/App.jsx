@@ -283,24 +283,37 @@ function TeacherPortal({ setRole, user }) {
 
   const onLaunch = async (quiz, type) => {
     const newCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-    setRoomCode(newCode);
-    localStorage.setItem('AssessMe_RoomCode', newCode);
-    setResponses([]); // clear prior
-    setSession(null); // clear prior session to reset dashboard
+
+    const isAsync = type === 'async_quiz' || type === 'async_video';
 
     const data = {
       id: newCode,
       user_id: user.id,
       type,
       quiz: { ...quiz, current_question_idx: 0, show_results: false },
-      is_active: true,
-      ts: Date.now()
+      is_active: !isAsync, // async rooms aren't "live" tracking
+      ts: Date.now(),
+      is_async: isAsync,
+      start_time: quiz.start_time,
+      end_time: quiz.end_time,
+      prevent_skipping: quiz.prevent_skipping
     };
+
     const { error } = await supabase.from('rooms').insert(data);
-    if (error) alert("Error creating room: " + error.message);
-    else {
-      setSession(data); // immediately populate so Results tab renders
-      setActiveTab('results');
+    if (error) {
+      alert("Error creating room: " + error.message);
+      return null;
+    } else {
+      if (isAsync) {
+        return newCode;
+      } else {
+        setRoomCode(newCode);
+        localStorage.setItem('AssessMe_RoomCode', newCode);
+        setResponses([]); // clear prior
+        setSession(data); // immediately populate so Results tab renders
+        setActiveTab('results');
+        return newCode;
+      }
     }
   };
 
@@ -412,6 +425,7 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   const [preventSkipping, setPreventSkipping] = useState(false);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [scheduledLink, setScheduledLink] = useState(null);
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -424,7 +438,47 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
     </div>
   );
 
-  const start = () => {
+  if (scheduledLink) return (
+    <div className="max-w-xl mx-auto bg-white p-12 rounded-[3.5rem] shadow-2xl border border-slate-100 text-center animate-in zoom-in duration-300">
+      <div className="w-24 h-24 bg-green-50 text-green-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-inner">
+        <CheckCircle size={48} />
+      </div>
+      <h2 className="text-4xl font-black text-slate-800 tracking-tighter mb-4">Quiz Scheduled!</h2>
+      <p className="text-slate-500 font-bold mb-8">Your asynchronous quiz is ready to be shared with your students.</p>
+      
+      <div className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 mb-8 max-w-sm mx-auto">
+        <div className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Room Code</div>
+        <div className="text-4xl font-black text-blue-600 tracking-widest">{scheduledLink.code}</div>
+      </div>
+
+      <div className="text-left mb-10">
+        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest px-4">Direct Share Link</label>
+        <div className="flex gap-2">
+          <input readOnly value={scheduledLink.url} className="flex-1 bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 text-sm focus:outline-none focus:border-blue-400 transition-colors" />
+          <button onClick={() => {
+            navigator.clipboard.writeText(scheduledLink.url);
+            alert("Link copied to clipboard!");
+          }} className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 transition-all active:scale-95 flex items-center justify-center">Copy</button>
+        </div>
+      </div>
+
+      <button onClick={() => {
+        setScheduledLink(null);
+        setType(null);
+        setCategory(null);
+        setAssignedClasses([]);
+        setShuffleQuestions(false);
+        setShuffleChoices(false);
+        setPreventSkipping(false);
+        setStartTime('');
+        setEndTime('');
+      }} className="w-full py-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-[2rem] font-black uppercase tracking-widest transition-colors shadow-sm">
+        Schedule Another
+      </button>
+    </div>
+  );
+
+  const start = async () => {
     const q = quizzes.find(x => x.id === selected);
     if (q) {
       let launchedQuiz = JSON.parse(JSON.stringify(q));
@@ -452,16 +506,23 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         launchedQuiz.prevent_skipping = preventSkipping;
       }
 
-      onLaunch({ ...launchedQuiz, assigned_classes: assignedClasses }, type);
+      const code = await onLaunch({ ...launchedQuiz, assigned_classes: assignedClasses }, type);
+      if (category === 'async' && code) {
+        const joinUrl = `${window.location.href.split('?')[0]}?room=${code}`;
+        setScheduledLink({ code, url: joinUrl });
+      }
     }
-    setType(null);
-    setCategory(null);
-    setAssignedClasses([]);
-    setShuffleQuestions(false);
-    setShuffleChoices(false);
-    setPreventSkipping(false);
-    setStartTime('');
-    setEndTime('');
+    
+    if (category !== 'async') {
+      setType(null);
+      setCategory(null);
+      setAssignedClasses([]);
+      setShuffleQuestions(false);
+      setShuffleChoices(false);
+      setPreventSkipping(false);
+      setStartTime('');
+      setEndTime('');
+    }
   };
 
   const toggleClass = (id) => {
@@ -1896,7 +1957,7 @@ function StudentPortal({ setRole, initialRoom }) {
   }
 
   const total = session?.quiz?.questions?.length || 1;
-  const isFinished = session?.type === 'student_paced' ? idx >= total : false;
+  const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ? idx >= total : false;
 
   if (quizEnded || isFinished) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
@@ -1947,12 +2008,12 @@ function StudentPortal({ setRole, initialRoom }) {
       )}
 
       {session.quiz.type === 'video' && (
-        <div className="lg:w-2/3 bg-black lg:h-full flex flex-col sticky top-0 z-20 shadow-2xl">
+        <div className="w-full flex flex-col sticky top-0 z-20 shadow-2xl shrink-0 lg:w-2/3 lg:h-full bg-black">
           <div className="p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
             <div className="font-black text-white text-lg truncate pr-4">{session.quiz.title}</div>
             <div className="bg-slate-800 px-3 py-1 rounded-full text-[10px] font-bold text-slate-300 uppercase shrink-0">ID: {sid || 'OPEN'}</div>
           </div>
-          <div className="flex-1 w-full relative">
+          <div className="w-full aspect-video lg:aspect-auto lg:flex-1 relative">
             <ReactPlayer
               ref={playerRef}
               url={session.quiz.video_url}
@@ -2059,7 +2120,7 @@ function StudentPortal({ setRole, initialRoom }) {
           )}
         </div>
 
-        {session.type === 'student_paced' && (
+        {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && (
           <div className="mt-12">
             <button
               onClick={handleNext}
