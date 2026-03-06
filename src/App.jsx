@@ -1871,7 +1871,7 @@ function ReportsTab({ reports, allReports, classes }) {
   let assignedReports = [];
   let gradeMatrix = [];
 
-  if (view === 'gradebook' && selectedClassId) {
+  if ((view === 'gradebook' || view === 'attendance') && selectedClassId) {
     gradebookClass = classes.find(c => c.id === selectedClassId);
     if (gradebookClass) {
       const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
