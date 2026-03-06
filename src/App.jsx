@@ -1974,7 +1974,7 @@ function ReportsTab({ reports, allReports, classes }) {
                   <th className="p-4 border-b border-slate-200">ID</th>
                   {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
                   {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
-                  <th className="p-4 border-b border-slate-200 text-center">Actions</th>
+                  {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
@@ -2006,15 +2006,17 @@ function ReportsTab({ reports, allReports, classes }) {
                       {openReport.type !== 'attendance' && (
                         <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
                       )}
-                      <td className="p-4 text-center">
-                        <a
-                          href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
-                          title={hasEmail ? "Send Email" : "No email address found"}
-                        >
-                          Email
-                        </a>
-                      </td>
+                      {openReport.type !== 'attendance' && (
+                        <td className="p-4 text-center">
+                          <a
+                            href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
+                            title={hasEmail ? "Send Email" : "No email address found"}
+                          >
+                            Email
+                          </a>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -2394,7 +2396,7 @@ function ReportsTab({ reports, allReports, classes }) {
               <div className="flex gap-2">
                 {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
                   <a
-                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=Immediate Action Required: Attendance Warning&body=Dear Student,%0D%0A%0D%0AOur records indicate that your overall attendance has fallen below the required 75% threshold. Please reach out to your instructor immediately to discuss this matter.%0D%0A%0D%0AClassLabX Automated Notification`}
+                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=⚠ Attendance Warning – Immediate Action Required&body=Dear Student,%0D%0A%0D%0AThis is an official notification from your course instructor.%0D%0A%0D%0AOur records show that your current attendance rate has dropped BELOW the required minimum of 75%. Failure to meet the attendance requirement may result in academic penalties or disqualification from final examinations, in accordance with institutional policy.%0D%0A%0D%0APlease contact your instructor IMMEDIATELY to discuss your attendance record and any possible remediation.%0D%0A%0D%0AThis message was generated automatically by ClassLabX.`}
                     className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95"
                   >
                     <AlertCircle size={18} /> Email At-Risk
