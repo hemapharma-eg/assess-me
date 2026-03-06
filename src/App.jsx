@@ -2040,24 +2040,26 @@ function ReportsTab({ reports, allReports, classes }) {
     );
   }
 
-  const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles) => {
+  const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles, attendanceOnly = false) => {
     try {
       const wb = XLSX.utils.book_new();
 
       // Separate out quizzes from attendance
-      const quizTitles = Array.from(new Set(assignedReps.filter(r => r.type !== 'attendance').map(r => r.title)));
+      const quizTitles = attendanceOnly ? [] : Array.from(new Set(assignedReps.filter(r => r.type !== 'attendance').map(r => r.title)));
 
-      const headers = ['Student ID', 'Student Name', 'Average Quiz Score (%)'];
+      const headers = ['Student ID', 'Student Name'];
+      if (!attendanceOnly) headers.push('Average Quiz Score (%)');
       if (hasAttendance) headers.push('Overall Attendance (%)');
-      headers.push(...quizTitles);
+      if (!attendanceOnly) headers.push(...quizTitles);
       if (hasAttendance) headers.push(...attendanceTitles);
 
       const rows = [headers];
       matrix.forEach(row => {
-        const studentData = [row.student_id, row.name, row.average];
+        const studentData = [row.student_id, row.name];
+        if (!attendanceOnly) studentData.push(row.average);
         if (hasAttendance) studentData.push(row.attendanceTotal);
         
-        quizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
+        if (!attendanceOnly) quizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
         if (hasAttendance) {
           attendanceTitles.forEach(title => { studentData.push(row.attendanceRecords[title] ? 'Present' : 'Absent'); });
         }
@@ -2065,9 +2067,11 @@ function ReportsTab({ reports, allReports, classes }) {
         rows.push(studentData);
       });
       const ws = XLSX.utils.aoa_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, "Gradebook");
-      XLSX.writeFile(wb, `ClassLabX_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
-    } catch (e) { alert("Error exporting Gradebook: " + e.message); }
+      XLSX.utils.book_append_sheet(wb, ws, attendanceOnly ? "Attendance" : "Gradebook");
+      XLSX.writeFile(wb, attendanceOnly
+        ? `ClassLabX_Attendance_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`
+        : `ClassLabX_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
+    } catch (e) { alert("Error exporting: " + e.message); }
   };
 
   // Gradebook Logic
@@ -2403,9 +2407,8 @@ function ReportsTab({ reports, allReports, classes }) {
                   </a>
                 )}
                 <button onClick={() => {
-                   const qs = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
                    const as = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)));
-                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as);
+                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as, true);
                 }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
                   <Download size={18} /> Export Attendance
                 </button>
