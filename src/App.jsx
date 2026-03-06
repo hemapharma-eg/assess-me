@@ -1995,11 +1995,12 @@ function ReportsTab({ reports, allReports, classes }) {
 
         // For reports with no assigned_classes (old format before the fix)
         if (!r.assigned_classes || r.assigned_classes.length === 0) {
-          // For attendance: we cannot retroactively know which class it was for,
-          // so show it for any selected class (Present/Absent status handles differentiation)
-          if (r.type === 'attendance') return true;
-          // For quizzes: check if any student from this class participated
-          return (r.responses || []).some(resp => classStudentIds.includes(resp.student_id));
+          // Determine which class the session belongs to by checking students who responded
+          const responderIds = (r.responses || []).map(resp => String(resp.student_id).trim().toLowerCase());
+          if (responderIds.length === 0) return false; // can't determine class if nobody responded
+          
+          const classIds = classStudentIds.map(id => String(id).trim().toLowerCase());
+          return responderIds.some(id => classIds.includes(id));
         }
 
         return false;
