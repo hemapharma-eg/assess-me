@@ -1751,6 +1751,15 @@ function StudentPortal({ setRole, initialRoom }) {
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [maxPlayed, setMaxPlayed] = useState(0);
+  const [questionUnlocked, setQuestionUnlocked] = useState(false);
+
+  // Sync to ensure Video starts from beginning
+  useEffect(() => {
+    if (session?.quiz?.type === 'video' && playerRef.current) {
+      playerRef.current.seekTo(0);
+      setVideoPlaying(true);
+    }
+  }, [session?.quiz?.id]);
 
   useEffect(() => {
     if (!joined || !room) return;
@@ -1793,6 +1802,13 @@ function StudentPortal({ setRole, initialRoom }) {
         ts: Date.now()
       });
     } catch (e) { console.error("Network Error", e); }
+
+    // Auto-resume video upon answering if it's a video quiz
+    if (session?.quiz?.type === 'video') {
+      setVideoPlaying(true);
+      setQuestionUnlocked(false);
+      handleNext();
+    }
   };
 
   const handleNext = () => setIdx(p => p + 1);
@@ -2032,8 +2048,10 @@ function StudentPortal({ setRole, initialRoom }) {
                   const targetTime = q.timestamp;
                   // If we are slightly past the target, and unanswered, pause.
                   // Allow a small 0.5s buffer so we don't infinitely lock.
-                  if (currentSec >= targetTime && currentSec < targetTime + 0.5 && answers[idx] === undefined) {
+                  if (currentSec >= targetTime && answers[idx] === undefined && !questionUnlocked) {
                     setVideoPlaying(false);
+                    setQuestionUnlocked(true);
+                    playerRef.current?.seekTo(targetTime); // Snap back exactly to timestamp
                   }
                 }
               }}
@@ -2064,71 +2082,84 @@ function StudentPortal({ setRole, initialRoom }) {
             <Activity size={14} /> Teacher Paced Mode Focus
           </div>
         )}
-        <h2 className={`text-3xl font-black text-slate-800 ${q.image_url ? 'mb-6' : 'mb-12'} leading-tight tracking-tight`}>{q.text}</h2>
-        {q.image_url && <img src={q.image_url} alt="Question content" className="w-full max-h-72 object-contain rounded-[2rem] border border-slate-100 shadow-sm mb-12 bg-slate-50 p-4" />}
-        <div className="space-y-5">
-          {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => {
-            if (!o || !String(o).trim()) return null;
-            const isSelected = answers[idx] === i;
-            let bgColorInfo = '';
+        
+        {session.quiz.type === 'video' && !questionUnlocked && answers[idx] === undefined ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-10 animate-pulse">
+            <div className="w-20 h-20 bg-slate-200 rounded-full mb-6 flex items-center justify-center text-slate-400">
+              <Play size={32} fill="currentColor" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 mb-2">Watch the Video</h3>
+            <p className="text-sm font-bold text-slate-400">The next question will appear automatically when you reach its timestamp.</p>
+          </div>
+        ) : (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className={`text-3xl font-black text-slate-800 ${q.image_url ? 'mb-6' : 'mb-12'} leading-tight tracking-tight`}>{q.text}</h2>
+            {q.image_url && <img src={q.image_url} alt="Question content" className="w-full max-h-72 object-contain rounded-[2rem] border border-slate-100 shadow-sm mb-12 bg-slate-50 p-4" />}
+            <div className="space-y-5">
+              {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => {
+                if (!o || !String(o).trim()) return null;
+                const isSelected = answers[idx] === i;
+                let bgColorInfo = '';
 
-            if (isLocked) {
-              if (q.correct === i) {
-                bgColorInfo = 'border-green-500 bg-green-50 text-green-900 shadow-green-500/20'; // Correct answer explicitly shown
-              } else if (isSelected) {
-                bgColorInfo = 'border-red-400 bg-red-50 text-red-900 shadow-red-500/20 opacity-70'; // Incorrect answer student selected
-              } else {
-                bgColorInfo = 'border-slate-100 bg-slate-50 text-slate-400 opacity-50'; // Unselected wrong options
-              }
-            } else {
-              bgColorInfo = isSelected ? 'border-orange-500 bg-orange-50 text-orange-900 shadow-orange-500/20' : 'border-slate-50 hover:border-orange-500 hover:bg-orange-50 text-slate-700';
-            }
+                if (isLocked) {
+                  if (q.correct === i) {
+                    bgColorInfo = 'border-green-500 bg-green-50 text-green-900 shadow-green-500/20'; // Correct answer explicitly shown
+                  } else if (isSelected) {
+                    bgColorInfo = 'border-red-400 bg-red-50 text-red-900 shadow-red-500/20 opacity-70'; // Incorrect answer student selected
+                  } else {
+                    bgColorInfo = 'border-slate-100 bg-slate-50 text-slate-400 opacity-50'; // Unselected wrong options
+                  }
+                } else {
+                  bgColorInfo = isSelected ? 'border-orange-500 bg-orange-50 text-orange-900 shadow-orange-500/20' : 'border-slate-50 hover:border-orange-500 hover:bg-orange-50 text-slate-700';
+                }
 
-            return (
-              <button
-                key={i}
-                onClick={() => !isLocked && submit(idx, i)}
-                disabled={isLocked}
-                className={`w-full text-left bg-white p-7 rounded-[2.5rem] border-4 transition-all font-black text-xl shadow-sm flex items-center gap-6 group ${bgColorInfo} ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}
-              >
-                <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs shrink-0 font-black transition-colors uppercase ${isLocked && q.correct === i ? 'bg-green-600 text-white' : (isSelected && !isLocked ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-orange-600 group-hover:text-white')}`}>
-                  {String.fromCharCode(65 + i)}
-                </span>
-                {o}
-                {isLocked && q.correct === i && <CheckCircle className="ml-auto text-green-500" size={24} />}
-                {isLocked && isSelected && q.correct !== i && <XCircle className="ml-auto text-red-400" size={24} />}
-              </button>
-            );
-          })}
-          {q.type === 'sa' && (
-            <div className="space-y-6">
-              <textarea
-                id="sa-box"
-                value={answers[idx] || ''}
-                onChange={(e) => submit(idx, e.target.value)}
-                disabled={isLocked}
-                className={`w-full border-4 rounded-[2.5rem] p-8 text-2xl font-bold focus:outline-none shadow-inner min-h-[220px] transition-all ${isLocked ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white text-slate-800'}`}
-                placeholder={isLocked ? "Editing locked by teacher" : "Start typing your answer here... It saves automatically!"}
-              />
-              {isLocked && q.correct && (
-                <div className="p-6 bg-green-50 rounded-[2rem] border-2 border-green-200 text-green-800 font-bold">
-                  <div className="text-[10px] uppercase tracking-widest text-green-600 mb-1">Correct Answer:</div>
-                  {q.correct}
+                return (
+                  <button
+                    key={i}
+                    onClick={() => !isLocked && submit(idx, i)}
+                    disabled={isLocked}
+                    className={`w-full text-left bg-white p-7 rounded-[2.5rem] border-4 transition-all font-black text-xl shadow-sm flex items-center gap-6 group ${bgColorInfo} ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}
+                  >
+                    <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs shrink-0 font-black transition-colors uppercase ${isLocked && q.correct === i ? 'bg-green-600 text-white' : (isSelected && !isLocked ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-orange-600 group-hover:text-white')}`}>
+                      {String.fromCharCode(65 + i)}
+                    </span>
+                    {o}
+                    {isLocked && q.correct === i && <CheckCircle className="ml-auto text-green-500" size={24} />}
+                    {isLocked && isSelected && q.correct !== i && <XCircle className="ml-auto text-red-400" size={24} />}
+                  </button>
+                );
+              })}
+              {q.type === 'sa' && (
+                <div className="space-y-6">
+                  <textarea
+                    id="sa-box"
+                    value={answers[idx] || ''}
+                    onChange={(e) => submit(idx, e.target.value)}
+                    disabled={isLocked}
+                    className={`w-full border-4 rounded-[2.5rem] p-8 text-2xl font-bold focus:outline-none shadow-inner min-h-[220px] transition-all ${isLocked ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white text-slate-800'}`}
+                    placeholder={isLocked ? "Editing locked by teacher" : "Start typing your answer here... It saves automatically!"}
+                  />
+                  {isLocked && q.correct && (
+                    <div className="p-6 bg-green-50 rounded-[2rem] border-2 border-green-200 text-green-800 font-bold">
+                      <div className="text-[10px] uppercase tracking-widest text-green-600 mb-1">Correct Answer:</div>
+                      {q.correct}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && (
-          <div className="mt-12">
-            <button
-              onClick={handleNext}
-              disabled={answers[idx] === undefined || (q.type === 'sa' && !answers[idx])}
-              className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
-            >
-              {session.quiz.type === 'video' ? (idx === total - 1 ? 'Finish Quiz' : 'Next Question') : 'Next'} <ArrowRight size={20} />
-            </button>
+            {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && session.quiz.type !== 'video' && (
+              <div className="mt-12">
+                <button
+                  onClick={handleNext}
+                  disabled={answers[idx] === undefined || (q.type === 'sa' && !answers[idx])}
+                  className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+                >
+                  Next <ArrowRight size={20} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
