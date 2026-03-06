@@ -217,21 +217,40 @@ function TeacherPortal({ setRole, user }) {
   const [responses, setResponses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Keep a stable room code for the browser
-  const [roomCode, setRoomCode] = useState(() => localStorage.getItem('AssessMe_RoomCode') || '');
+  const [asyncReports, setAsyncReports] = useState([]);
 
   // Fetch Quizzes and Reports
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true);
-      const [resQuizzes, resReports, resClass] = await Promise.all([
+      const [resQuizzes, resReports, resClass, resAsyncRooms] = await Promise.all([
         supabase.from('quizzes').select('*').order('created_at', { ascending: false }),
         supabase.from('reports').select('*').order('ts', { ascending: false }),
-        supabase.from('classes').select(`*, students(*)`).order('created_at', { ascending: false })
+        supabase.from('classes').select(`*, students(*)`).order('created_at', { ascending: false }),
+        supabase.from('rooms').select('*').eq('is_async', true) // Fetch async rooms
       ]);
+
       if (resQuizzes.data) setQuizzes(resQuizzes.data);
       if (resReports.data) setReports(resReports.data);
       if (resClass.data) setClasses(resClass.data);
+
+      if (resAsyncRooms.data && resAsyncRooms.data.length > 0) {
+        const asyncCodes = resAsyncRooms.data.map(r => r.id);
+        const { data: asyncResponses } = await supabase.from('responses').select('*').in('room_code', asyncCodes);
+        
+        const pseudoReports = resAsyncRooms.data.map(room => ({
+          id: room.id,
+          user_id: room.user_id,
+          title: room.quiz.title,
+          type: room.type, // 'async_video' or 'async_quiz'
+          ts: room.start_time ? new Date(room.start_time).getTime() : room.ts,
+          responses: (asyncResponses || []).filter(r => r.room_code === room.id),
+          questions: room.quiz.questions,
+          assigned_classes: room.quiz.assigned_classes || []
+        }));
+        setAsyncReports(pseudoReports);
+      }
+
       setLoadingData(false);
     };
     fetchData();
@@ -407,7 +426,7 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
         {activeTab === 'scheduled' && <ScheduledTab user={user} />}
         {activeTab === 'results' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
-        {activeTab === 'reports' && <ReportsTab reports={reports} classes={classes} />}
+        {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
       </main>
     </div>
@@ -434,7 +453,7 @@ function ScheduledTab({ user }) {
       .select('*')
       .eq('user_id', user.id)
       .eq('is_async', true)
-      .order('created_at', { ascending: false });
+      .order('ts', { ascending: false });
       
     if (data) setScheduledRooms(data);
     setLoading(false);
