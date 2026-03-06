@@ -1196,6 +1196,10 @@ function QuizEditor({ quiz, onSave, onCancel }) {
 
   const handleImageUpload = async (idx, file) => {
     if (!file) return;
+    if (file.size > 1 * 1024 * 1024) {
+      alert(`Image too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Please upload an image under 1 MB.`);
+      return;
+    }
     setUploadingImageFor(idx);
     try {
       const fileExt = file.name.split('.').pop();
