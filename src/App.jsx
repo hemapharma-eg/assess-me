@@ -138,7 +138,7 @@ function RolePicker({ setRole, user }) {
         <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-200">
           <Database size={40} />
         </div>
-        <h1 className="text-4xl font-black text-slate-800 text-center mb-2">Assess<span className="text-blue-600">Me</span></h1>
+        <h1 className="text-4xl font-black text-slate-800 text-center mb-2">ClassLab<span className="text-blue-600">X</span></h1>
         <p className="text-slate-400 text-center mb-10 font-bold text-xs uppercase tracking-widest">Cloud Assessments</p>
 
         {!user && showTeacherAuth ? (
@@ -219,9 +219,8 @@ function TeacherPortal({ setRole, user }) {
   const [loadingData, setLoadingData] = useState(true);
 
   // Keep a stable room code for the browser
-  const [roomCode, setRoomCode] = useState(() => localStorage.getItem('AssessMe_RoomCode') || '');
+  const [roomCode, setRoomCode] = useState(() => localStorage.getItem('ClassLabX_RoomCode') || '');
   const [asyncReports, setAsyncReports] = useState([]);
-  const [hiddenAsyncIds, setHiddenAsyncIds] = useState(new Set()); // Track soft-deleted async sessions
 
   // Fetch Quizzes and Reports
   useEffect(() => {
@@ -331,7 +330,7 @@ function TeacherPortal({ setRole, user }) {
         return newCode;
       } else {
         setRoomCode(newCode);
-        localStorage.setItem('AssessMe_RoomCode', newCode);
+        localStorage.setItem('ClassLabX_RoomCode', newCode);
         setResponses([]); // clear prior
         setSession(data); // immediately populate so Results tab renders
         setActiveTab('synchronous');
@@ -367,7 +366,7 @@ function TeacherPortal({ setRole, user }) {
 
     setSession(null);
     setRoomCode('');
-    localStorage.removeItem('AssessMe_RoomCode');
+    localStorage.removeItem('ClassLabX_RoomCode');
     setActiveTab('reports');
   };
 
@@ -384,7 +383,7 @@ function TeacherPortal({ setRole, user }) {
       <header className="bg-white border-b px-4 md:px-6 h-16 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-10">
           <h1 className="text-xl font-black text-blue-600 flex items-center gap-2 tracking-tighter">
-            <Database size={20} /> AssessMe <span className="text-[10px] bg-blue-100 px-2 py-0.5 rounded-full tracking-widest uppercase text-blue-800">Cloud Sync</span>
+            <Database size={20} /> ClassLabX <span className="text-[10px] bg-blue-100 px-2 py-0.5 rounded-full tracking-widest uppercase text-blue-800">Cloud Sync</span>
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
@@ -433,27 +432,8 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
         {activeTab === 'reports' && (() => {
           const allReports = [...reports, ...asyncReports];
-          const visibleReports = allReports.filter(r => !r.hidden && !hiddenAsyncIds.has(r.id));
-          return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} onDeleteReport={async (r) => {
-            if (!window.confirm(`Delete session "${r.title}" from history?`)) return;
-            const isAsync = asyncReports.some(ar => ar.id === r.id);
-            if (isAsync) {
-              // Soft-delete: just hide from session history UI
-              setHiddenAsyncIds(prev => new Set([...prev, r.id]));
-            } else {
-              // Soft-delete: mark hidden in DB
-              await supabase.from('reports').update({ hidden: true }).eq('id', r.id);
-              setReports(prev => prev.map(rp => rp.id === r.id ? { ...rp, hidden: true } : rp));
-            }
-          }} onDeleteAllReports={async () => {
-            if (!window.confirm('Hide ALL sessions from history? Gradebook data will be preserved.')) return;
-            // Soft-delete all sync reports
-            const visibleReportIds = reports.filter(r => !r.hidden).map(r => r.id);
-            if (visibleReportIds.length) await supabase.from('reports').update({ hidden: true }).in('id', visibleReportIds);
-            setReports(prev => prev.map(r => ({ ...r, hidden: true })));
-            // Hide all async pseudo-reports
-            setHiddenAsyncIds(new Set(asyncReports.map(r => r.id)));
-          }} />;
+          const visibleReports = allReports.filter(r => !r.hidden);
+          return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} />;
         })()}
       </main>
     </div>
@@ -1057,7 +1037,7 @@ function QuizEditor({ quiz, onSave, onCancel }) {
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Quiz_Template");
-    XLSX.writeFile(wb, "AssessMe_Quiz_Template.xlsx");
+    XLSX.writeFile(wb, "ClassLabX_Quiz_Template.xlsx");
   };
 
   const importExcel = (e) => {
@@ -1519,7 +1499,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
   );
 }
 
-function ReportsTab({ reports, allReports, classes, onDeleteReport, onDeleteAllReports }) {
+function ReportsTab({ reports, allReports, classes }) {
   const [view, setView] = useState('history'); // history, gradebook
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -1565,7 +1545,7 @@ function ReportsTab({ reports, allReports, classes, onDeleteReport, onDeleteAllR
       const wsResults = XLSX.utils.aoa_to_sheet(resultsData);
       XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
       XLSX.utils.book_append_sheet(wb, wsResults, "Student Results");
-      XLSX.writeFile(wb, `AssessMe_Report_${report.title.replace(/\s+/g, '_')}_${new Date(report.ts).getTime()}.xlsx`);
+      XLSX.writeFile(wb, `ClassLabX_Report_${report.title.replace(/\s+/g, '_')}_${new Date(report.ts).getTime()}.xlsx`);
     } catch (e) { alert("Error exporting to Excel: " + e.message); }
   };
 
@@ -1744,7 +1724,7 @@ function ReportsTab({ reports, allReports, classes, onDeleteReport, onDeleteAllR
       });
       const ws = XLSX.utils.aoa_to_sheet(rows);
       XLSX.utils.book_append_sheet(wb, ws, "Gradebook");
-      XLSX.writeFile(wb, `AssessMe_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
+      XLSX.writeFile(wb, `ClassLabX_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
     } catch (e) { alert("Error exporting Gradebook: " + e.message); }
   };
 
@@ -1833,41 +1813,60 @@ function ReportsTab({ reports, allReports, classes, onDeleteReport, onDeleteAllR
             <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
             <div className="flex items-center gap-4">
               <div className="text-slate-400 font-bold text-sm whitespace-nowrap">{reports.length} Session{reports.length !== 1 ? 's' : ''}</div>
-              {reports.length > 0 && (
-                <button onClick={onDeleteAllReports} className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl font-black text-xs transition-all flex items-center gap-1.5"><Trash2 size={12} /> Delete All</button>
-              )}
             </div>
           </div>
-          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
-            <div className="divide-y divide-slate-100">
-              {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).map(r => (
-                <div key={r.id} className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}><BarChart2 size={18} /></div>
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-black text-slate-800 truncate">{r.title}</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{new Date(r.ts).toLocaleDateString()} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {r.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-center">
-                      <div className="text-xl font-black text-slate-800">{(r.responses || []).length}</div>
-                      <div className="text-[8px] font-black text-slate-400 uppercase">Students</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xl font-black text-slate-800">{(r.questions || []).length}</div>
-                      <div className="text-[8px] font-black text-slate-400 uppercase">Q's</div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setOpenReport(r)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-md shadow-blue-100"><Eye size={14} /> Open</button>
-                      <button onClick={() => onDeleteReport(r)} className="px-3 py-2.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all"><Trash2 size={14} /></button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).length === 0 && (
-                <div className="p-20 text-center text-slate-300 font-bold italic">No sessions match your filter.</div>
-              )}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto custom-scroll">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
+                    <th className="p-4 border-b border-slate-200 w-16 text-center">Type</th>
+                    <th className="p-4 border-b border-slate-200">Session Name</th>
+                    <th className="p-4 border-b border-slate-200">Date/Time</th>
+                    <th className="p-4 border-b border-slate-200 text-center">Students</th>
+                    <th className="p-4 border-b border-slate-200 text-center">Questions</th>
+                    <th className="p-4 border-b border-slate-200 text-right pr-6">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).map(r => (
+                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-3 text-center align-middle">
+                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                          <BarChart2 size={16} />
+                        </div>
+                      </td>
+                      <td className="p-3 align-middle">
+                        <div className="font-black text-slate-800 text-sm truncate max-w-[200px] sm:max-w-xs">{r.title}</div>
+                      </td>
+                      <td className="p-3 align-middle">
+                        <div className="text-xs font-bold text-slate-500">
+                          {new Date(r.ts).toLocaleDateString()} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'}</div>
+                      </td>
+                      <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
+                        {(r.responses || []).length}
+                      </td>
+                      <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
+                        {(r.questions || []).length}
+                      </td>
+                      <td className="p-3 text-right align-middle pr-6">
+                        <button onClick={() => setOpenReport(r)} className="px-4 py-2 inline-flex bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg font-black text-xs transition-all items-center gap-2">
+                          <Eye size={14} /> Open
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="p-16 text-center text-slate-300 font-bold italic border-b-0">
+                        No sessions match your filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -2551,7 +2550,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Roster_Template");
-    XLSX.writeFile(wb, "AssessMe_Roster_Template.xlsx");
+    XLSX.writeFile(wb, "ClassLabX_Roster_Template.xlsx");
   };
 
   const submit = async () => {
@@ -2758,7 +2757,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Roster_Template");
-    XLSX.writeFile(wb, "AssessMe_Roster_Template.xlsx");
+    XLSX.writeFile(wb, "ClassLabX_Roster_Template.xlsx");
   };
 
   const addSingleStudent = async () => {
