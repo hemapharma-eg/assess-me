@@ -326,7 +326,15 @@ function TeacherPortal({ setRole, user }) {
       user_id: user.id,
       type,
       quiz: type === 'attendance'
-        ? { title: quiz.sessionName || quiz.title || 'Attendance', questions: [], assigned_classes: quiz.assigned_classes || [] }
+        ? {
+            title: quiz.attendanceMode === 'relaunch'
+              ? (quiz.selectedOldAttendance?.title || quiz.sessionName || 'Attendance')
+              : (quiz.sessionName || 'Attendance'),
+            questions: [],
+            assigned_classes: quiz.assigned_classes || [],
+            old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null,
+            old_responses: quiz.attendanceMode === 'relaunch' ? (quiz.selectedOldAttendance?.responses || []) : []
+          }
         : { ...quiz, current_question_idx: 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
       ts: Date.now(),
@@ -356,29 +364,52 @@ function TeacherPortal({ setRole, user }) {
 
   const onEnd = async () => {
     if (!session) return;
-    const repId = Date.now().toString();
 
-    const newReport = {
-      id: repId,
-      user_id: user.id,
-      title: session.quiz.title,
-      type: session.type,
-      ts: Date.now(),
-      responses: responses,
-      questions: session.quiz.questions,
-      assigned_classes: session.quiz?.assigned_classes?.length > 0 
-        ? session.quiz.assigned_classes 
-        : (session.assigned_classes || [])
-    };
+    const isRelaunch = !!(session.quiz?.old_report_id);
+    const oldReportId = session.quiz?.old_report_id;
 
-    // 1. Save to Reports in DB
-    await supabase.from('reports').insert(newReport);
-    setReports(prev => [newReport, ...prev]);
+    if (isRelaunch && oldReportId) {
+      // RELAUNCH: merge new check-ins into the existing report
+      const oldResponses = session.quiz?.old_responses || [];
 
-    // 2. Clear PUBLIC network buffer
+      // Build a map of previous responses keyed by student_id
+      const mergedMap = {};
+      oldResponses.forEach(r => { mergedMap[String(r.student_id).trim()] = r; });
+
+      // Add/overwrite with NEW check-ins (students who scanned this relaunch)
+      responses.forEach(r => { mergedMap[String(r.student_id).trim()] = r; });
+
+      const mergedResponses = Object.values(mergedMap);
+
+      // UPDATE existing report
+      await supabase.from('reports').update({ responses: mergedResponses }).eq('id', oldReportId);
+
+      // Update local state
+      setReports(prev => prev.map(rep =>
+        rep.id === oldReportId ? { ...rep, responses: mergedResponses } : rep
+      ));
+    } else {
+      // NEW session: insert fresh report
+      const repId = Date.now().toString();
+      const newReport = {
+        id: repId,
+        user_id: user.id,
+        title: session.quiz.title,
+        type: session.type,
+        ts: Date.now(),
+        responses: responses,
+        questions: session.quiz.questions,
+        assigned_classes: session.quiz?.assigned_classes?.length > 0
+          ? session.quiz.assigned_classes
+          : (session.assigned_classes || [])
+      };
+      await supabase.from('reports').insert(newReport);
+      setReports(prev => [newReport, ...prev]);
+    }
+
+    // Clear PUBLIC network buffer
     try {
       await supabase.from('rooms').delete().eq('id', roomCode);
-      // Responses cascade delete automatically due to ON DELETE CASCADE
     } catch (e) { console.error("Cleanup error", e); }
 
     setSession(null);
