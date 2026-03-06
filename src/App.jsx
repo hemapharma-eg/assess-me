@@ -333,7 +333,7 @@ function TeacherPortal({ setRole, user }) {
         localStorage.setItem('AssessMe_RoomCode', newCode);
         setResponses([]); // clear prior
         setSession(data); // immediately populate so Results tab renders
-        setActiveTab('results');
+        setActiveTab('synchronous');
         return newCode;
       }
     }
@@ -387,7 +387,7 @@ function TeacherPortal({ setRole, user }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Quizzes', 'Classes', 'Scheduled', 'Launch', 'Results', 'Reports'].map(t => (
+            {['Quizzes', 'Classes', 'Launch', 'Synchronous', 'Asynchronous', 'Reports'].map(t => (
               <button
                 key={t} onClick={() => setActiveTab(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -413,7 +413,7 @@ function TeacherPortal({ setRole, user }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['quizzes', 'classes', 'scheduled', 'launch', 'results', 'reports'].map(tab => (
+          {['quizzes', 'classes', 'launch', 'synchronous', 'asynchronous', 'reports'].map(tab => (
             <button
               key={tab} onClick={() => setActiveTab(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -425,12 +425,12 @@ function TeacherPortal({ setRole, user }) {
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
-        {activeTab === 'scheduled' && <ScheduledTab user={user} />}
-        {activeTab === 'results' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
-        {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
+        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
+        {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
+        {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
+        {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} />}
       </main>
     </div>
   );
@@ -611,7 +611,7 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
       </div>
       <h2 className="text-3xl font-black text-slate-800 mb-2">Room {session.quiz.title} is LIVE</h2>
       <p className="text-slate-400 font-medium mb-8">Room Code: {roomCode}</p>
-      <button onClick={() => setActiveTab('results')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100">Go to Results Tab</button>
+      <button onClick={() => setActiveTab('synchronous')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100">Go to Synchronous Tab</button>
     </div>
   );
 
