@@ -365,7 +365,7 @@ function TeacherPortal({ setRole, user }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Quizzes', 'Classes', 'Launch', 'Results', 'Reports'].map(t => (
+            {['Quizzes', 'Classes', 'Scheduled', 'Launch', 'Results', 'Reports'].map(t => (
               <button
                 key={t} onClick={() => setActiveTab(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -391,7 +391,7 @@ function TeacherPortal({ setRole, user }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['quizzes', 'classes', 'launch', 'results', 'reports'].map(tab => (
+          {['quizzes', 'classes', 'scheduled', 'launch', 'results', 'reports'].map(tab => (
             <button
               key={tab} onClick={() => setActiveTab(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -405,6 +405,7 @@ function TeacherPortal({ setRole, user }) {
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
         {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
+        {activeTab === 'scheduled' && <ScheduledTab user={user} />}
         {activeTab === 'results' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
         {activeTab === 'reports' && <ReportsTab reports={reports} classes={classes} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
@@ -414,6 +415,160 @@ function TeacherPortal({ setRole, user }) {
 }
 
 // --- Teacher Sections ---
+
+function ScheduledTab({ user }) {
+  const [scheduledRooms, setScheduledRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingRoom, setEditingRoom] = useState(null);
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+
+  useEffect(() => {
+    fetchScheduled();
+  }, []);
+
+  const fetchScheduled = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_async', true)
+      .order('created_at', { ascending: false });
+      
+    if (data) setScheduledRooms(data);
+    setLoading(false);
+  };
+
+  const handleUnschedule = async (id) => {
+    if (!window.confirm('Are you sure you want to unschedule this quiz? It will delete the room entirely.')) return;
+    
+    // Deleting the room will automatically cascade and delete responses.
+    await supabase.from('rooms').delete().eq('id', id);
+    setScheduledRooms(prev => prev.filter(r => r.id !== id));
+  };
+
+  const startEdit = (room) => {
+    setEditingRoom(room.id);
+    
+    // Format to datetime-local expected string YYYY-MM-DDTHH:MM
+    const formatLocal = (isoString) => {
+      if (!isoString) return '';
+      const d = new Date(isoString);
+      return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    };
+
+    setEditStart(formatLocal(room.start_time));
+    setEditEnd(formatLocal(room.end_time));
+  };
+
+  const saveEdit = async (room) => {
+    const startIso = new Date(editStart).toISOString();
+    const endIso = new Date(editEnd).toISOString();
+
+    const { error } = await supabase
+      .from('rooms')
+      .update({ start_time: startIso, end_time: endIso })
+      .eq('id', room.id);
+
+    if (!error) {
+      setScheduledRooms(prev => prev.map(r => r.id === room.id ? { ...r, start_time: startIso, end_time: endIso } : r));
+    } else {
+      alert("Failed to update schedules: " + error.message);
+    }
+    setEditingRoom(null);
+  };
+
+  if (loading) return (
+    <div className="flex justify-center p-20">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+
+  return (
+    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
+      <div className="p-8 border-b flex justify-between items-center bg-slate-50 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="relative z-10">
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Scheduled Quizzes</h2>
+          <p className="text-slate-400 font-bold mt-1">Manage pending asynchronous activities</p>
+        </div>
+      </div>
+
+      <div className="p-8 grid gap-4 grid-cols-1 md:grid-cols-2">
+        {scheduledRooms.length === 0 ? (
+          <div className="col-span-full p-20 text-center border-2 border-dashed border-slate-100 rounded-3xl">
+            <h3 className="text-2xl font-black text-slate-400 mb-2">No Scheduled Quizzes</h3>
+            <p className="text-slate-400 font-bold">Launch an asynchronous quiz to see it here.</p>
+          </div>
+        ) : (
+          scheduledRooms.map(room => (
+            <div key={room.id} className="border-2 border-slate-100 p-6 rounded-[2rem] hover:border-blue-200 transition-colors bg-white flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tighter w-3/4">{room.quiz?.title || 'Untitled Quiz'}</h3>
+                  <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-2xl font-black text-xl tracking-widest">{room.id}</div>
+                </div>
+                
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
+                  Type: {room.type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
+                </p>
+
+                {editingRoom === room.id ? (
+                  <div className="bg-slate-50 p-4 rounded-2xl space-y-3 mb-4 border border-blue-100">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Start Time</label>
+                      <input type="datetime-local" className="w-full p-2 text-sm font-bold border border-slate-200 rounded-xl" value={editStart} onChange={e => setEditStart(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">End Time</label>
+                      <input type="datetime-local" className="w-full p-2 text-sm font-bold border border-slate-200 rounded-xl" value={editEnd} onChange={e => setEditEnd(e.target.value)} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 p-4 rounded-2xl flex flex-col gap-2 mb-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-green-500">Opens:</span> 
+                      {new Date(room.start_time).toLocaleString()}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-red-500">Closes:</span> 
+                      {new Date(room.end_time).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 mt-auto pt-4 border-t border-slate-50">
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.href.split('?')[0]}?room=${room.id}`);
+                    alert("Join Link Copied!");
+                  }}
+                  className="flex-1 py-3 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl font-black text-xs uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                >
+                  <Copy size={16} /> Copy Link
+                </button>
+                
+                {editingRoom === room.id ? (
+                  <>
+                    <button onClick={() => saveEdit(room)} className="px-4 py-3 bg-green-50 hover:bg-green-100 text-green-600 rounded-xl font-black transition-colors"><CheckCircle size={18} /></button>
+                    <button onClick={() => setEditingRoom(null)} className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-400 rounded-xl font-black transition-colors"><X size={18} /></button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => startEdit(room)} className="px-4 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl font-black transition-colors"><Edit2 size={18} /></button>
+                    <button onClick={() => handleUnschedule(room.id)} className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl font-black transition-colors"><Trash2 size={18} /></button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab }) {
   const [selected, setSelected] = useState('');
@@ -1752,14 +1907,7 @@ function StudentPortal({ setRole, initialRoom }) {
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [maxPlayed, setMaxPlayed] = useState(0);
   const [questionUnlocked, setQuestionUnlocked] = useState(false);
-
-  // Sync to ensure Video starts from beginning
-  useEffect(() => {
-    if (session?.quiz?.type === 'video' && playerRef.current) {
-      playerRef.current.seekTo(0);
-      setVideoPlaying(true);
-    }
-  }, [session?.quiz?.id]);
+  const [videoInitializing, setVideoInitializing] = useState(true);
 
   useEffect(() => {
     if (!joined || !room) return;
@@ -1973,7 +2121,8 @@ function StudentPortal({ setRole, initialRoom }) {
   }
 
   const total = session?.quiz?.questions?.length || 1;
-  const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ? idx >= total : false;
+  const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ?
+    (session?.quiz?.type === 'video' ? idx > total : idx >= total) : false;
 
   if (quizEnded || isFinished) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
@@ -2038,13 +2187,19 @@ function StudentPortal({ setRole, initialRoom }) {
               width="100%"
               height="100%"
               style={{ position: 'absolute', top: 0, left: 0 }}
+              onStart={() => {
+                if (videoInitializing) {
+                  playerRef.current?.seekTo(0);
+                  setVideoInitializing(false);
+                }
+              }}
               onProgress={(state) => {
                 const currentSec = state.playedSeconds;
                 setPlayedSeconds(currentSec);
                 if (currentSec > maxPlayed) setMaxPlayed(currentSec);
 
                 // Pause at current question's timestamp if unanswered
-                if (idx < total && q.timestamp !== undefined && q.timestamp !== null) {
+                if (idx < total && q?.timestamp !== undefined && q?.timestamp !== null) {
                   const targetTime = q.timestamp;
                   // If we are slightly past the target, and unanswered, pause.
                   // Allow a small 0.5s buffer so we don't infinitely lock.
@@ -2082,8 +2237,23 @@ function StudentPortal({ setRole, initialRoom }) {
             <Activity size={14} /> Teacher Paced Mode Focus
           </div>
         )}
-        
-        {session.quiz.type === 'video' && !questionUnlocked && answers[idx] === undefined ? (
+        {session.quiz.type === 'video' && idx >= total ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-8 relative z-10 shadow-inner">
+              <CheckCircle size={48} />
+            </div>
+            <h3 className="text-3xl font-black text-slate-800 mb-4 tracking-tighter">Questions Complete!</h3>
+            <p className="text-slate-500 font-bold text-sm leading-relaxed mb-10 max-w-sm">
+              You've answered all the questions for this video! Feel free to finish watching the rest of the clip.
+            </p>
+            <button
+              onClick={() => handleNext()} // This pushes idx > total and triggers the final thank you screen
+              className="w-full max-w-sm py-6 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+            >
+              Finish & Submit <ArrowRight size={20} />
+            </button>
+          </div>
+        ) : session.quiz.type === 'video' && !questionUnlocked && answers[idx] === undefined ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-10 animate-pulse">
             <div className="w-20 h-20 bg-slate-200 rounded-full mb-6 flex items-center justify-center text-slate-400">
               <Play size={32} fill="currentColor" />
@@ -2093,10 +2263,10 @@ function StudentPortal({ setRole, initialRoom }) {
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className={`text-3xl font-black text-slate-800 ${q.image_url ? 'mb-6' : 'mb-12'} leading-tight tracking-tight`}>{q.text}</h2>
-            {q.image_url && <img src={q.image_url} alt="Question content" className="w-full max-h-72 object-contain rounded-[2rem] border border-slate-100 shadow-sm mb-12 bg-slate-50 p-4" />}
+            <h2 className={`text-3xl font-black text-slate-800 ${q?.image_url ? 'mb-6' : 'mb-12'} leading-tight tracking-tight`}>{q?.text}</h2>
+            {q?.image_url && <img src={q.image_url} alt="Question content" className="w-full max-h-72 object-contain rounded-[2rem] border border-slate-100 shadow-sm mb-12 bg-slate-50 p-4" />}
             <div className="space-y-5">
-              {(q.type === 'mc' || q.type === 'tf') && q.options.map((o, i) => {
+              {(q?.type === 'mc' || q?.type === 'tf') && q.options.map((o, i) => {
                 if (!o || !String(o).trim()) return null;
                 const isSelected = answers[idx] === i;
                 let bgColorInfo = '';
@@ -2129,7 +2299,7 @@ function StudentPortal({ setRole, initialRoom }) {
                   </button>
                 );
               })}
-              {q.type === 'sa' && (
+              {q?.type === 'sa' && (
                 <div className="space-y-6">
                   <textarea
                     id="sa-box"
@@ -2153,7 +2323,7 @@ function StudentPortal({ setRole, initialRoom }) {
               <div className="mt-12">
                 <button
                   onClick={handleNext}
-                  disabled={answers[idx] === undefined || (q.type === 'sa' && !answers[idx])}
+                  disabled={answers[idx] === undefined || (q?.type === 'sa' && !answers[idx])}
                   className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
                 >
                   Next <ArrowRight size={20} />
