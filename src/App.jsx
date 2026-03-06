@@ -40,10 +40,19 @@ export default function App() {
 
 function MainApp() {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState(() => localStorage.getItem('ClassLabX_Role') || null);
   const [initialRoom, setInitialRoom] = useState('');
   const [authError, setAuthError] = useState(null);
   const [loadingContext, setLoadingContext] = useState(true);
+
+  // Sync role to localStorage whenever it changes
+  useEffect(() => {
+    if (role) {
+      localStorage.setItem('ClassLabX_Role', role);
+    } else {
+      localStorage.removeItem('ClassLabX_Role');
+    }
+  }, [role]);
 
   useEffect(() => {
     // Check URL params for QR scanning
@@ -210,13 +219,17 @@ function TeacherPortal({ setRole, user }) {
     return null;
   }
 
-  const [activeTab, setActiveTab] = useState('quizzes');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ClassLabX_TeacherTab') || 'quizzes');
   const [quizzes, setQuizzes] = useState([]);
   const [reports, setReports] = useState([]);
   const [classes, setClasses] = useState([]);
   const [session, setSession] = useState(null);
   const [responses, setResponses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    localStorage.setItem('ClassLabX_TeacherTab', activeTab);
+  }, [activeTab]);
 
   // Keep a stable room code for the browser
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('ClassLabX_RoomCode') || '');
@@ -2326,9 +2339,19 @@ function ReportsTab({ reports, allReports, classes }) {
 //               STUDENT PORTAL
 // ==========================================
 function StudentPortal({ setRole, initialRoom }) {
-  const [room, setRoom] = useState(initialRoom);
-  const [sid, setSid] = useState('');
-  const [name, setName] = useState(''); // Will be auto-filled if restricted
+  // Initialize from cache if refresh happened mid-session
+  const [cachedState] = useState(() => {
+    try {
+      const stored = localStorage.getItem('ClassLabX_StudentState');
+      if (stored) return JSON.parse(stored);
+    } catch(e) {}
+    return null;
+  });
+
+  const [room, setRoom] = useState(cachedState?.room || initialRoom);
+  const [sid, setSid] = useState(cachedState?.sid || '');
+  const [name, setName] = useState(cachedState?.name || ''); 
+  const [joined, setJoined] = useState(cachedState?.joined || false);
 
   // Stable random ID for open rooms
   const [localId] = useState(() => Math.random().toString(36).substring(2, 9));
@@ -2339,13 +2362,24 @@ function StudentPortal({ setRole, initialRoom }) {
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [tempSession, setTempSession] = useState(null); // hold room data before full join
 
-  const [joined, setJoined] = useState(false);
   const [session, setSession] = useState(null);
   const [quizEnded, setQuizEnded] = useState(false);
   const [answers, setAnswers] = useState({});
   const [idx, setIdx] = useState(0);
   const [attendanceSuccess, setAttendanceSuccess] = useState(false);
   const [roomType, setRoomType] = useState('');
+
+  // Keep cache synced if they successfully join
+  useEffect(() => {
+    if (joined && room && (sid || name)) {
+      localStorage.setItem('ClassLabX_StudentState', JSON.stringify({ room, sid, name, joined }));
+    }
+  }, [joined, room, sid, name]);
+
+  const clearStudentSession = () => {
+    localStorage.removeItem('ClassLabX_StudentState');
+    setRole(null);
+  };
 
   useEffect(() => {
     if (room?.trim().length >= 4) {
@@ -2618,7 +2652,7 @@ function StudentPortal({ setRole, initialRoom }) {
              </div>
              <h2 className="text-4xl font-black text-slate-800 tracking-tighter relative z-10 mb-2">Present!</h2>
              <p className="text-slate-500 font-bold mb-8 relative z-10">Your attendance has been recorded. You may close this page.</p>
-             <button onClick={() => setRole(null)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors relative z-10">Done</button>
+             <button onClick={clearStudentSession} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors relative z-10">Done</button>
           </div>
         </div>
       );
@@ -2655,7 +2689,7 @@ function StudentPortal({ setRole, initialRoom }) {
               {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : 'ENTER ROOM'}
             </button>
           </div>
-          <button type="button" onClick={() => setRole(null)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
+          <button type="button" onClick={clearStudentSession} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
             <X size={24} />
           </button>
         </form>
