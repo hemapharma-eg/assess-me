@@ -325,7 +325,9 @@ function TeacherPortal({ setRole, user }) {
       id: newCode,
       user_id: user.id,
       type,
-      quiz: type === 'attendance' ? { title: quiz.title, questions: [] } : { ...quiz, current_question_idx: 0, show_results: false },
+      quiz: type === 'attendance'
+        ? { title: quiz.sessionName || quiz.title || 'Attendance', questions: [], assigned_classes: quiz.assigned_classes || [] }
+        : { ...quiz, current_question_idx: 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
       ts: Date.now(),
       is_async: isAsync,
@@ -364,7 +366,9 @@ function TeacherPortal({ setRole, user }) {
       ts: Date.now(),
       responses: responses,
       questions: session.quiz.questions,
-      assigned_classes: session.quiz.assigned_classes || []
+      assigned_classes: session.quiz?.assigned_classes?.length > 0 
+        ? session.quiz.assigned_classes 
+        : (session.assigned_classes || [])
     };
 
     // 1. Save to Reports in DB
