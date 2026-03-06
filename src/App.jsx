@@ -430,7 +430,26 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
         {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
-        {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} />}
+        {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} onDeleteReport={async (r) => {
+          if (!window.confirm(`Delete session "${r.title}"?`)) return;
+          // Async pseudo-reports have short room-code IDs; real reports have timestamp IDs
+          const isAsync = asyncReports.some(ar => ar.id === r.id);
+          if (isAsync) {
+            await supabase.from('rooms').delete().eq('id', r.id);
+            setAsyncReports(prev => prev.filter(ar => ar.id !== r.id));
+          } else {
+            await supabase.from('reports').delete().eq('id', r.id);
+            setReports(prev => prev.filter(rp => rp.id !== r.id));
+          }
+        }} onDeleteAllReports={async () => {
+          if (!window.confirm('Delete ALL session history? This cannot be undone.')) return;
+          const reportIds = reports.map(r => r.id);
+          const asyncIds = asyncReports.map(r => r.id);
+          if (reportIds.length) await supabase.from('reports').delete().in('id', reportIds);
+          if (asyncIds.length) await supabase.from('rooms').delete().in('id', asyncIds);
+          setReports([]);
+          setAsyncReports([]);
+        }} />}
       </main>
     </div>
   );
@@ -1495,7 +1514,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
   );
 }
 
-function ReportsTab({ reports, classes }) {
+function ReportsTab({ reports, classes, onDeleteReport, onDeleteAllReports }) {
   const [view, setView] = useState('history'); // history, gradebook
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -1807,7 +1826,12 @@ function ReportsTab({ reports, classes }) {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row gap-4">
             <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
-            <div className="text-slate-400 font-bold text-sm self-center whitespace-nowrap">{reports.length} Session{reports.length !== 1 ? 's' : ''}</div>
+            <div className="flex items-center gap-4">
+              <div className="text-slate-400 font-bold text-sm whitespace-nowrap">{reports.length} Session{reports.length !== 1 ? 's' : ''}</div>
+              {reports.length > 0 && (
+                <button onClick={onDeleteAllReports} className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl font-black text-xs transition-all flex items-center gap-1.5"><Trash2 size={12} /> Delete All</button>
+              )}
+            </div>
           </div>
           <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
             <div className="divide-y divide-slate-100">
@@ -1831,6 +1855,7 @@ function ReportsTab({ reports, classes }) {
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setOpenReport(r)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-md shadow-blue-100"><Eye size={14} /> Open</button>
+                      <button onClick={() => onDeleteReport(r)} className="px-3 py-2.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all"><Trash2 size={14} /></button>
                     </div>
                   </div>
                 </div>
