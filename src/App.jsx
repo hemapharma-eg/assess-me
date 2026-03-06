@@ -4,7 +4,7 @@ import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, 
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
@@ -1735,6 +1735,32 @@ function ReportsTab({ reports, allReports, classes }) {
     try { return JSON.parse(localStorage.getItem('ClassLabX_HiddenSessions')) || []; }
     catch { return []; }
   });
+  // Repair state for old sessions
+  const [renamingReport, setRenamingReport] = useState(null); // report being renamed
+  const [renameValue, setRenameValue] = useState('');
+  const [assigningClassReport, setAssigningClassReport] = useState(null); // report being class-assigned
+  const [assignClassValue, setAssignClassValue] = useState('');
+  const [localReportPatch, setLocalReportPatch] = useState({}); // id -> {title?, assigned_classes?}
+
+  const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
+
+  const handleRename = async (r) => {
+    const newTitle = renameValue.trim();
+    if (!newTitle) return;
+    await supabase.from('reports').update({ title: newTitle }).eq('id', r.id);
+    setLocalReportPatch(prev => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), title: newTitle } }));
+    setRenamingReport(null);
+    setRenameValue('');
+  };
+
+  const handleAssignClass = async (r) => {
+    if (!assignClassValue) return;
+    const newClasses = [assignClassValue];
+    await supabase.from('reports').update({ assigned_classes: newClasses }).eq('id', r.id);
+    setLocalReportPatch(prev => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), assigned_classes: newClasses } }));
+    setAssigningClassReport(null);
+    setAssignClassValue('');
+  };
 
   const toggleHidden = (id) => {
     setHiddenSessions(prev => {
@@ -1746,6 +1772,7 @@ function ReportsTab({ reports, allReports, classes }) {
 
   const deleteReport = async (id, roomId, isAsync) => { /* implementation for deleteReport */ };
   const [selectedForEmail, setSelectedForEmail] = useState([]);
+
 
   useEffect(() => {
     if (openReport) setSelectedForEmail([]);
@@ -1990,11 +2017,14 @@ function ReportsTab({ reports, allReports, classes }) {
       const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
 
       assignedReports = (allReports || reports).filter(r => {
-        // Automatically include if explicitly assigned
-        if (r.assigned_classes?.includes(selectedClassId)) return true;
+        // Apply any local repair patches (from the Assign-Class UI in Session History)
+        const effectiveClasses = localReportPatch[r.id]?.assigned_classes ?? (r.assigned_classes || []);
+
+        // Include if explicitly assigned (in DB or via local patch)
+        if (effectiveClasses.includes(selectedClassId)) return true;
 
         // For reports with no assigned_classes (old format before the fix)
-        if (!r.assigned_classes || r.assigned_classes.length === 0) {
+        if (effectiveClasses.length === 0) {
           // Determine which class the session belongs to by checking students who responded
           const responderIds = (r.responses || []).map(resp => String(resp.student_id).trim().toLowerCase());
           if (responderIds.length === 0) return false; // can't determine class if nobody responded
@@ -2133,8 +2163,13 @@ function ReportsTab({ reports, allReports, classes }) {
                   {reports
                     .filter(r => !hiddenSessions.includes(r.id))
                     .filter(r => typeFilter[r.type])
-                    .filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase()))
-                    .map(r => (
+                    .filter(r => !searchFilter || (r.title || '').toLowerCase().includes(searchFilter.toLowerCase()))
+                    .map(r => {
+                      const effectiveTitle = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
+                      const effectiveClasses = getEffectiveField(r, 'assigned_classes') || [];
+                      const assignedClassName = effectiveClasses.length > 0 ? (classes.find(c => c.id === effectiveClasses[0])?.name) : null;
+                      const isUnlinkedAttendance = r.type === 'attendance' && effectiveClasses.length === 0;
+                      return (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 text-center align-middle">
                         <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
@@ -2142,7 +2177,45 @@ function ReportsTab({ reports, allReports, classes }) {
                         </div>
                       </td>
                       <td className="p-3 align-middle">
-                        <div className="font-black text-slate-800 text-sm truncate max-w-[200px] sm:max-w-xs">{r.title}</div>
+                        {renamingReport === r.id ? (
+                          <div className="flex gap-2 items-center">
+                            <input
+                              autoFocus
+                              className="flex-1 border-2 border-blue-300 rounded-lg px-2 py-1 text-sm font-bold text-slate-700 focus:outline-blue-500"
+                              value={renameValue}
+                              onChange={e => setRenameValue(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleRename(r); if (e.key === 'Escape') { setRenamingReport(null); setRenameValue(''); } }}
+                            />
+                            <button onClick={() => handleRename(r)} className="text-blue-600 font-black text-xs px-2 py-1 bg-blue-50 rounded-lg hover:bg-blue-100">Save</button>
+                            <button onClick={() => { setRenamingReport(null); setRenameValue(''); }} className="text-slate-400 font-black text-xs px-2 py-1 bg-slate-50 rounded-lg hover:bg-slate-100">✕</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="font-black text-slate-800 text-sm truncate max-w-[160px] sm:max-w-xs">{effectiveTitle}</div>
+                            <button onClick={() => { setRenamingReport(r.id); setRenameValue(effectiveTitle === 'Attendance Session' ? '' : effectiveTitle); }} className="text-slate-300 hover:text-blue-400 transition-colors shrink-0" title="Rename">
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                        )}
+                        {assignedClassName && (
+                          <div className="text-[9px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{assignedClassName}</div>
+                        )}
+                        {isUnlinkedAttendance && (
+                          assigningClassReport === r.id ? (
+                            <div className="flex gap-2 items-center mt-1">
+                              <select autoFocus className="text-xs border border-orange-300 rounded-lg px-2 py-1 font-bold text-slate-700" value={assignClassValue} onChange={e => setAssignClassValue(e.target.value)}>
+                                <option value="">-- Select Class --</option>
+                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                              <button onClick={() => handleAssignClass(r)} className="text-orange-600 font-black text-xs px-2 py-1 bg-orange-50 rounded-lg hover:bg-orange-100">Link</button>
+                              <button onClick={() => { setAssigningClassReport(null); setAssignClassValue(''); }} className="text-slate-400 text-xs px-2 py-1 bg-slate-50 rounded-lg hover:bg-slate-100">✕</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setAssigningClassReport(r.id); setAssignClassValue(''); }} className="mt-1 text-[9px] text-orange-500 font-black uppercase tracking-widest hover:text-orange-700 flex items-center gap-1">
+                              ⚠ Unlinked — click to assign class
+                            </button>
+                          )
+                        )}
                       </td>
                       <td className="p-3 align-middle">
                         <div className="text-xs font-bold text-slate-500">
@@ -2165,7 +2238,8 @@ function ReportsTab({ reports, allReports, classes }) {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                    })}
                   {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).length === 0 && (
                     <tr>
                       <td colSpan="6" className="p-16 text-center text-slate-300 font-bold italic border-b-0">
