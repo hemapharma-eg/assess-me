@@ -601,6 +601,10 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   const [endTime, setEndTime] = useState('');
   const [scheduledLink, setScheduledLink] = useState(null);
   const [sessionName, setSessionName] = useState('');
+  
+  // Attendance Relaunch State
+  const [attendanceMode, setAttendanceMode] = useState('new'); // 'new' | 'relaunch'
+  const [selectedOldAttendance, setSelectedOldAttendance] = useState(null);
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -647,6 +651,8 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         setPreventSkipping(false);
         setStartTime('');
         setEndTime('');
+        setAttendanceMode('new');
+        setSelectedOldAttendance(null);
       }} className="w-full py-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-[2rem] font-black uppercase tracking-widest transition-colors shadow-sm">
         Schedule Another
       </button>
@@ -654,20 +660,28 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   );
 
   const start = async () => {
+    let launchedQuiz;
+
     if (category === 'attendance') {
-      if (!sessionName || assignedClasses.length === 0) {
-        alert("Please provide a session name and select at least one cohort.");
+      if (assignedClasses.length === 0) {
+        alert("Please select at least one cohort.");
         return;
       }
-      await onLaunch({ title: sessionName, assigned_classes: assignedClasses }, 'attendance');
-      setCategory(null);
-      setSessionName('');
-      setAssignedClasses([]);
-      return;
-    }
+      if (attendanceMode === 'new' && !sessionName) {
+        alert("Please enter a session name.");
+        return;
+      }
+      if (attendanceMode === 'relaunch' && !selectedOldAttendance) {
+        alert("Please select a previous session to relaunch.");
+        return;
+      }
 
-    if (assignedClasses.length === 0) {
-      alert("Please select at least one cohort.");
+      await onLaunch({ 
+        attendanceMode, 
+        sessionName, 
+        selectedOldAttendance, 
+        assigned_classes: assignedClasses 
+      }, 'attendance');
       return;
     }
 
@@ -714,6 +728,8 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
       setPreventSkipping(false);
       setStartTime('');
       setEndTime('');
+      setAttendanceMode('new');
+      setSelectedOldAttendance(null);
     }
   };
 
@@ -826,50 +842,102 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         <p className="text-slate-400 font-bold mt-1">Capture student check-ins quickly</p>
       </div>
 
-      <div className="space-y-6 mb-8">
-        <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Session Name (e.g., Lecture 1: Intro)</label>
-          <input
-            type="text"
-            className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 transition-all"
-            value={sessionName}
-            onChange={(e) => setSessionName(e.target.value)}
-            placeholder="Enter a title..."
-          />
-        </div>
+      <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl mb-6">
+        <button 
+          onClick={() => { setAttendanceMode('new'); setSelectedOldAttendance(null); setAssignedClasses([]); setSessionName(''); }}
+          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${attendanceMode === 'new' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >New Session</button>
+        <button 
+          onClick={() => setAttendanceMode('relaunch')}
+          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${attendanceMode === 'relaunch' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >Relaunch Old</button>
+      </div>
 
-        <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Target Cohort(s)</label>
-          <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
-            {classes.length === 0 ? (
-              <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Cannot start attendance.</p>
-            ) : (
-              classes.map(c => (
-                <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-                  <input
-                    type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
-                    checked={assignedClasses.includes(c.id)}
-                    onChange={() => toggleClass(c.id)}
-                  />
-                  <div>
-                    <div className="font-bold text-slate-700 text-sm">{c.name}</div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
-                  </div>
-                </label>
-              ))
+      {attendanceMode === 'new' ? (
+        <div className="space-y-6 mb-8">
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Session Name (e.g., Lecture 1: Intro)</label>
+            <input
+              type="text"
+              className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 transition-all"
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
+              placeholder="Enter a title..."
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Target Cohort(s)</label>
+            <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
+              {classes.length === 0 ? (
+                <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Cannot start attendance.</p>
+              ) : (
+                classes.map(c => (
+                  <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input
+                      type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
+                      checked={assignedClasses.includes(c.id)}
+                      onChange={() => toggleClass(c.id)}
+                    />
+                    <div>
+                      <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6 mb-8">
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Previous Session</label>
+            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scroll">
+              {reports.filter(r => r.type === 'attendance').length === 0 ? (
+                <p className="text-slate-400 italic text-center text-sm py-4">No past attendance sessions found.</p>
+              ) : (
+                reports.filter(r => r.type === 'attendance').sort((a,b) => new Date(b.ts) - new Date(a.ts)).map(rep => (
+                  <button
+                    key={rep.id}
+                    onClick={() => {
+                       setSelectedOldAttendance(rep);
+                       setAssignedClasses(rep.assigned_classes || []);
+                    }}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedOldAttendance?.id === rep.id ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
+                  >
+                     <div className="font-black text-slate-800 text-sm mb-1">{rep.title}</div>
+                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                       <Clock size={12} />
+                       {new Date(rep.ts).toLocaleDateString('en-GB')} {new Date(rep.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                     </div>
+                     {(rep.assigned_classes || []).length > 0 && (
+                       <div className="mt-2 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-1 flex max-w-max rounded-lg uppercase">
+                         Targeting {classes.find(c => c.id === rep.assigned_classes[0])?.name || 'Unknown Cohort'}
+                       </div>
+                     )}
+                  </button>
+                ))
+              )}
+            </div>
+            {selectedOldAttendance && (
+               <div className="mt-4 p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-800 text-xs font-bold flex gap-3 items-start">
+                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                 <p>Relaunching this session will generate a new live access code. Any students who check in will be ADDED to the existing report list. Prevously present students will remain present.</p>
+               </div>
             )}
           </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-3">
         <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
-          disabled={!sessionName || assignedClasses.length === 0}
+          disabled={(attendanceMode === 'new' && (!sessionName || assignedClasses.length === 0)) || (attendanceMode === 'relaunch' && !selectedOldAttendance)}
           className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
         >
-          Start Session
+          {attendanceMode === 'relaunch' ? 'Relaunch Session' : 'Start Session'}
         </button>
       </div>
     </div>
@@ -933,20 +1001,22 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         )) : [
           { id: 'async_quiz', name: 'Standard Quiz', icon: <FileText size={48} />, color: 'bg-blue-600', desc: 'Schedule a standard quiz.' },
           { id: 'async_video', name: 'Video Quiz', icon: <Video size={48} />, color: 'bg-purple-600', desc: 'Schedule a video quiz with timestamped questions.' }
-        ].map(c => (
-          <button
-            key={c.id} onClick={() => setType(c.id)}
-            className={`${c.color} text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center`}
-          >
-            <div className="p-4 bg-white/10 rounded-2xl">{c.icon}</div>
-            <span className="text-3xl font-black">{c.name}</span>
-            <span className="text-sm font-medium opacity-80">{c.desc}</span>
-          </button>
-        ))}
+        ].map(c => {
+          return (
+            <button
+              key={c.id} onClick={() => setType(c.id)}
+              className={`${c.color} text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center`}
+            >
+              <div className="p-4 bg-white/10 rounded-2xl">{c.icon}</div>
+              <span className="text-3xl font-black">{c.name}</span>
+              <span className="text-sm font-medium opacity-80">{c.desc}</span>
+            </button>
+          )
+        })}
       </div>
     </div>
   );
-}
+} // Close LaunchTab
 
 function QuizzesTab({ quizzes, setQuizzes, user }) {
   const [edit, setEdit] = useState(null);
