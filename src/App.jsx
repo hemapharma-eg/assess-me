@@ -677,7 +677,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
     if (category === 'attendance') {
       if (assignedClasses.length === 0) {
-        alert("Please select at least one cohort.");
+        alert("Please select at least one class.");
         return;
       }
       if (attendanceMode === 'new' && !sessionName) {
@@ -777,7 +777,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No matching quizzes found. Go to Quizzes to create one.</p>}
       </div>
 
-      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Cohort(s) (Required)</h2>
+      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
       <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
         {classes.length === 0 ? (
           <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Please create a class first.</p>
@@ -880,7 +880,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           </div>
 
           <div>
-            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Target Cohort(s)</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Target Class(s)</label>
             <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
               {classes.length === 0 ? (
                 <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Cannot start attendance.</p>
@@ -910,27 +910,34 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
               {reports.filter(r => r.type === 'attendance').length === 0 ? (
                 <p className="text-slate-400 italic text-center text-sm py-4">No past attendance sessions found.</p>
               ) : (
-                reports.filter(r => r.type === 'attendance').sort((a,b) => new Date(b.ts) - new Date(a.ts)).map(rep => (
-                  <button
-                    key={rep.id}
-                    onClick={() => {
-                       setSelectedOldAttendance(rep);
-                       setAssignedClasses(rep.assigned_classes || []);
-                    }}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedOldAttendance?.id === rep.id ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
-                  >
-                     <div className="font-black text-slate-800 text-sm mb-1">{rep.title}</div>
-                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                       <Clock size={12} />
-                       {new Date(rep.ts).toLocaleDateString('en-GB')} {new Date(rep.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                     </div>
-                     {(rep.assigned_classes || []).length > 0 && (
-                       <div className="mt-2 text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-1 flex max-w-max rounded-lg uppercase">
-                         Targeting {classes.find(c => c.id === rep.assigned_classes[0])?.name || 'Unknown Cohort'}
+                reports.filter(r => r.type === 'attendance').sort((a,b) => new Date(b.ts) - new Date(a.ts)).map(rep => {
+                  const targetClassName = rep.assigned_classes?.length > 0 
+                    ? (classes.find(c => c.id === rep.assigned_classes[0])?.name || 'Unknown Class')
+                    : 'No Class Assigned';
+                  
+                  return (
+                    <button
+                      key={rep.id}
+                      onClick={() => {
+                         setSelectedOldAttendance(rep);
+                         setAssignedClasses(rep.assigned_classes || []);
+                      }}
+                      className={`w-full text-left p-4 rounded-xl border-2 transition-all flex justify-between items-center ${selectedOldAttendance?.id === rep.id ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
+                    >
+                       <div>
+                         <div className="font-black text-slate-800 text-sm mb-1">{rep.title}</div>
+                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                           <Clock size={12} />
+                           {new Date(rep.ts).toLocaleDateString('en-GB')} {new Date(rep.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                         </div>
                        </div>
-                     )}
-                  </button>
-                ))
+                       
+                       <div className="text-[10px] font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-lg uppercase whitespace-nowrap ml-2">
+                         {targetClassName}
+                       </div>
+                    </button>
+                  );
+                })
               )}
             </div>
             {selectedOldAttendance && (
@@ -2001,7 +2008,7 @@ function ReportsTab({ reports, allReports, classes }) {
         const scores = {}; // Keys: Quiz Title, Values: HIGHEST score
         const attendanceRecords = {}; // Keys: Attendance Title, Values: Boolean (Present/Absent)
 
-        // Check if there are other students in this cohort with the exact same ID
+        // Check if there are other students in this class with the exact same ID
         const hasDuplicateId = (gradebookClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
 
         // Process Quizzes
@@ -2072,7 +2079,7 @@ function ReportsTab({ reports, allReports, classes }) {
     <div className="space-y-6">
       <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-[600px] mx-auto overflow-x-auto whitespace-nowrap custom-scroll">
         <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
-        <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
+        <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Class Gradebook</button>
         <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
       </div>
 
@@ -2166,7 +2173,7 @@ function ReportsTab({ reports, allReports, classes }) {
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Cohort</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Class</label>
               <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
                 <option value="">-- Choose Class --</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -2232,7 +2239,7 @@ function ReportsTab({ reports, allReports, classes }) {
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Cohort</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Class</label>
               <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
                 <option value="">-- Choose Class --</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -2543,7 +2550,7 @@ function StudentPortal({ setRole, initialRoom }) {
       const { data: stuData } = await stuQuery;
 
       if (!stuData || stuData.length === 0) {
-        setIdError(assigned && assigned.length > 0 ? "ID not found in assigned cohorts." : "Student ID not found in database.");
+        setIdError(assigned && assigned.length > 0 ? "ID not found in assigned classes." : "Student ID not found in database.");
         setCheckingId(false);
         return;
       }
@@ -2573,7 +2580,7 @@ function StudentPortal({ setRole, initialRoom }) {
     const { data: stuData, error: stuErr } = await stuQuery;
 
     if (!stuData || stuData.length === 0) {
-      setIdError(assigned && assigned.length > 0 ? "ID not found in assigned cohorts." : "Student ID not found in database.");
+      setIdError(assigned && assigned.length > 0 ? "ID not found in assigned classes." : "Student ID not found in database.");
       setCheckingId(false);
       return;
     }
@@ -2979,11 +2986,11 @@ function ClassesTab({ classes, setClasses, user }) {
       <div className="p-8 border-b flex justify-between items-center bg-slate-50 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
         <div className="relative z-10">
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Student Cohorts</h2>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Student Classes</h2>
           <p className="text-slate-400 font-bold mt-1">Manage classes and verified rosters</p>
         </div>
         <button onClick={() => setIsCreating(true)} className="relative z-10 bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-blue-100 hover:bg-blue-700 hover:scale-105 active:scale-95 transition-all">
-          <Plus size={18} /> New Cohort
+          <Plus size={18} /> New Class
         </button>
       </div>
 
@@ -3011,8 +3018,8 @@ function ClassesTab({ classes, setClasses, user }) {
         {classes.length === 0 && (
           <div className="col-span-full flex flex-col items-center justify-center text-center p-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-[2.5rem]">
             <Users size={48} className="text-slate-200 mb-4" />
-            <p className="font-black text-xl mb-2 text-slate-600">No Cohorts Found</p>
-            <p className="font-bold text-sm">Create a new cohort to restrict quiz access to specific students.</p>
+            <p className="font-black text-xl mb-2 text-slate-600">No Classes Found</p>
+            <p className="font-bold text-sm">Create a new class to restrict quiz access to specific students.</p>
           </div>
         )}
       </div>
@@ -3124,7 +3131,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
   return (
     <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300">
       <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-        <h2 className="text-2xl font-black text-slate-800">Create New Cohort</h2>
+        <h2 className="text-2xl font-black text-slate-800">Create New Class</h2>
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
       </div>
 
@@ -3132,7 +3139,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
         {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl font-bold flex items-center gap-2"><AlertCircle size={18} />{error}</div>}
 
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Cohort Name <span className="text-red-500">*</span></label>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Class Name <span className="text-red-500">*</span></label>
           <input
             className="w-full text-2xl font-black text-slate-800 border-b-4 border-slate-100 focus:border-blue-600 focus:outline-none transition-all pb-2 bg-transparent"
             placeholder="e.g. Fall 2026 Biology" value={name} onChange={e => setName(e.target.value)}
@@ -3186,7 +3193,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
           <button onClick={onCancel} className="px-6 py-3 font-black text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">Discard</button>
           <button disabled={uploading || !name.trim()} onClick={submit} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
             {uploading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <CheckCircle size={18} />}
-            Save Cohort
+            Save Class
           </button>
         </div>
       </div>
@@ -3260,7 +3267,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           }
 
           if (duplicatesSkipped > 0) {
-            alert(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this cohort.`);
+            alert(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this class.`);
           }
 
           if (parsedStudents.length > 0) {
@@ -3317,7 +3324,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   };
 
   const clearRoster = async () => {
-    if (!window.confirm("ARE YOU SURE? This removes all students from this cohort.")) return;
+    if (!window.confirm("ARE YOU SURE? This removes all students from this class.")) return;
     setLoading(true);
     const { error } = await supabase.from('students').delete().eq('class_id', cls.id);
     setLoading(false);
@@ -3328,7 +3335,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   };
 
   const triggerDeleteClass = async () => {
-    if (!window.confirm("Delete entire cohort and its roster? This action is permanent!")) return;
+    if (!window.confirm("Delete entire class and its roster? This action is permanent!")) return;
     setLoading(true);
     const { error } = await supabase.from('classes').delete().eq('id', cls.id);
     setLoading(false);
@@ -3348,11 +3355,11 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 
     // Uniqueness Checks
     const isDuplicateId = students.find(x => x.id !== s.id && String(x.student_id).toLowerCase().trim() === editSid.toLowerCase().trim());
-    if (isDuplicateId) return alert("Error: That Student ID is already used by another student in this cohort.");
+    if (isDuplicateId) return alert("Error: That Student ID is already used by another student in this class.");
 
     if (editEmail.trim()) {
       const isDuplicateEmail = students.find(x => x.id !== s.id && x.email && String(x.email).toLowerCase().trim() === editEmail.toLowerCase().trim());
-      if (isDuplicateEmail) return alert("Error: That Email is already used by another student in this cohort.");
+      if (isDuplicateEmail) return alert("Error: That Email is already used by another student in this class.");
     }
 
     const { error } = await supabase.from('students').update({ name: editName, student_id: editSid, email: editEmail }).eq('id', s.id);
@@ -3378,7 +3385,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
         </div>
         <div className="flex gap-2">
           <button onClick={triggerDeleteClass} className="px-5 py-2.5 bg-white border-2 border-slate-100 text-red-500 hover:bg-red-50 hover:border-red-200 rounded-xl font-black text-sm transition-all flex items-center gap-2">
-            <Trash2 size={16} /> Delete Cohort
+            <Trash2 size={16} /> Delete Class
           </button>
         </div>
       </div>
