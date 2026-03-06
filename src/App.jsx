@@ -1973,7 +1973,7 @@ function ReportsTab({ reports, allReports, classes }) {
                   <th className="p-4 border-b border-slate-200 z-10">Student Name</th>
                   <th className="p-4 border-b border-slate-200">ID</th>
                   {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
-                  <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>
+                  {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
                   <th className="p-4 border-b border-slate-200 text-center">Actions</th>
                 </tr>
               </thead>
@@ -2003,7 +2003,9 @@ function ReportsTab({ reports, allReports, classes }) {
                           {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
                         </td>
                       ))}
-                      <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
+                      {openReport.type !== 'attendance' && (
+                        <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
+                      )}
                       <td className="p-4 text-center">
                         <a
                           href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
