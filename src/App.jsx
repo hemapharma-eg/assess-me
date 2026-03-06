@@ -221,6 +221,7 @@ function TeacherPortal({ setRole, user }) {
   // Keep a stable room code for the browser
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('AssessMe_RoomCode') || '');
   const [asyncReports, setAsyncReports] = useState([]);
+  const [hiddenAsyncIds, setHiddenAsyncIds] = useState(new Set()); // Track soft-deleted async sessions
 
   // Fetch Quizzes and Reports
   useEffect(() => {
@@ -430,29 +431,30 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
         {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
-        {activeTab === 'reports' && <ReportsTab reports={[...reports, ...asyncReports]} classes={classes} onDeleteReport={async (r) => {
-          if (!window.confirm(`Delete session "${r.title}"?`)) return;
-          const isAsync = asyncReports.some(ar => ar.id === r.id);
-          if (isAsync) {
-            // Only delete responses for this async room, NOT the room itself
-            await supabase.from('responses').delete().eq('room_code', r.id);
-            // Update the pseudo-report in state to have empty responses
-            setAsyncReports(prev => prev.map(ar => ar.id === r.id ? { ...ar, responses: [] } : ar));
-          } else {
-            await supabase.from('reports').delete().eq('id', r.id);
-            setReports(prev => prev.filter(rp => rp.id !== r.id));
-          }
-        }} onDeleteAllReports={async () => {
-          if (!window.confirm('Delete ALL session history? This cannot be undone.')) return;
-          // Delete regular reports from DB
-          const reportIds = reports.map(r => r.id);
-          if (reportIds.length) await supabase.from('reports').delete().in('id', reportIds);
-          setReports([]);
-          // For async rooms, only delete responses (keep rooms alive for Asynchronous tab)
-          const asyncRoomIds = asyncReports.map(r => r.id);
-          if (asyncRoomIds.length) await supabase.from('responses').delete().in('room_code', asyncRoomIds);
-          setAsyncReports(prev => prev.map(ar => ({ ...ar, responses: [] })));
-        }} />}
+        {activeTab === 'reports' && (() => {
+          const allReports = [...reports, ...asyncReports];
+          const visibleReports = allReports.filter(r => !r.hidden && !hiddenAsyncIds.has(r.id));
+          return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} onDeleteReport={async (r) => {
+            if (!window.confirm(`Delete session "${r.title}" from history?`)) return;
+            const isAsync = asyncReports.some(ar => ar.id === r.id);
+            if (isAsync) {
+              // Soft-delete: just hide from session history UI
+              setHiddenAsyncIds(prev => new Set([...prev, r.id]));
+            } else {
+              // Soft-delete: mark hidden in DB
+              await supabase.from('reports').update({ hidden: true }).eq('id', r.id);
+              setReports(prev => prev.map(rp => rp.id === r.id ? { ...rp, hidden: true } : rp));
+            }
+          }} onDeleteAllReports={async () => {
+            if (!window.confirm('Hide ALL sessions from history? Gradebook data will be preserved.')) return;
+            // Soft-delete all sync reports
+            const visibleReportIds = reports.filter(r => !r.hidden).map(r => r.id);
+            if (visibleReportIds.length) await supabase.from('reports').update({ hidden: true }).in('id', visibleReportIds);
+            setReports(prev => prev.map(r => ({ ...r, hidden: true })));
+            // Hide all async pseudo-reports
+            setHiddenAsyncIds(new Set(asyncReports.map(r => r.id)));
+          }} />;
+        })()}
       </main>
     </div>
   );
@@ -1517,7 +1519,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
   );
 }
 
-function ReportsTab({ reports, classes, onDeleteReport, onDeleteAllReports }) {
+function ReportsTab({ reports, allReports, classes, onDeleteReport, onDeleteAllReports }) {
   const [view, setView] = useState('history'); // history, gradebook
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -1756,7 +1758,7 @@ function ReportsTab({ reports, classes, onDeleteReport, onDeleteAllReports }) {
     if (gradebookClass) {
       const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
 
-      assignedReports = reports.filter(r => {
+      assignedReports = (allReports || reports).filter(r => {
         // Automatically include if explicitly assigned
         if (r.assigned_classes?.includes(selectedClassId)) return true;
 
