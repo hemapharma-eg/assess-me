@@ -312,13 +312,13 @@ function TeacherPortal({ setRole, user }) {
       id: newCode,
       user_id: user.id,
       type,
-      quiz: { ...quiz, current_question_idx: 0, show_results: false },
+      quiz: type === 'attendance' ? { title: quiz.title, questions: [] } : { ...quiz, current_question_idx: 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
       ts: Date.now(),
       is_async: isAsync,
-      start_time: quiz.start_time,
-      end_time: quiz.end_time,
-      prevent_skipping: quiz.prevent_skipping
+      start_time: type === 'attendance' ? new Date().toISOString() : quiz?.start_time,
+      end_time: quiz?.end_time,
+      prevent_skipping: quiz?.prevent_skipping
     };
 
     const { error } = await supabase.from('rooms').insert(data);
@@ -598,8 +598,8 @@ function ScheduledTab({ user }) {
 
 function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab }) {
   const [selected, setSelected] = useState('');
-  const [category, setCategory] = useState(null); // 'sync' or 'async'
-  const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video'
+  const [category, setCategory] = useState(null); // 'sync', 'async', 'attendance'
+  const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video', 'attendance'
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
@@ -607,6 +607,7 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [scheduledLink, setScheduledLink] = useState(null);
+  const [sessionName, setSessionName] = useState('');
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -660,6 +661,18 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
   );
 
   const start = async () => {
+    if (category === 'attendance') {
+      if (!sessionName || assignedClasses.length === 0) {
+        alert("Please provide a session name and select at least one cohort.");
+        return;
+      }
+      await onLaunch({ title: sessionName, assigned_classes: assignedClasses }, 'attendance');
+      setCategory(null);
+      setSessionName('');
+      setAssignedClasses([]);
+      return;
+    }
+
     const q = quizzes.find(x => x.id === selected);
     if (q) {
       let launchedQuiz = JSON.parse(JSON.stringify(q));
@@ -716,7 +729,7 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
     return true; // Sync can theoretically take any, but we'll let teachers decide
   });
 
-  if (type) return (
+  if (type && category !== 'attendance') return (
     <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100">
       <h2 className="text-2xl font-black mb-6 text-slate-800">
         Choose a {type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
@@ -805,24 +818,91 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
     </div>
   );
 
+  if (category === 'attendance') return (
+    <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-in zoom-in duration-300">
+      <div className="mb-8 text-center">
+        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <UserCheck size={32} />
+        </div>
+        <h2 className="text-3xl font-black text-slate-800">Start Attendance</h2>
+        <p className="text-slate-400 font-bold mt-1">Capture student check-ins quickly</p>
+      </div>
+
+      <div className="space-y-6 mb-8">
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Session Name (e.g., Lecture 1: Intro)</label>
+          <input
+            type="text"
+            className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 transition-all"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+            placeholder="Enter a title..."
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Target Cohort(s)</label>
+          <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
+            {classes.length === 0 ? (
+              <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Cannot start attendance.</p>
+            ) : (
+              classes.map(c => (
+                <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
+                    checked={assignedClasses.includes(c.id)}
+                    onChange={() => toggleClass(c.id)}
+                  />
+                  <div>
+                    <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
+        <button
+          onClick={start}
+          disabled={!sessionName || assignedClasses.length === 0}
+          className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
+        >
+          Start Session
+        </button>
+      </div>
+    </div>
+  );
+
   if (category === null) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <button
           onClick={() => setCategory('sync')}
-          className="bg-blue-600 text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center"
+          className="bg-blue-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
         >
-          <div className="p-4 bg-white/10 rounded-2xl"><Users size={48} /></div>
-          <span className="text-3xl font-black">Synchronous</span>
-          <span className="text-sm font-medium opacity-80">Launch a live quiz for students to take right now.</span>
+          <div className="p-3 bg-white/10 rounded-2xl"><Users size={40} /></div>
+          <span className="text-2xl font-black">Synchronous</span>
+          <span className="text-xs font-medium opacity-80 leading-relaxed">Launch a live quiz for students to take right now together.</span>
         </button>
         <button
           onClick={() => setCategory('async')}
-          className="bg-orange-500 text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center"
+          className="bg-orange-500 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
         >
-          <div className="p-4 bg-white/10 rounded-2xl"><Clock size={48} /></div>
-          <span className="text-3xl font-black">Asynchronous</span>
-          <span className="text-sm font-medium opacity-80">Schedule quizzes for students to complete on their own time.</span>
+          <div className="p-3 bg-white/10 rounded-2xl"><Clock size={40} /></div>
+          <span className="text-2xl font-black">Asynchronous</span>
+          <span className="text-xs font-medium opacity-80 leading-relaxed">Schedule quizzes for students to complete on their own time.</span>
+        </button>
+        <button
+          onClick={() => setCategory('attendance')}
+          className="bg-green-500 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
+        >
+          <div className="p-3 bg-white/10 rounded-2xl"><UserCheck size={40} /></div>
+          <span className="text-2xl font-black">Attendance</span>
+          <span className="text-xs font-medium opacity-80 leading-relaxed">Instantly capture secure, device-verified student check-ins.</span>
         </button>
       </div>
     );
@@ -1231,8 +1311,21 @@ function QuizEditor({ quiz, onSave, onCancel }) {
 
 function ResultsTab({ session, responses, onEnd, roomCode }) {
   const [showQR, setShowQR] = useState(true);
-  const joinUrl = `${window.location.href.split('?')[0]}?room=${roomCode}`;
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(joinUrl)}`;
+  const [attendanceToken, setAttendanceToken] = useState(() => Date.now().toString());
+
+  useEffect(() => {
+    if (session?.type !== 'attendance') return;
+    const interval = setInterval(() => {
+      setAttendanceToken(Date.now().toString());
+    }, 10000); // 10 seconds
+    return () => clearInterval(interval);
+  }, [session?.type]);
+
+  const joinUrl = session?.type === 'attendance'
+    ? `${window.location.href.split('?')[0]}?room=${roomCode}&token=${attendanceToken}`
+    : `${window.location.href.split('?')[0]}?room=${roomCode}`;
+    
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(joinUrl)}`;
 
   if (!session) return <div className="text-center py-40 text-slate-300 font-black uppercase tracking-widest">No Active Sessions</div>;
 
@@ -1270,9 +1363,9 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
     <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border flex flex-col min-h-[70vh]">
       <div className="bg-slate-900 text-white p-8 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0 z-10">
         <div>
-          <h2 className="text-2xl font-black">{session.quiz.title}</h2>
+          <h2 className="text-2xl font-black text-white">{session.quiz?.title || session.title || 'Live Session'}</h2>
           <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
-            Live • {session.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'} • {responses.length} Participants
+            Live • {session.type === 'teacher_paced' ? 'Teacher Paced' : session.type === 'attendance' ? 'Attendance Mode' : 'Student Paced'} • {responses.length} Participants
           </p>
         </div>
         <div className="flex gap-4">
@@ -1284,17 +1377,54 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
       </div>
 
       {showQR && (
-        <div className="p-10 bg-blue-50 border-b flex flex-col md:flex-row items-center justify-center gap-12 text-center md:text-left animate-in slide-in-from-top duration-300 shrink-0 z-0 relative">
-          <img src={qr} className="w-44 h-44 border-8 border-white rounded-[2rem] shadow-2xl" />
+        <div className="p-10 bg-blue-50 border-b flex flex-col items-center justify-center gap-8 text-center animate-in slide-in-from-top duration-300 shrink-0 z-0 relative">
+          {session.type === 'attendance' && (
+            <div className="bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-[-1rem] animate-pulse">
+              <Activity size={14} /> Dynamic QR Active (Refreshes every 10s)
+            </div>
+          )}
+          <img src={qr} className="w-56 h-56 border-8 border-white rounded-[2rem] shadow-2xl" />
           <div>
-            <h3 className="text-3xl font-black text-slate-800 mb-2">Join Class</h3>
-            <p className="text-slate-500 mb-6 font-medium max-w-xs">Have students scan the code or enter room code on mobile devices.</p>
-            <div className="text-4xl font-black tracking-[0.3em] text-blue-600 bg-white px-8 py-3 rounded-2xl shadow-inner border-2 border-blue-100 inline-block">{roomCode}</div>
+            <h3 className="text-3xl font-black text-slate-800 mb-2">Join {session.type === 'attendance' ? 'Attendance' : 'Class'}</h3>
+            <p className="text-slate-500 mb-6 font-medium max-w-sm mx-auto">
+              Scan the code to join.
+              {session.type === 'attendance' && " This QR refreshes continuously for security to prevent proxy scanning."}
+            </p>
+            {session.type !== 'attendance' && (
+              <div className="text-4xl font-black tracking-[0.3em] text-blue-600 bg-white px-8 py-3 rounded-2xl shadow-inner border-2 border-blue-100 inline-block">{roomCode}</div>
+            )}
           </div>
         </div>
       )}
 
-      {session.type === 'teacher_paced' ? (
+      {session.type === 'attendance' ? (
+        <div className="flex-1 overflow-x-auto p-6 md:p-12 relative">
+           <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
+             <UserCheck size={400} />
+           </div>
+           <div className="max-w-4xl mx-auto relative z-10">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {responses.map((r, i) => (
+                  <div key={i} className="bg-white p-4 rounded-3xl border-2 border-green-100 shadow-sm shadow-green-50 flex flex-col items-center text-center animate-in zoom-in duration-300">
+                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mb-3">
+                      <CheckCircle size={24} />
+                    </div>
+                    <div className="font-black text-slate-800 text-sm leading-tight mb-1">{r.student_name}</div>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{r.student_id}</div>
+                  </div>
+                ))}
+              </div>
+              {responses.length === 0 && (
+                <div className="text-center py-20">
+                  <div className="w-20 h-20 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-6">
+                     <QrCode size={32} />
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-300">Waiting for check-ins...</h3>
+                </div>
+              )}
+           </div>
+        </div>
+      ) : session.type === 'teacher_paced' ? (
         <TeacherPacedDashboard
           session={session}
           responses={responses}
@@ -1708,18 +1838,28 @@ function ReportsTab({ reports, allReports, classes }) {
     );
   }
 
-  const exportGradebook = (cls, assignedReps, matrix) => {
+  const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles) => {
     try {
       const wb = XLSX.utils.book_new();
 
-      // Group reports by unique titles for column headers
-      const uniqueQuizTitles = Array.from(new Set(assignedReps.map(r => r.title)));
+      // Separate out quizzes from attendance
+      const quizTitles = Array.from(new Set(assignedReps.filter(r => r.type !== 'attendance').map(r => r.title)));
 
-      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...uniqueQuizTitles];
+      const headers = ['Student ID', 'Student Name', 'Average Quiz Score (%)'];
+      if (hasAttendance) headers.push('Overall Attendance (%)');
+      headers.push(...quizTitles);
+      if (hasAttendance) headers.push(...attendanceTitles);
+
       const rows = [headers];
       matrix.forEach(row => {
         const studentData = [row.student_id, row.name, row.average];
-        uniqueQuizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
+        if (hasAttendance) studentData.push(row.attendanceTotal);
+        
+        quizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
+        if (hasAttendance) {
+          attendanceTitles.forEach(title => { studentData.push(row.attendanceRecords[title] ? 'Present' : 'Absent'); });
+        }
+        
         rows.push(studentData);
       });
       const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1749,22 +1889,26 @@ function ReportsTab({ reports, allReports, classes }) {
 
         return false;
       });
-      // We want to group by Quiz Title in the gradebook to handle multiple attempts
-      const uniqueQuizTitles = Array.from(new Set(assignedReports.map(r => r.title)));
+      // Separation of Quiz Reports and Attendance Reports
+      const quizReports = assignedReports.filter(r => r.type !== 'attendance');
+      const attendanceReports = assignedReports.filter(r => r.type === 'attendance');
+
+      // We want to group by Quiz/Attendance Title
+      const uniqueQuizTitles = Array.from(new Set(quizReports.map(r => r.title)));
+      const uniqueAttendanceTitles = Array.from(new Set(attendanceReports.map(r => r.title)));
 
       gradeMatrix = (gradebookClass.students || []).map(stu => {
-        const scores = {}; // Keys will be Quiz Title, Values will be HIGHEST score
+        const scores = {}; // Keys: Quiz Title, Values: HIGHEST score
+        const attendanceRecords = {}; // Keys: Attendance Title, Values: Boolean (Present/Absent)
 
         // Check if there are other students in this cohort with the exact same ID
         const hasDuplicateId = (gradebookClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
 
-        assignedReports.forEach(rep => {
+        // Process Quizzes
+        quizReports.forEach(rep => {
           const stuResp = (rep.responses || []).find(res => {
             if (res.student_id !== stu.student_id) return false;
-            // If the ID is duplicated in the cohort, we MUST also match the name exactly to avoid assigning scores to the wrong person.
-            if (hasDuplicateId) {
-              return res.student_name === stu.name;
-            }
+            if (hasDuplicateId) return res.student_name === stu.name;
             return true;
           });
           if (stuResp) {
@@ -1777,15 +1921,29 @@ function ReportsTab({ reports, allReports, classes }) {
               }
             });
             const score = Math.round((correctCount / rep.questions.length) * 100);
-
-            // Only keep the highest score for this specific quiz title
             if (scores[rep.title] === undefined || score > scores[rep.title]) {
               scores[rep.title] = score;
             }
           }
         });
 
-        // Calculate average based on the highest scores of unique quizzes taken
+        // Process Attendance
+        attendanceReports.forEach(rep => {
+          const stuResp = (rep.responses || []).find(res => {
+            if (res.student_id !== stu.student_id) return false;
+            // Name matching check for duplicates happens on submission side for attendance, but just to be safe:
+            if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
+              return res.student_name === stu.name;
+            }
+            return true;
+          });
+          // If they have ANY response in this attendance session, they are present
+          if (stuResp) {
+             attendanceRecords[rep.title] = true;
+          }
+        });
+
+        // Calculate Averages
         let totalScore = 0;
         let attemptCount = 0;
         Object.values(scores).forEach(highestScore => {
@@ -1793,7 +1951,17 @@ function ReportsTab({ reports, allReports, classes }) {
           attemptCount++;
         });
 
-        return { ...stu, scores, average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0 };
+        const attendanceTotal = uniqueAttendanceTitles.length > 0 
+          ? Math.round((Object.keys(attendanceRecords).length / uniqueAttendanceTitles.length) * 100) 
+          : 0;
+
+        return { 
+          ...stu, 
+          scores, 
+          average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0,
+          attendanceRecords,
+          attendanceTotal
+        };
       }).sort((a, b) => a.name.localeCompare(b.name));
     }
   }
@@ -1832,8 +2000,8 @@ function ReportsTab({ reports, allReports, classes }) {
                   {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).map(r => (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 text-center align-middle">
-                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
-                          <BarChart2 size={16} />
+                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                          {r.type === 'attendance' ? <UserCheck size={16} /> : <BarChart2 size={16} />}
                         </div>
                       </td>
                       <td className="p-3 align-middle">
@@ -1843,7 +2011,7 @@ function ReportsTab({ reports, allReports, classes }) {
                         <div className="text-xs font-bold text-slate-500">
                           {new Date(r.ts).toLocaleDateString()} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'}</div>
+                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : r.type === 'attendance' ? 'Attendance' : 'Student Paced'}</div>
                       </td>
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {(r.responses || []).length}
@@ -1881,9 +2049,23 @@ function ReportsTab({ reports, allReports, classes }) {
               </select>
             </div>
             {gradebookClass && (
-              <button onClick={() => exportGradebook(gradebookClass, assignedReports, gradeMatrix)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
-                <Download size={18} /> Export Gradebook
-              </button>
+              <div className="flex gap-2">
+                {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
+                  <a
+                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=Immediate Action Required: Attendance Warning&body=Dear Student,%0D%0A%0D%0AOur records indicate that your overall attendance has fallen below the required 75% threshold. Please reach out to your instructor immediately to discuss this matter.%0D%0A%0D%0AClassLabX Automated Notification`}
+                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95"
+                  >
+                    <AlertCircle size={18} /> Email At-Risk
+                  </a>
+                )}
+                <button onClick={() => {
+                   const qs = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
+                   const as = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)));
+                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as);
+                }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
+                  <Download size={18} /> Export Gradebook
+                </button>
+              </div>
             )}
           </div>
           {!selectedClassId ? (
@@ -1895,28 +2077,63 @@ function ReportsTab({ reports, allReports, classes }) {
                   <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
                     <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
-                    <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average</th>
-                    {Array.from(new Set(assignedReports.map(r => r.title))).map(title => (
-                      <th key={title} className="p-4 border-b border-slate-200 min-w-[120px]">
+                    <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average Score</th>
+                    
+                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && (
+                      <th className="p-4 border-b border-slate-200 text-center text-green-600 w-28">Overall Attendance</th>
+                    )}
+
+                    {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
+                      <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
                         <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
-                        <div className="text-slate-300 font-medium text-[8px] mt-1">Best Score</div>
+                        <div className="text-slate-300 font-medium text-[8px] mt-1">Quiz Best Score</div>
                       </th>
                     ))}
+                    
+                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
+                      <th key={`a-${title}`} className="p-4 border-b border-slate-200 min-w-[100px] border-l-2">
+                        <div className="truncate w-full max-w-[120px]" title={title}>{title}</div>
+                        <div className="text-slate-300 font-medium text-[8px] mt-1">Attendance</div>
+                      </th>
+                    ))}
+
                     {assignedReports.length === 0 && <th className="p-4 border-b border-slate-200">No activities recorded yet.</th>}
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                  {gradeMatrix.map((row, i) => (
-                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-4 sticky left-0 bg-white z-10 whitespace-nowrap truncate max-w-xs" title={row.name}>{row.name}</td>
+                  {gradeMatrix.map((row, i) => {
+                    const hasAttendance = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0;
+                    const isAtRisk = hasAttendance && row.attendanceTotal < 75;
+                    return (
+                    <tr key={i} className={`hover:bg-blue-50/30 transition-colors ${isAtRisk ? 'bg-red-50/20' : ''}`}>
+                      <td className={`p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs ${isAtRisk ? 'bg-red-50/40 text-red-700 font-black' : 'bg-white'}`} title={row.name}>
+                        <div className="flex items-center gap-2">
+                           {row.name}
+                           {isAtRisk && <span className="bg-red-500 text-white px-2 py-0.5 rounded-md text-[8px] uppercase tracking-widest font-black shrink-0 shadow-sm animate-pulse">At Risk</span>}
+                        </div>
+                      </td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
-                      <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{row.average}%</td>
-                      {Array.from(new Set(assignedReports.map(r => r.title))).map(title => (
-                        <td key={title} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
+                      <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-slate-400'}`}>{row.average > 0 ? `${row.average}%` : '-'}</td>
+                      
+                      {hasAttendance && (
+                        <td className={`p-4 text-center font-black ${row.attendanceTotal >= 75 ? 'text-green-600' : 'text-red-500'}`}>
+                          {row.attendanceTotal}%
+                        </td>
+                      )}
+
+                      {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
+                        <td key={`q-${title}`} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
                       ))}
+
+                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).map(title => (
+                         <td key={`a-${title}`} className={`p-4 font-black border-l-2 ${row.attendanceRecords[title] ? 'text-green-500' : 'text-red-300'}`}>
+                           {row.attendanceRecords[title] ? 'Present' : 'Absent'}
+                         </td>
+                      ))}
+
                       {assignedReports.length === 0 && <td className="p-4"></td>}
                     </tr>
-                  ))}
+                  )})}
                   {gradeMatrix.length === 0 && (<tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
                 </tbody>
               </table>
@@ -1951,6 +2168,7 @@ function StudentPortal({ setRole, initialRoom }) {
   const [quizEnded, setQuizEnded] = useState(false);
   const [answers, setAnswers] = useState({});
   const [idx, setIdx] = useState(0);
+  const [attendanceSuccess, setAttendanceSuccess] = useState(false);
 
   // Video Quiz States
   const playerRef = useRef(null);
@@ -2029,7 +2247,7 @@ function StudentPortal({ setRole, initialRoom }) {
     }
 
     // --- Async Time Check ---
-    if (roomData.is_async) {
+    if (roomData.is_async && roomData.type !== 'attendance') {
       const now = Date.now();
       const start = new Date(roomData.start_time).getTime();
       const end = new Date(roomData.end_time).getTime();
@@ -2044,6 +2262,107 @@ function StudentPortal({ setRole, initialRoom }) {
         setCheckingId(false);
         return;
       }
+    }
+
+    if (roomData.type === 'attendance') {
+      if (!sid.trim()) {
+        setIdError("Student ID is required for Attendance.");
+        setCheckingId(false);
+        return;
+      }
+
+      // 1. Validate Token (must be within 20-30 seconds of creation to prevent sharing static pictures)
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlToken = params.get('token');
+        if (urlToken) {
+          const tokenTime = parseInt(urlToken, 10);
+          if (isNaN(tokenTime) || (Date.now() - tokenTime > 30000)) {
+             setIdError("Invalid or Expired QR Code. Please scan the live code on the screen again.");
+             setCheckingId(false);
+             return;
+          }
+        }
+      } catch(e) {}
+
+      // 2. Anti-Fraud Device Lock
+      // Generate a simple fingerprint (userAgent + language + screen resolution + a localStorage persistent id)
+      let deviceId = localStorage.getItem('ClassLabX_DeviceID');
+      if (!deviceId) {
+        deviceId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('ClassLabX_DeviceID', deviceId);
+      }
+      const fingerprint = `${deviceId}_${navigator.userAgent}_${navigator.language}_${window.screen.width}x${window.screen.height}`;
+
+      // Check if this fingerprint already voted in this room
+      const { data: existingVotes } = await supabase.from('responses')
+        .select('*')
+        .eq('room_code', code)
+        .like('id', `%|${fingerprint}`); // we will store it like ROOM_SID|fingerprint
+
+      if (existingVotes && existingVotes.length > 0) {
+        // Did they already vote with THIS exact sid on THIS device? That's fine, maybe they refreshed.
+        const votedWithThisSid = existingVotes.find(v => v.student_id === sid.trim());
+        if (!votedWithThisSid) {
+           // They voted with another SID on this device
+           setIdError("Anti-Fraud Alert: Only one attendance entry allowed per device.");
+           setCheckingId(false);
+           return;
+        }
+      }
+
+      // Check if student is in assigned cohorts
+      const assigned = roomData.quiz?.assigned_classes;
+      if (assigned && assigned.length > 0) {
+        const { data: stuData } = await supabase.from('students')
+          .select('*')
+          .in('class_id', assigned)
+          .eq('student_id', sid.trim());
+
+        if (!stuData || stuData.length === 0) {
+          setIdError("ID not found in assigned cohorts.");
+          setCheckingId(false);
+          return;
+        }
+        
+        // Success for Cohort Attendance
+        const stuName = stuData[0].name;
+        const respId = `${code}_${sid.trim()}|${fingerprint}`;
+        
+        await supabase.from('responses').upsert({
+          id: respId,
+          room_code: code,
+          student_name: stuName,
+          student_id: sid.trim(),
+          answers: {},
+          ts: Date.now()
+        });
+
+        setAttendanceSuccess(true);
+        setCheckingId(false);
+        return;
+      }
+
+      // If no cohorts assigned (Open Attendance)
+      if (!name.trim()) {
+        setIdError("Name is required for Open Attendance.");
+        setCheckingId(false);
+        return;
+      }
+
+      const respId = `${code}_${sid.trim()}|${fingerprint}`;
+      await supabase.from('responses').upsert({
+        id: respId,
+        room_code: code,
+        student_name: name.trim(),
+        student_id: sid.trim(),
+        answers: {},
+        ts: Date.now()
+      });
+
+      setAttendanceSuccess(true);
+      setCheckingId(false);
+      return;
     }
 
     const assigned = roomData.quiz?.assigned_classes;
@@ -2123,6 +2442,22 @@ function StudentPortal({ setRole, initialRoom }) {
       );
     }
 
+    if (attendanceSuccess) {
+      return (
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 text-center animate-in zoom-in duration-300">
+          <div className="bg-white p-12 md:p-16 flex flex-col items-center rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative overflow-hidden">
+             <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-green-50 to-transparent"></div>
+             <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6 relative z-10 shadow-inner">
+               <CheckCircle size={48} />
+             </div>
+             <h2 className="text-4xl font-black text-slate-800 tracking-tighter relative z-10 mb-2">Present!</h2>
+             <p className="text-slate-500 font-bold mb-8 relative z-10">Your attendance has been recorded. You may close this page.</p>
+             <button onClick={() => setRole(null)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors relative z-10">Done</button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
         <form onSubmit={attemptJoin} className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
@@ -2132,7 +2467,7 @@ function StudentPortal({ setRole, initialRoom }) {
               <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />
             </div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
-            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} /> {idError}</span> : "Enter details below"}</p>
+            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2 px-2 text-center break-words">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} className="shrink-0" /> {idError}</span> : "Enter details below"}</p>
           </div>
           <div className="space-y-4">
             <div>
