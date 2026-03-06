@@ -427,7 +427,7 @@ function TeacherPortal({ setRole, user }) {
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
         {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
-        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
+        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
         {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
         {activeTab === 'reports' && (() => {
@@ -589,7 +589,7 @@ function ScheduledTab({ user }) {
   );
 }
 
-function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab }) {
+function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab }) {
   const [selected, setSelected] = useState('');
   const [category, setCategory] = useState(null); // 'sync', 'async', 'attendance'
   const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video', 'attendance'
