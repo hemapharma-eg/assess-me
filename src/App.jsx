@@ -1993,8 +1993,21 @@ function ReportsTab({ reports, allReports, classes }) {
         // Automatically include if explicitly assigned
         if (r.assigned_classes?.includes(selectedClassId)) return true;
 
-        // Also include 'Open' quizzes (none assigned) if any student from this class participated
+        // For reports with no assigned_classes (old format before the fix),
+        // fall back to checking if any student from this class participated
         if (!r.assigned_classes || r.assigned_classes.length === 0) {
+          // For attendance: check if any of the responders belong to this class
+          if (r.type === 'attendance') {
+            const responderIds = (r.responses || []).map(resp => String(resp.student_id).trim());
+            // Show if at least one responder is in the class
+            if (responderIds.length > 0) {
+              return responderIds.some(id => classStudentIds.map(String).includes(id));
+            }
+            // No responses at all (0 scans) — we can't tell which class it belonged to.
+            // Show it for all classes to avoid losing data.
+            return true;
+          }
+          // For quizzes: check if any student from this class participated
           return (r.responses || []).some(resp => classStudentIds.includes(resp.student_id));
         }
 
