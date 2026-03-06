@@ -4,7 +4,7 @@ import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, 
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
@@ -653,6 +653,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   // Attendance Relaunch State
   const [attendanceMode, setAttendanceMode] = useState('new'); // 'new' | 'relaunch'
   const [selectedOldAttendance, setSelectedOldAttendance] = useState(null);
+  const [relaunchSearch, setRelaunchSearch] = useState('');
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -941,39 +942,63 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         <div className="space-y-6 mb-8">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Previous Session</label>
+            {/* Search bar */}
+            <div className="relative mb-3">
+              <input
+                type="text"
+                value={relaunchSearch}
+                onChange={e => setRelaunchSearch(e.target.value)}
+                placeholder="Search by name, class or date (DD/MM/YYYY)..."
+                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border-2 border-slate-100 focus:border-blue-400 rounded-xl text-sm font-bold text-slate-700 focus:outline-none transition-all placeholder:text-slate-300"
+              />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            </div>
             <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scroll">
-              {reports.filter(r => r.type === 'attendance').length === 0 ? (
-                <p className="text-slate-400 italic text-center text-sm py-4">No past attendance sessions found.</p>
-              ) : (
-                reports.filter(r => r.type === 'attendance').sort((a,b) => new Date(b.ts) - new Date(a.ts)).map(rep => {
-                  const targetClassName = rep.assigned_classes?.length > 0 
+              {(() => {
+                const allAttendance = reports.filter(r => r.type === 'attendance').sort((a, b) => new Date(b.ts) - new Date(a.ts));
+                const q = relaunchSearch.trim().toLowerCase();
+                const filtered = !q ? allAttendance : allAttendance.filter(rep => {
+                  const className = rep.assigned_classes?.length > 0
+                    ? (classes.find(c => c.id === rep.assigned_classes[0])?.name || '').toLowerCase()
+                    : '';
+                  const dateStr = new Date(rep.ts).toLocaleDateString('en-GB').toLowerCase();
+                  return (
+                    (rep.title || '').toLowerCase().includes(q) ||
+                    className.includes(q) ||
+                    dateStr.includes(q)
+                  );
+                });
+
+                if (allAttendance.length === 0) return <p className="text-slate-400 italic text-center text-sm py-4">No past attendance sessions found.</p>;
+                if (filtered.length === 0) return <p className="text-slate-400 italic text-center text-sm py-4">No sessions match your search.</p>;
+
+                return filtered.map(rep => {
+                  const targetClassName = rep.assigned_classes?.length > 0
                     ? (classes.find(c => c.id === rep.assigned_classes[0])?.name || 'Unknown Class')
                     : 'No Class Assigned';
-                  
                   return (
                     <button
                       key={rep.id}
                       onClick={() => {
-                         setSelectedOldAttendance(rep);
-                         setAssignedClasses(rep.assigned_classes || []);
+                        setSelectedOldAttendance(rep);
+                        setAssignedClasses(rep.assigned_classes || []);
                       }}
                       className={`w-full text-left p-4 rounded-xl border-2 transition-all flex justify-between items-center ${selectedOldAttendance?.id === rep.id ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
                     >
-                       <div>
-                         <div className="font-black text-slate-800 text-sm mb-1">{rep.title}</div>
-                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                           <Clock size={12} />
-                           {new Date(rep.ts).toLocaleDateString('en-GB')} {new Date(rep.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                         </div>
-                       </div>
-                       
-                       <div className="text-[10px] font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-lg uppercase whitespace-nowrap ml-2">
-                         {targetClassName}
-                       </div>
+                      <div>
+                        <div className="font-black text-slate-800 text-sm mb-1">{rep.title || 'Untitled Session'}</div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Clock size={12} />
+                          {new Date(rep.ts).toLocaleDateString('en-GB')} {new Date(rep.ts).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                        </div>
+                      </div>
+                      <div className="text-[10px] font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-lg uppercase whitespace-nowrap ml-2">
+                        {targetClassName}
+                      </div>
                     </button>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
             {selectedOldAttendance && (
                <div className="mt-4 p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-800 text-xs font-bold flex gap-3 items-start">
