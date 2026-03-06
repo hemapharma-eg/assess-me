@@ -634,11 +634,11 @@ function QuizzesTab({ quizzes, setQuizzes, user }) {
   const save = async (data) => {
     let saved;
     if (data.id) {
-      const { data: ret, error } = await supabase.from('quizzes').update({ title: data.title, questions: data.questions }).eq('id', data.id).select().single();
+      const { data: ret, error } = await supabase.from('quizzes').update({ title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).eq('id', data.id).select().single();
       if (error) alert("Save error: " + error.message);
       else saved = ret;
     } else {
-      const { data: ret, error } = await supabase.from('quizzes').insert({ user_id: user.id, title: data.title, questions: data.questions }).select().single();
+      const { data: ret, error } = await supabase.from('quizzes').insert({ user_id: user.id, title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).select().single();
       if (error) alert("Save error: " + error.message);
       else saved = ret;
     }
