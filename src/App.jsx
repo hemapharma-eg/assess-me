@@ -2371,36 +2371,25 @@ function StudentPortal({ setRole, initialRoom }) {
         }
       }
 
-      // Check if student is in assigned cohorts
+      // Check student in database
       const assigned = roomData.quiz?.assigned_classes;
+      let stuQuery = supabase.from('students').select('*').eq('student_id', sid.trim());
+      
       if (assigned && assigned.length > 0) {
-        const { data: stuData } = await supabase.from('students')
-          .select('*')
-          .in('class_id', assigned)
-          .eq('student_id', sid.trim());
+        stuQuery = stuQuery.in('class_id', assigned);
+      }
+      
+      const { data: stuData } = await stuQuery;
 
-        if (!stuData || stuData.length === 0) {
-          setIdError("ID not found in assigned cohorts.");
-          setCheckingId(false);
-          return;
-        }
-        
-        // Ask for confirmation
-        const stuName = stuData[0].name;
-        setName(stuName);
-        setTempSession(roomData);
-        setNeedsConfirmation(true);
+      if (!stuData || stuData.length === 0) {
+        setIdError(assigned && assigned.length > 0 ? "ID not found in assigned cohorts." : "Student ID not found in database.");
         setCheckingId(false);
         return;
       }
-
-      // If no cohorts assigned (Open Attendance)
-      if (!name.trim()) {
-        setIdError("Name is required for Open Attendance.");
-        setCheckingId(false);
-        return;
-      }
-
+      
+      // Ask for confirmation
+      const stuName = stuData[0].name;
+      setName(stuName);
       setTempSession(roomData);
       setNeedsConfirmation(true);
       setCheckingId(false);
