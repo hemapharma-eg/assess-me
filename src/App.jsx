@@ -1928,8 +1928,9 @@ function StudentPortal({ setRole, initialRoom }) {
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [maxPlayed, setMaxPlayed] = useState(0);
-  const [questionUnlocked, setQuestionUnlocked] = useState(false);
+  const [showQuestion, setShowQuestion] = useState(false); // Only true when video reached timestamp
   const [videoInitializing, setVideoInitializing] = useState(true);
+  const [videoDuration, setVideoDuration] = useState(0);
 
   useEffect(() => {
     if (!joined || !room) return;
@@ -1975,9 +1976,10 @@ function StudentPortal({ setRole, initialRoom }) {
 
     // Auto-resume video upon answering if it's a video quiz
     if (session?.quiz?.type === 'video') {
-      setVideoPlaying(true);
-      setQuestionUnlocked(false);
+      setShowQuestion(false);
       handleNext();
+      // Small delay before resuming so idx updates first
+      setTimeout(() => setVideoPlaying(true), 100);
     }
   };
 
@@ -2205,13 +2207,17 @@ function StudentPortal({ setRole, initialRoom }) {
               ref={playerRef}
               url={session.quiz.video_url}
               playing={videoPlaying}
-              controls={!session.prevent_skipping} // Hide default controls if forced sequential
+              controls={!session.prevent_skipping}
               width="100%"
               height="100%"
               style={{ position: 'absolute', top: 0, left: 0 }}
+              onReady={() => {
+                if (playerRef.current) setVideoDuration(playerRef.current.getDuration());
+              }}
               onStart={() => {
                 if (videoInitializing) {
                   playerRef.current?.seekTo(0);
+                  setVideoPlaying(true);
                   setVideoInitializing(false);
                 }
               }}
@@ -2220,15 +2226,17 @@ function StudentPortal({ setRole, initialRoom }) {
                 setPlayedSeconds(currentSec);
                 if (currentSec > maxPlayed) setMaxPlayed(currentSec);
 
-                // Pause at current question's timestamp if unanswered
-                if (idx < total && q?.timestamp !== undefined && q?.timestamp !== null) {
-                  const targetTime = q.timestamp;
-                  // If we are slightly past the target, and unanswered, pause.
-                  // Allow a small 0.5s buffer so we don't infinitely lock.
-                  if (currentSec >= targetTime && answers[idx] === undefined && !questionUnlocked) {
+                // Only check for timestamp pausing when:
+                // - We have more questions to show
+                // - The question is NOT already being shown
+                // - The question hasn't been answered yet
+                const questions = session.quiz.questions;
+                if (idx < questions.length && !showQuestion && answers[idx] === undefined) {
+                  const targetTime = questions[idx]?.timestamp;
+                  if (targetTime !== undefined && targetTime !== null && currentSec >= targetTime) {
                     setVideoPlaying(false);
-                    setQuestionUnlocked(true);
-                    playerRef.current?.seekTo(targetTime); // Snap back exactly to timestamp
+                    setShowQuestion(true);
+                    playerRef.current?.seekTo(targetTime);
                   }
                 }
               }}
@@ -2242,12 +2250,25 @@ function StudentPortal({ setRole, initialRoom }) {
                 <button onClick={() => setVideoPlaying(!videoPlaying)} className="w-10 h-10 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-center text-white shrink-0">
                   {videoPlaying ? <span className="font-black text-xs">||</span> : <Play size={16} fill="currentColor" />}
                 </button>
-                <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden relative">
-                  <div className="h-full bg-slate-600 absolute left-0 top-0" style={{ width: `${(maxPlayed / (playerRef.current?.getDuration() || 1)) * 100}%` }}></div>
-                  <div className="h-full bg-blue-500 absolute left-0 top-0 transition-all" style={{ width: `${(playedSeconds / (playerRef.current?.getDuration() || 1)) * 100}%` }}></div>
+                <div
+                  className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden relative cursor-pointer"
+                  onClick={(e) => {
+                    // Allow seeking backward only (up to maxPlayed)
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const fraction = (e.clientX - rect.left) / rect.width;
+                    const dur = videoDuration || 1;
+                    const seekTo = fraction * dur;
+                    if (seekTo <= maxPlayed) {
+                      playerRef.current?.seekTo(seekTo);
+                      setPlayedSeconds(seekTo);
+                    }
+                  }}
+                >
+                  <div className="h-full bg-slate-600 absolute left-0 top-0" style={{ width: `${(maxPlayed / (videoDuration || 1)) * 100}%` }}></div>
+                  <div className="h-full bg-blue-500 absolute left-0 top-0 transition-all" style={{ width: `${(playedSeconds / (videoDuration || 1)) * 100}%` }}></div>
                 </div>
               </div>
-              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest text-center">Skipping is disabled. <br className="md:hidden" />Answer questions to proceed.</p>
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest text-center">You can seek backward but not forward. <br className="md:hidden" />Answer questions when they appear.</p>
             </div>
           )}
         </div>
@@ -2275,13 +2296,13 @@ function StudentPortal({ setRole, initialRoom }) {
               Finish & Submit <ArrowRight size={20} />
             </button>
           </div>
-        ) : session.quiz.type === 'video' && !questionUnlocked && answers[idx] === undefined ? (
+        ) : session.quiz.type === 'video' && !showQuestion && answers[idx] === undefined ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-10 animate-pulse">
             <div className="w-20 h-20 bg-slate-200 rounded-full mb-6 flex items-center justify-center text-slate-400">
               <Play size={32} fill="currentColor" />
             </div>
             <h3 className="text-xl font-black text-slate-800 mb-2">Watch the Video</h3>
-            <p className="text-sm font-bold text-slate-400">The next question will appear automatically when you reach its timestamp.</p>
+            <p className="text-sm font-bold text-slate-400">Question {idx + 1} will appear automatically at the right moment.</p>
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
