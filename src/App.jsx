@@ -1928,9 +1928,9 @@ function StudentPortal({ setRole, initialRoom }) {
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [maxPlayed, setMaxPlayed] = useState(0);
-  const [showQuestion, setShowQuestion] = useState(false); // Only true when video reached timestamp
   const [videoInitializing, setVideoInitializing] = useState(true);
   const [videoDuration, setVideoDuration] = useState(0);
+  const [videoCompleted, setVideoCompleted] = useState(false);
 
   useEffect(() => {
     if (!joined || !room) return;
@@ -1973,17 +1973,10 @@ function StudentPortal({ setRole, initialRoom }) {
         ts: Date.now()
       });
     } catch (e) { console.error("Network Error", e); }
-
-    // Auto-resume video upon answering if it's a video quiz
-    if (session?.quiz?.type === 'video') {
-      setShowQuestion(false);
-      handleNext();
-      // Small delay before resuming so idx updates first
-      setTimeout(() => setVideoPlaying(true), 100);
-    }
   };
 
-  const handleNext = () => setIdx(p => p + 1);
+  const handleNext = () => setIdx(p => Math.min(p + 1, total));
+  const handlePrev = () => setIdx(p => Math.max(p - 1, 0));
 
   // Auto-sync Student idx with Teacher in Teacher-Paced mode
   useEffect(() => {
@@ -2146,7 +2139,7 @@ function StudentPortal({ setRole, initialRoom }) {
 
   const total = session?.quiz?.questions?.length || 1;
   const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ?
-    (session?.quiz?.type === 'video' ? idx > total : idx >= total) : false;
+    (session?.quiz?.type === 'video' ? idx >= total : idx >= total) : false;
 
   if (quizEnded || isFinished) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
@@ -2225,23 +2218,10 @@ function StudentPortal({ setRole, initialRoom }) {
                 const currentSec = state.playedSeconds;
                 setPlayedSeconds(currentSec);
                 if (currentSec > maxPlayed) setMaxPlayed(currentSec);
-
-                // Only check for timestamp pausing when:
-                // - We have more questions to show
-                // - The question is NOT already being shown
-                // - The question hasn't been answered yet
-                const questions = session.quiz.questions;
-                if (idx < questions.length && !showQuestion && answers[idx] === undefined) {
-                  const targetTime = questions[idx]?.timestamp;
-                  if (targetTime !== undefined && targetTime !== null && currentSec >= targetTime) {
-                    setVideoPlaying(false);
-                    setShowQuestion(true);
-                    playerRef.current?.seekTo(targetTime);
-                  }
-                }
               }}
               onPlay={() => setVideoPlaying(true)}
               onPause={() => setVideoPlaying(false)}
+              onEnded={() => setVideoCompleted(true)}
             />
           </div>
           {session.prevent_skipping && (
@@ -2268,7 +2248,7 @@ function StudentPortal({ setRole, initialRoom }) {
                   <div className="h-full bg-blue-500 absolute left-0 top-0 transition-all" style={{ width: `${(playedSeconds / (videoDuration || 1)) * 100}%` }}></div>
                 </div>
               </div>
-              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest text-center">You can seek backward but not forward. <br className="md:hidden" />Answer questions when they appear.</p>
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest text-center">You can seek backward but not forward.{!videoCompleted && ' Complete the video to submit.'}</p>
             </div>
           )}
         </div>
@@ -2280,101 +2260,121 @@ function StudentPortal({ setRole, initialRoom }) {
             <Activity size={14} /> Teacher Paced Mode Focus
           </div>
         )}
-        {session.quiz.type === 'video' && idx >= total ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-8 relative z-10 shadow-inner">
-              <CheckCircle size={48} />
-            </div>
-            <h3 className="text-3xl font-black text-slate-800 mb-4 tracking-tighter">Questions Complete!</h3>
-            <p className="text-slate-500 font-bold text-sm leading-relaxed mb-10 max-w-sm">
-              You've answered all the questions for this video! Feel free to finish watching the rest of the clip.
-            </p>
-            <button
-              onClick={() => handleNext()} // This pushes idx > total and triggers the final thank you screen
-              className="w-full max-w-sm py-6 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
-            >
-              Finish & Submit <ArrowRight size={20} />
-            </button>
-          </div>
-        ) : session.quiz.type === 'video' && !showQuestion && answers[idx] === undefined ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-10 animate-pulse">
-            <div className="w-20 h-20 bg-slate-200 rounded-full mb-6 flex items-center justify-center text-slate-400">
-              <Play size={32} fill="currentColor" />
-            </div>
-            <h3 className="text-xl font-black text-slate-800 mb-2">Watch the Video</h3>
-            <p className="text-sm font-bold text-slate-400">Question {idx + 1} will appear automatically at the right moment.</p>
-          </div>
-        ) : (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className={`text-3xl font-black text-slate-800 ${q?.image_url ? 'mb-6' : 'mb-12'} leading-tight tracking-tight`}>{q?.text}</h2>
-            {q?.image_url && <img src={q.image_url} alt="Question content" className="w-full max-h-72 object-contain rounded-[2rem] border border-slate-100 shadow-sm mb-12 bg-slate-50 p-4" />}
-            <div className="space-y-5">
-              {(q?.type === 'mc' || q?.type === 'tf') && q.options.map((o, i) => {
-                if (!o || !String(o).trim()) return null;
-                const isSelected = answers[idx] === i;
-                let bgColorInfo = '';
 
-                if (isLocked) {
-                  if (q.correct === i) {
-                    bgColorInfo = 'border-green-500 bg-green-50 text-green-900 shadow-green-500/20'; // Correct answer explicitly shown
-                  } else if (isSelected) {
-                    bgColorInfo = 'border-red-400 bg-red-50 text-red-900 shadow-red-500/20 opacity-70'; // Incorrect answer student selected
-                  } else {
-                    bgColorInfo = 'border-slate-100 bg-slate-50 text-slate-400 opacity-50'; // Unselected wrong options
-                  }
+        {session.quiz.type === 'video' && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Question {idx + 1} / {total}</div>
+              <div className="h-2 flex-1 mx-4 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-orange-500 transition-all duration-500" style={{ width: `${(Object.keys(answers).length / total) * 100}%` }}></div>
+              </div>
+              <div className="text-[10px] font-black text-orange-500">{Object.keys(answers).length}/{total} answered</div>
+            </div>
+          </div>
+        )}
+
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 className={`text-3xl font-black text-slate-800 ${q?.image_url ? 'mb-6' : 'mb-12'} leading-tight tracking-tight`}>{q?.text}</h2>
+          {q?.image_url && <img src={q.image_url} alt="Question content" className="w-full max-h-72 object-contain rounded-[2rem] border border-slate-100 shadow-sm mb-12 bg-slate-50 p-4" />}
+          <div className="space-y-5">
+            {(q?.type === 'mc' || q?.type === 'tf') && q.options.map((o, i) => {
+              if (!o || !String(o).trim()) return null;
+              const isSelected = answers[idx] === i;
+              let bgColorInfo = '';
+
+              if (isLocked) {
+                if (q.correct === i) {
+                  bgColorInfo = 'border-green-500 bg-green-50 text-green-900 shadow-green-500/20';
+                } else if (isSelected) {
+                  bgColorInfo = 'border-red-400 bg-red-50 text-red-900 shadow-red-500/20 opacity-70';
                 } else {
-                  bgColorInfo = isSelected ? 'border-orange-500 bg-orange-50 text-orange-900 shadow-orange-500/20' : 'border-slate-50 hover:border-orange-500 hover:bg-orange-50 text-slate-700';
+                  bgColorInfo = 'border-slate-100 bg-slate-50 text-slate-400 opacity-50';
                 }
+              } else {
+                bgColorInfo = isSelected ? 'border-orange-500 bg-orange-50 text-orange-900 shadow-orange-500/20' : 'border-slate-50 hover:border-orange-500 hover:bg-orange-50 text-slate-700';
+              }
 
-                return (
-                  <button
-                    key={i}
-                    onClick={() => !isLocked && submit(idx, i)}
-                    disabled={isLocked}
-                    className={`w-full text-left bg-white p-7 rounded-[2.5rem] border-4 transition-all font-black text-xl shadow-sm flex items-center gap-6 group ${bgColorInfo} ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}
-                  >
-                    <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs shrink-0 font-black transition-colors uppercase ${isLocked && q.correct === i ? 'bg-green-600 text-white' : (isSelected && !isLocked ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-orange-600 group-hover:text-white')}`}>
-                      {String.fromCharCode(65 + i)}
-                    </span>
-                    {o}
-                    {isLocked && q.correct === i && <CheckCircle className="ml-auto text-green-500" size={24} />}
-                    {isLocked && isSelected && q.correct !== i && <XCircle className="ml-auto text-red-400" size={24} />}
-                  </button>
-                );
-              })}
-              {q?.type === 'sa' && (
-                <div className="space-y-6">
-                  <textarea
-                    id="sa-box"
-                    value={answers[idx] || ''}
-                    onChange={(e) => submit(idx, e.target.value)}
-                    disabled={isLocked}
-                    className={`w-full border-4 rounded-[2.5rem] p-8 text-2xl font-bold focus:outline-none shadow-inner min-h-[220px] transition-all ${isLocked ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white text-slate-800'}`}
-                    placeholder={isLocked ? "Editing locked by teacher" : "Start typing your answer here... It saves automatically!"}
-                  />
-                  {isLocked && q.correct && (
-                    <div className="p-6 bg-green-50 rounded-[2rem] border-2 border-green-200 text-green-800 font-bold">
-                      <div className="text-[10px] uppercase tracking-widest text-green-600 mb-1">Correct Answer:</div>
-                      {q.correct}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && session.quiz.type !== 'video' && (
-              <div className="mt-12">
+              return (
                 <button
-                  onClick={handleNext}
-                  disabled={answers[idx] === undefined || (q?.type === 'sa' && !answers[idx])}
-                  className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+                  key={i}
+                  onClick={() => !isLocked && submit(idx, i)}
+                  disabled={isLocked}
+                  className={`w-full text-left bg-white p-7 rounded-[2.5rem] border-4 transition-all font-black text-xl shadow-sm flex items-center gap-6 group ${bgColorInfo} ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}
                 >
-                  Next <ArrowRight size={20} />
+                  <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs shrink-0 font-black transition-colors uppercase ${isLocked && q.correct === i ? 'bg-green-600 text-white' : (isSelected && !isLocked ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-orange-600 group-hover:text-white')}`}>
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  {o}
+                  {isLocked && q.correct === i && <CheckCircle className="ml-auto text-green-500" size={24} />}
+                  {isLocked && isSelected && q.correct !== i && <XCircle className="ml-auto text-red-400" size={24} />}
                 </button>
+              );
+            })}
+            {q?.type === 'sa' && (
+              <div className="space-y-6">
+                <textarea
+                  id="sa-box"
+                  value={answers[idx] || ''}
+                  onChange={(e) => submit(idx, e.target.value)}
+                  disabled={isLocked}
+                  className={`w-full border-4 rounded-[2.5rem] p-8 text-2xl font-bold focus:outline-none shadow-inner min-h-[220px] transition-all ${isLocked ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white text-slate-800'}`}
+                  placeholder={isLocked ? "Editing locked by teacher" : "Start typing your answer here... It saves automatically!"}
+                />
+                {isLocked && q.correct && (
+                  <div className="p-6 bg-green-50 rounded-[2rem] border-2 border-green-200 text-green-800 font-bold">
+                    <div className="text-[10px] uppercase tracking-widest text-green-600 mb-1">Correct Answer:</div>
+                    {q.correct}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
+
+          {/* Video Quiz Navigation: Prev / Next / Finish */}
+          {session.quiz.type === 'video' && (
+            <div className="mt-10 flex items-center gap-3">
+              <button
+                onClick={handlePrev}
+                disabled={idx <= 0}
+                className="px-6 py-4 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 rounded-2xl font-black transition-all flex items-center gap-2"
+              >
+                <ArrowLeft size={18} /> Prev
+              </button>
+              <div className="flex-1"></div>
+              {Object.keys(answers).length >= total ? (
+                <button
+                  onClick={handleNext}
+                  disabled={session.prevent_skipping && !videoCompleted}
+                  className="px-8 py-4 bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black text-lg shadow-xl shadow-green-100 transition-all active:scale-95 flex items-center gap-2"
+                  title={session.prevent_skipping && !videoCompleted ? 'You must finish watching the video first' : ''}
+                >
+                  Finish & Submit <CheckCircle size={18} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleNext}
+                  disabled={idx >= total - 1}
+                  className="px-6 py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl font-black transition-all flex items-center gap-2"
+                >
+                  Next <ArrowRight size={18} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Non-video quiz Next button */}
+          {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && session.quiz.type !== 'video' && (
+            <div className="mt-12">
+              <button
+                onClick={handleNext}
+                disabled={answers[idx] === undefined || (q?.type === 'sa' && !answers[idx])}
+                className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+              >
+                Next <ArrowRight size={20} />
+              </button>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
