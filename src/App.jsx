@@ -666,6 +666,11 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
       return;
     }
 
+    if (assignedClasses.length === 0) {
+      alert("Please select at least one cohort.");
+      return;
+    }
+
     const q = quizzes.find(x => x.id === selected);
     if (q) {
       let launchedQuiz = JSON.parse(JSON.stringify(q));
@@ -743,10 +748,10 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No matching quizzes found. Go to Quizzes to create one.</p>}
       </div>
 
-      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Cohorts (Optional)</h2>
+      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Cohort(s) (Required)</h2>
       <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
         {classes.length === 0 ? (
-          <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. All students can join.</p>
+          <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Please create a class first.</p>
         ) : (
           classes.map(c => (
             <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
@@ -802,7 +807,7 @@ function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab
         <button onClick={() => { setType(null); setCategory(null); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
-          disabled={!selected || (category === 'async' && (!startTime || !endTime))}
+          disabled={!selected || assignedClasses.length === 0 || (category === 'async' && (!startTime || !endTime))}
           className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
         >
           {category === 'async' ? 'Schedule' : 'Launch'}
@@ -2395,47 +2400,31 @@ function StudentPortal({ setRole, initialRoom }) {
     }
 
     const assigned = roomData.quiz?.assigned_classes;
-    if (assigned && assigned.length > 0) {
-      if (!sid.trim()) {
-        setIdError("Student ID is required for this room.");
-        setCheckingId(false);
-        return;
-      }
-
-      // Check if student is in any of the assigned classes
-      const { data: stuData, error: stuErr } = await supabase.from('students')
-        .select('*')
-        .in('class_id', assigned)
-        .eq('student_id', sid.trim());
-
-      if (!stuData || stuData.length === 0) {
-        setIdError("ID not found in assigned cohorts. Please check your ID.");
-        setCheckingId(false);
-        return;
-      }
-
-      // Found the student - ask for confirmation
-      setName(stuData[0].name);
-      setTempSession(roomData);
-      setNeedsConfirmation(true);
+    
+    if (!sid.trim()) {
+      setIdError("Student ID is required.");
       setCheckingId(false);
-    } else {
-      // Open room
-      if (!name.trim()) {
-        setIdError("Your Name is required for this open room.");
-        setCheckingId(false);
-        return;
-      }
-      // If it's an async room, fetch previous responses to allow resuming
-      if (roomData.is_async && sid.trim()) {
-        const respId = `${code}_${sid.trim()}`;
-        const { data: prevResp } = await supabase.from('responses').select('answers').eq('id', respId).single();
-        if (prevResp && prevResp.answers) {
-          setAnswers(prevResp.answers);
-        }
-      }
-      setJoined(true);
+      return;
     }
+
+    let stuQuery = supabase.from('students').select('*').eq('student_id', sid.trim());
+    if (assigned && assigned.length > 0) {
+      stuQuery = stuQuery.in('class_id', assigned);
+    }
+
+    const { data: stuData, error: stuErr } = await stuQuery;
+
+    if (!stuData || stuData.length === 0) {
+      setIdError(assigned && assigned.length > 0 ? "ID not found in assigned cohorts." : "Student ID not found in database.");
+      setCheckingId(false);
+      return;
+    }
+
+    // Found the student - ask for confirmation
+    setName(stuData[0].name);
+    setTempSession(roomData);
+    setNeedsConfirmation(true);
+    setCheckingId(false);
   };
 
   const confirmJoin = async () => {
@@ -2530,22 +2519,14 @@ function StudentPortal({ setRole, initialRoom }) {
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-              {roomType !== 'attendance' && (
-                <input
-                  className="w-full sm:flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
-                  placeholder="Full Name (if open)" value={name} onChange={e => setName(e.target.value)}
-                />
-              )}
               <input
-                className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
-                placeholder="ID #" value={sid} onChange={e => setSid(e.target.value)}
+                className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300 text-center uppercase tracking-[0.2em]"
+                placeholder="STUDENT ID #" value={sid} onChange={e => setSid(e.target.value)}
               />
             </div>
-            {roomType !== 'attendance' && (
-              <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
-                If your teacher assigned a cohort, you MUST enter your exact Student ID number. You can leave Name blank.
-              </p>
-            )}
+            <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
+              Please enter your exact Student ID number to access this activity.
+            </p>
             <button type="submit" disabled={checkingId} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-100 mt-2 transition-transform active:scale-95 flex justify-center items-center">
               {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : 'ENTER ROOM'}
             </button>
