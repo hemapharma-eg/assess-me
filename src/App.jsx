@@ -217,6 +217,8 @@ function TeacherPortal({ setRole, user }) {
   const [responses, setResponses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
+  // Keep a stable room code for the browser
+  const [roomCode, setRoomCode] = useState(() => localStorage.getItem('AssessMe_RoomCode') || '');
   const [asyncReports, setAsyncReports] = useState([]);
 
   // Fetch Quizzes and Reports
