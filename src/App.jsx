@@ -2330,8 +2330,12 @@ function StudentPortal({ setRole, initialRoom }) {
             )}
           </div>
 
-          {/* Video Quiz Navigation: Prev / Next / Finish */}
-          {session.quiz.type === 'video' && (
+           {/* Video Quiz Navigation: Prev / Next / Finish */}
+          {session.quiz.type === 'video' && (() => {
+            const allAnswered = Object.keys(answers).length >= total;
+            const watchedPct = videoDuration > 0 ? Math.round((maxPlayed / videoDuration) * 100) : 0;
+            const canSubmit = allAnswered && (session.prevent_skipping ? videoCompleted : watchedPct >= 50);
+            return (
             <div className="mt-10 flex items-center gap-3">
               <button
                 onClick={handlePrev}
@@ -2341,14 +2345,14 @@ function StudentPortal({ setRole, initialRoom }) {
                 <ArrowLeft size={18} /> Prev
               </button>
               <div className="flex-1"></div>
-              {Object.keys(answers).length >= total ? (
+              {allAnswered ? (
                 <button
                   onClick={handleNext}
-                  disabled={session.prevent_skipping && !videoCompleted}
+                  disabled={!canSubmit}
                   className="px-8 py-4 bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black text-lg shadow-xl shadow-green-100 transition-all active:scale-95 flex items-center gap-2"
-                  title={session.prevent_skipping && !videoCompleted ? 'You must finish watching the video first' : ''}
+                  title={!canSubmit ? (session.prevent_skipping ? 'Finish watching the video first' : `Watch at least 50% of the video (${watchedPct}% watched)`) : ''}
                 >
-                  Finish & Submit <CheckCircle size={18} />
+                  Finish & Submit {!canSubmit && <span className="text-xs font-bold opacity-70">({session.prevent_skipping ? 'finish video' : `${watchedPct}%/50%`})</span>} <CheckCircle size={18} />
                 </button>
               ) : (
                 <button
@@ -2360,7 +2364,8 @@ function StudentPortal({ setRole, initialRoom }) {
                 </button>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Non-video quiz Next button */}
           {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && session.quiz.type !== 'video' && (
