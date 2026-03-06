@@ -1841,40 +1841,66 @@ function ReportsTab({ reports, allReports, classes }) {
   const exportToExcel = (report) => {
     try {
       const wb = XLSX.utils.book_new();
+      const safeTitle = (report.title || 'Report').replace(/[\\/*?[\]:]/g, '').replace(/\s+/g, '_');
+      const typeLabel = report.type === 'teacher_paced' ? 'Teacher Paced' : report.type === 'attendance' ? 'Attendance' : 'Student Paced';
+
       const overviewData = [
-        ['Report Title', report.title],
+        ['Report Title', report.title || 'Untitled'],
         ['Date', new Date(report.ts).toLocaleString()],
-        ['Type', report.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'],
-        ['Total Participants', report.responses?.length || 0],
-        ['Total Questions', report.questions?.length || 0],
+        ['Type', typeLabel],
+        ['Total Participants', (report.responses || []).length],
+        ['Total Questions', (report.questions || []).length],
         []
       ];
-      const headers = ['Student ID', 'Student Name', 'Overall Score (%)', ...report.questions.map((_, i) => `Q${i + 1} Answer`), ...report.questions.map((_, i) => `Q${i + 1} Correct?`)];
-      const resultsData = [headers];
-      (report.responses || []).forEach(r => {
-        let correctCount = 0;
-        const ansRow = [];
-        const isCorrectRow = [];
-        report.questions.forEach((q, qIdx) => {
-          const rawAns = r.answers?.[qIdx];
-          let formattedAns = rawAns;
-          if (rawAns !== undefined && q.type !== 'sa') {
-            formattedAns = q.options && q.type === 'mc' ? String.fromCharCode(65 + Number(rawAns)) : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
-          }
-          ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
-          const isOk = rawAns !== undefined && (q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct)));
-          isCorrectRow.push(isOk ? 'Yes' : 'No');
-          if (isOk) correctCount++;
-        });
-        const score = Math.round((correctCount / report.questions.length) * 100);
-        resultsData.push([r.student_id, r.student_name, score, ...ansRow, ...isCorrectRow]);
-      });
       const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
-      const wsResults = XLSX.utils.aoa_to_sheet(resultsData);
-      XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
-      XLSX.utils.book_append_sheet(wb, wsResults, "Student Results");
-      XLSX.writeFile(wb, `ClassLabX_Report_${report.title.replace(/\s+/g, '_')}_${new Date(report.ts).getTime()}.xlsx`);
-    } catch (e) { alert("Error exporting to Excel: " + e.message); }
+      XLSX.utils.book_append_sheet(wb, wsOverview, 'Overview');
+
+      if (report.type === 'attendance') {
+        // Attendance: just show who attended
+        const attHeaders = ['#', 'Student ID', 'Student Name'];
+        const attRows = [attHeaders];
+        (report.responses || [])
+          .sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''))
+          .forEach((r, i) => { attRows.push([i + 1, r.student_id || '', r.student_name || 'Anonymous']); });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), 'Attendees');
+      } else {
+        // Quiz: full scores + per-question breakdown
+        const questions = report.questions || [];
+        const headers = [
+          'Student ID', 'Student Name', 'Overall Score (%)',
+          ...questions.map((_, i) => `Q${i + 1} Answer`),
+          ...questions.map((_, i) => `Q${i + 1} Correct?`)
+        ];
+        const resultsData = [headers];
+        (report.responses || []).forEach(r => {
+          let correctCount = 0;
+          const ansRow = [];
+          const isCorrectRow = [];
+          questions.forEach((q, qIdx) => {
+            const rawAns = r.answers?.[qIdx];
+            let formattedAns = rawAns;
+            if (rawAns !== undefined && q.type !== 'sa') {
+              formattedAns = q.options && q.type === 'mc'
+                ? String.fromCharCode(65 + Number(rawAns))
+                : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
+            }
+            ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
+            const isOk = rawAns !== undefined && (
+              q.type === 'sa'
+                ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
+                : (String(rawAns) === String(q.correct))
+            );
+            isCorrectRow.push(isOk ? 'Yes' : 'No');
+            if (isOk) correctCount++;
+          });
+          const score = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 'N/A';
+          resultsData.push([r.student_id, r.student_name, score, ...ansRow, ...isCorrectRow]);
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resultsData), 'Student Results');
+      }
+
+      XLSX.writeFile(wb, `ClassLabX_Report_${safeTitle}_${new Date(report.ts).getTime()}.xlsx`);
+    } catch (e) { alert('Error exporting to Excel: ' + e.message); }
   };
 
   // Helper to compute student scores for a report
