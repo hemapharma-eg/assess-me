@@ -510,6 +510,12 @@ function TeacherPortal({ setRole, user }) {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          {profile && (
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Plan:</span>
+              <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{profile.subscription.replace('_', ' ')}</span>
+            </div>
+          )}
           {roomCode && (
             <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest flex items-center gap-2">
               <Wifi size={14} className={session ? 'text-green-400 animate-pulse' : 'text-slate-500'} />
@@ -1033,14 +1039,15 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
   const filteredQuizzes = quizzes.filter(q => {
     if (type === 'async_video') return q.type === 'video';
-    if (type === 'async_quiz') return q.type !== 'video';
-    return true; // Sync can theoretically take any, but we'll let teachers decide
+    if (type === 'async_survey') return q.type === 'survey';
+    if (type === 'async_quiz' || category === 'sync') return q.type === 'standard' || !q.type;
+    return true; 
   });
 
   if (type && category !== 'attendance') return (
     <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100">
       <h2 className="text-2xl font-black mb-6 text-slate-800">
-        Choose a {type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
+        Choose a {type === 'async_video' ? 'Video Quiz' : (type === 'async_survey' ? 'Feedback Survey' : 'Standard Quiz')}
       </h2>
       <div className="space-y-3 mb-10 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
         {filteredQuizzes.map(q => (
@@ -1048,10 +1055,10 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
             key={q.id} onClick={() => setSelected(q.id)}
             className={`w-full p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${selected === q.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
           >
-            {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />}
+            {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />)}
             <div>
               <div className="font-black text-slate-800">{q.title}</div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{(q.questions || []).length} Questions</div>
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{(q.questions || []).length} {q.type === 'survey' ? 'Items' : 'Questions'}</div>
             </div>
           </button>
         ))}
@@ -1116,16 +1123,18 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           </label>
         )}
 
-        {type !== 'async_video' && (
+        {type !== 'async_video' && type !== 'async_survey' && (
           <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
             <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} />
             <span className="font-bold text-slate-700 text-sm">Shuffle Questions</span>
           </label>
         )}
-        <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-          <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
-          <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
-        </label>
+        {type !== 'async_survey' && (
+          <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+            <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
+            <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
+          </label>
+        )}
       </div>
 
       <div className="flex gap-3">
@@ -1340,7 +1349,8 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           </button>
         )) : [
           { id: 'async_quiz', name: 'Standard Quiz', icon: <FileText size={48} />, color: 'bg-blue-600', desc: 'Schedule a standard quiz.' },
-          { id: 'async_video', name: 'Video Quiz', icon: <Video size={48} />, color: 'bg-purple-600', desc: 'Schedule a video quiz with timestamped questions.' }
+          { id: 'async_video', name: 'Video Quiz', icon: <Video size={48} />, color: 'bg-purple-600', desc: 'Schedule a video quiz with timestamped questions.' },
+          { id: 'async_survey', name: 'Feedback Survey', icon: <BarChart2 size={48} />, color: 'bg-green-600', desc: 'Schedule an anonymous or named survey.' }
         ].map(c => {
           return (
             <button
