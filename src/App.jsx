@@ -2637,6 +2637,23 @@ function StudentPortal({ setRole, initialRoom }) {
     };
   }, [joined, room]);
 
+  // Restore timer & answers when rejoining via cached localStorage state
+  // (confirmJoin is bypassed on cache-restore, so quizStartedAt stays null)
+  useEffect(() => {
+    if (!joined || !session || !sid || quizStartedAt) return;
+    if (!session.timer_duration) return;
+    const code = room.toUpperCase();
+    const respId = `${code}_${sid}`;
+    supabase.from('responses').select('answers, quiz_started_at').eq('id', respId).single().then(({ data }) => {
+      if (data?.quiz_started_at) {
+        setQuizStartedAt(data.quiz_started_at);
+      }
+      if (data?.answers && Object.keys(data.answers).length > 0 && Object.keys(answers).length === 0) {
+        setAnswers(data.answers);
+      }
+    });
+  }, [joined, session, sid]);
+
   const submit = async (qIdx, ans) => {
     const next = { ...answers, [qIdx]: ans };
     setAnswers(next);
