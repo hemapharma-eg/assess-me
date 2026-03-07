@@ -767,7 +767,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         launchedQuiz.start_time = new Date(startTime).toISOString();
         launchedQuiz.end_time = new Date(endTime).toISOString();
         launchedQuiz.prevent_skipping = preventSkipping;
-        if (type === 'async_quiz' && timerDuration && parseInt(timerDuration) > 0) {
+        if (timerDuration && parseInt(timerDuration) > 0) {
           launchedQuiz.timer_duration = parseInt(timerDuration);
         }
       }
