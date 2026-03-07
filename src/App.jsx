@@ -9,6 +9,11 @@ import {
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
 
+const COUNTRIES = [
+  "Egypt", "United States", "United Kingdom", "Canada", "Australia", "Germany", "France", "United Arab Emirates", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman", "Jordan", "Lebanon", "Syria", "Iraq", "Palestine", "Libya", "Tunisia", "Algeria", "Morocco", "Sudan", "Yemen",
+  "Afghanistan", "Albania", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Austria", "Azerbaijan", "Bahamas", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "Gabon", "Gambia", "Georgia", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Korea, South", "Kosovo", "Kyrgyzstan", "Laos", "Latvia", "Lesotho", "Liberia", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singpore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Suriname", "Sweden", "Switzerland", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Zambia", "Zimbabwe", "Other"
+];
+
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -112,9 +117,10 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [country, setCountry] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [schoolUniversity, setSchoolUniversity] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('Egypt');
+  const [customCountry, setCustomCountry] = useState('');
   const [authMode, setAuthMode] = useState(isRecoveryMode ? 'recovery' : 'login'); // 'login', 'signup', 'forgot', 'recovery'
   const [loading, setLoading] = useState(false);
 
@@ -149,7 +155,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
         options: {
           data: {
             full_name: fullName,
-            country,
+            country: selectedCountry === 'Other' ? customCountry : selectedCountry,
             job_title: jobTitle,
             school_university: schoolUniversity,
             subscription: 'beta' // all new users start as beta
@@ -231,15 +237,28 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                   />
                 </div>
                 <div>
-                  <input
-                    type="text"
-                    placeholder="Country"
-                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
-                    value={country}
-                    onChange={e => setCountry(e.target.value)}
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Country</label>
+                  <select
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                    value={selectedCountry}
+                    onChange={e => setSelectedCountry(e.target.value)}
                     required
-                  />
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
+                {selectedCountry === 'Other' && (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Enter Country Name"
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                      value={customCountry}
+                      onChange={e => setCustomCountry(e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
                 <div>
                   <input
                     type="text"
