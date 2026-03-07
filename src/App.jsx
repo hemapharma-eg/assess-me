@@ -4037,7 +4037,7 @@ function StudentPortal({ setRole, initialRoom }) {
     );
   }
 
-  const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ?
+  const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video' || session?.type === 'feedback') ?
     (session?.quiz?.type === 'video' ? idx >= total : idx >= total) : false;
 
   if (quizEnded || isFinished) return (
