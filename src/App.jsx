@@ -2210,7 +2210,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
     ? `${window.location.href.split('?')[0]}?room=${roomCode}&token=${attendanceToken}`
     : `${window.location.href.split('?')[0]}?room=${roomCode}`;
     
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(joinUrl)}`;
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(joinUrl)}`;
 
   if (!session) return <div className="text-center py-40 text-slate-300 font-black uppercase tracking-widest">No Active Sessions</div>;
 
@@ -2268,16 +2268,30 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
               <Activity size={14} /> Dynamic QR Active (Refreshes every 10s)
             </div>
           )}
-          <img src={qr} className="w-56 h-56 border-8 border-white rounded-[2rem] shadow-2xl" />
+          <div className="relative group">
+            <img src={qr} className="w-64 h-64 border-8 border-white rounded-xl shadow-2xl relative z-10" />
+            <div className="absolute inset-0 bg-blue-200 blur-2xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
+          </div>
           <div>
             <h3 className="text-3xl font-black text-slate-800 mb-2">Join {session.type === 'attendance' ? 'Attendance' : 'Class'}</h3>
-            <p className="text-slate-500 mb-6 font-medium max-w-sm mx-auto">
+            <p className="text-slate-500 mb-4 font-medium max-w-sm mx-auto">
               Scan the code to join.
               {session.type === 'attendance' && " This QR refreshes continuously for security to prevent proxy scanning."}
             </p>
-            {session.type !== 'attendance' && (
-              <div className="text-4xl font-black tracking-[0.3em] text-blue-600 bg-white px-8 py-3 rounded-2xl shadow-inner border-2 border-blue-100 inline-block">{roomCode}</div>
-            )}
+            <div className="flex flex-col items-center gap-4">
+              {session.type !== 'attendance' && (
+                <div className="text-4xl font-black tracking-[0.3em] text-blue-600 bg-white px-8 py-3 rounded-2xl shadow-inner border-2 border-blue-100 inline-block">{roomCode}</div>
+              )}
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(joinUrl);
+                  alert("Join Link copied to clipboard!");
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm active:scale-95"
+              >
+                <Copy size={14} /> Copy Direct Join URL
+              </button>
+            </div>
           </div>
         </div>
       )}
