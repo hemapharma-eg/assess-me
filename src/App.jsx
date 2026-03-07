@@ -2677,19 +2677,13 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                       
                       {openReport.type === 'attendance' && (
                         <td className="p-4 text-center">
-                          <select
-                            className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border-2 transition-all cursor-pointer ${
-                              (s.status || 'present') === 'present' ? 'bg-green-50 text-green-600 border-green-100' :
-                              s.status === 'late' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                              'bg-red-50 text-red-600 border-red-100'
-                            }`}
-                            value={s.status || 'present'}
-                            onChange={(e) => updateReportStatus(openReport.id, s.student_id, e.target.value)}
-                          >
-                            <option value="present">Present</option>
-                            <option value="late">Late</option>
-                            <option value="absent">Absent</option>
-                          </select>
+                          <div className={`inline-block text-[10px] font-black uppercase px-3 py-1 rounded-lg border-2 ${
+                            (s.status || 'present') === 'present' ? 'bg-green-50 text-green-600 border-green-100' :
+                            s.status === 'late' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                            'bg-red-50 text-red-600 border-red-100'
+                          }`}>
+                            {s.status || 'present'}
+                          </div>
                         </td>
                       )}
 
