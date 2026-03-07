@@ -2210,7 +2210,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
     ? `${window.location.href.split('?')[0]}?room=${roomCode}&token=${attendanceToken}`
     : `${window.location.href.split('?')[0]}?room=${roomCode}`;
     
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(joinUrl)}`;
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(joinUrl)}`;
 
   if (!session) return <div className="text-center py-40 text-slate-300 font-black uppercase tracking-widest">No Active Sessions</div>;
 
