@@ -611,7 +611,7 @@ function TeacherPortal({ setRole, user }) {
     let updatedResponses;
     if (existingResp) {
       updatedResponses = currentResponses.map(resp =>
-        String(resp.student_id).trim() === stdStudentId ? { ...resp, status: newStatus } : resp
+        String(resp.student_id).trim() === stdStudentId ? { ...resp, status: newStatus, ts: Date.now() } : resp
       );
     } else {
       // Inject new response for "Absent" students being marked Present/Late
@@ -2583,11 +2583,13 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   };
 
   // Detail view for a single report
-  if (openReport) {
-    const scored = computeScores(openReport);
+  const activeReport = openReport ? (allReports || reports).find(r => r.id === openReport.id) : null;
+
+  if (activeReport) {
+    const scored = computeScores(activeReport);
 
     // Calculate difficulty index per question
-    const difficultyIndices = openReport.questions.map((_, qIdx) => {
+    const difficultyIndices = (activeReport.questions || []).map((_, qIdx) => {
       let correctAttempts = 0;
       let totalAttempts = 0;
 
@@ -2608,22 +2610,22 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             <div className="flex items-center gap-4">
               <button onClick={() => setOpenReport(null)} className="p-3 bg-white hover:bg-slate-100 rounded-2xl shadow-sm transition-colors text-slate-500"><ArrowLeft size={20} /></button>
               <div>
-                <h2 className="text-2xl font-black text-slate-800 tracking-tight">{openReport.title}</h2>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">{activeReport.title}</h2>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">
-                  {new Date(openReport.ts).toLocaleString()} • {openReport.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'} • {scored.length} Students • {openReport.questions.length} Questions
+                  {new Date(activeReport.ts).toLocaleString()} • {activeReport.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'} • {scored.length} Students • {(activeReport.questions || []).length} Questions
                 </p>
               </div>
             </div>
             <div className="flex gap-2">
               {selectedForEmail.length > 0 && (
                 <a
-                  href={`mailto:?bcc=${selectedForEmail.map(id => scored.find(s => s.student_id === id)?.email).filter(Boolean).join(',')}&subject=Your Quiz Results: ${openReport.title}&body=Hello Class,%0D%0A%0D%0AYour scores for the recent quiz "${openReport.title}" are now available.`}
+                  href={`mailto:?bcc=${selectedForEmail.map(id => scored.find(s => s.student_id === id)?.email).filter(Boolean).join(',')}&subject=Your Quiz Results: ${activeReport.title}&body=Hello Class,%0D%0A%0D%0AYour scores for the recent quiz "${activeReport.title}" are now available.`}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-blue-100 transition-all active:scale-95"
                 >
                   Email Selected ({selectedForEmail.length})
                 </a>
               )}
-              <button onClick={() => exportToExcel(openReport)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
+              <button onClick={() => exportToExcel(activeReport)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
                 <Download size={16} /> Export Excel
               </button>
             </div>
@@ -2647,9 +2649,9 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                   <th className="p-4 border-b border-slate-200 z-10">#</th>
                   <th className="p-4 border-b border-slate-200 z-10">Student Name</th>
                   <th className="p-4 border-b border-slate-200">ID</th>
-                  {openReport.type === 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Status</th>}
-                  {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
-                  {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
+                  {activeReport.type === 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Status</th>}
+                  {(activeReport.questions || []).map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
+                  {activeReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
                   <th className="p-4 border-b border-slate-200 text-center">Actions</th>
                 </tr>
               </thead>
@@ -2675,7 +2677,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                       <td className="p-4 whitespace-nowrap">{s.student_name || 'Anonymous'}</td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{s.student_id || '-'}</td>
                       
-                      {openReport.type === 'attendance' && (
+                      {activeReport.type === 'attendance' && (
                         <td className="p-4 text-center">
                           <div className={`inline-block text-[10px] font-black uppercase px-3 py-1 rounded-lg border-2 ${
                             (s.status || 'present') === 'present' ? 'bg-green-50 text-green-600 border-green-100' :
@@ -2692,15 +2694,15 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                           {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
                         </td>
                       ))}
-                      {openReport.type !== 'attendance' && (
+                      {activeReport.type !== 'attendance' && (
                         <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
                       )}
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <a
-                            href={openReport.type === 'attendance' 
-                              ? `mailto:${s.email}?subject=Attendance Status: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour attendance status for "${openReport.title}" is marked as ${s.status?.toUpperCase() || 'PRESENT'}.`
-                              : `mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`
+                            href={activeReport.type === 'attendance' 
+                              ? `mailto:${s.email}?subject=Attendance Status: ${activeReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour attendance status for "${activeReport.title}" is marked as ${s.status?.toUpperCase() || 'PRESENT'}.`
+                              : `mailto:${s.email}?subject=Your Quiz Results: ${activeReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${activeReport.title}" is ${s.total}%.`
                             }
                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
                             title={hasEmail ? "Send Email" : "No email address found"}
@@ -2712,7 +2714,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     </tr>
                   );
                 })}
-                {openReport.type !== 'attendance' && openReport.type !== 'async_survey' && scored.length > 0 && (
+                {activeReport.type !== 'attendance' && activeReport.type !== 'async_survey' && scored.length > 0 && (
                   <tr className="bg-slate-50/50 border-t-4 border-slate-200">
                     <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">% Correct</td>
                     {difficultyIndices.map((di, i) => (
@@ -2723,8 +2725,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     <td colSpan="2"></td>
                   </tr>
                 )}
-                {openReport.type !== 'attendance' && scored.length === 0 && <tr><td colSpan={openReport.questions.length + 6} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
-                {openReport.type === 'attendance' && scored.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-slate-400 italic">No attendance records in this session.</td></tr>}
+                {activeReport.type !== 'attendance' && scored.length === 0 && <tr><td colSpan={(activeReport.questions || []).length + 6} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
+                {activeReport.type === 'attendance' && scored.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-slate-400 italic">No attendance records in this session.</td></tr>}
               </tbody>
             </table>
           </div>
