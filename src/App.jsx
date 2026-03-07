@@ -598,62 +598,77 @@ function TeacherPortal({ setRole, user }) {
   }, [user.id]);
 
   const updateReportStatus = async (reportId, studentId, newStatus) => {
-    // 1. Find the report locally to get current responses
+    // 1. Find the target report to get title/classes for matching
     const allReps = [...reports, ...asyncReports];
-    const report = allReps.find(r => r.id === reportId);
-    if (!report) return;
+    const targetReport = allReps.find(r => r.id === reportId);
+    if (!targetReport) return;
 
-    // Standardize comparison
     const stdStudentId = String(studentId).trim();
-    const currentResponses = report.responses || [];
-    const existingResp = currentResponses.find(r => String(r.student_id).trim() === stdStudentId);
+    const targetTitle = targetReport.title;
+    const targetClasses = (targetReport.assigned_classes || []).sort().join(',');
 
-    let updatedResponses;
-    if (existingResp) {
-      updatedResponses = currentResponses.map(resp =>
-        String(resp.student_id).trim() === stdStudentId ? { ...resp, status: newStatus, ts: Date.now() } : resp
-      );
-    } else {
-      // Inject new response for "Absent" students being marked Present/Late
-      const student = (classes || []).flatMap(c => c.students || []).find(s => String(s.student_id).trim() === stdStudentId);
-      const newResp = {
-        id: Math.random().toString(36).substring(2, 9),
-        student_id: studentId,
-        student_name: student?.name || 'Anonymous',
-        status: newStatus,
-        ts: Date.now(),
-        answers: {}
-      };
-      updatedResponses = [...currentResponses, newResp];
-    }
+    // 2. Identify ALL reports that should be updated (matching title and classes)
+    const matchingReports = allReps.filter(r => {
+       if (r.type !== targetReport.type) return false;
+       const rTitle = r.title;
+       const rClasses = (r.assigned_classes || []).sort().join(',');
+       return rTitle === targetTitle && rClasses === targetClasses;
+    });
 
-    // 2. Update local state immediately for both arrays
-    setReports(prev => prev.map(r => r.id === reportId ? { ...r, responses: updatedResponses } : r));
-    setAsyncReports(prev => prev.map(r => r.id === reportId ? { ...r, responses: updatedResponses } : r));
-
-    // 3. Update Database
-    // Check if it's a pseudo-report (async) or a real report
-    const isAsync = asyncReports.some(r => r.id === reportId);
-    if (isAsync) {
-      // For async reports, we need to update the individual response in the 'responses' table
-      // OR update the room's old_responses if it's a relaunch? Actually asyncRooms don't have old_responses JSON.
-      // They just have responses in the table.
+    // 3. Prepare updates for each matching report
+    const updatedReportsMap = {}; // reportId -> updatedResponses
+    
+    matchingReports.forEach(rep => {
+      const currentResponses = rep.responses || [];
+      const existingResp = currentResponses.find(r => String(r.student_id).trim() === stdStudentId);
+      let updatedResponses;
+      
       if (existingResp) {
-        await supabase.from('responses').update({ status: newStatus }).eq('id', existingResp.id);
+        updatedResponses = currentResponses.map(resp =>
+          String(resp.student_id).trim() === stdStudentId ? { ...resp, status: newStatus, ts: Date.now() } : resp
+        );
       } else {
         const student = (classes || []).flatMap(c => c.students || []).find(s => String(s.student_id).trim() === stdStudentId);
-        await supabase.from('responses').insert({
-          room_code: reportId,
+        const newResp = {
+          id: Math.random().toString(36).substring(2, 9),
           student_id: studentId,
           student_name: student?.name || 'Anonymous',
           status: newStatus,
-          ts: new Date().toISOString(),
+          ts: Date.now(),
           answers: {}
-        });
+        };
+        updatedResponses = [...currentResponses, newResp];
       }
-    } else {
-      const { error } = await supabase.from('reports').update({ responses: updatedResponses }).eq('id', reportId);
-      if (error) alert("Database update failed: " + error.message);
+      updatedReportsMap[rep.id] = updatedResponses;
+    });
+
+    // 4. Update Local State
+    setReports(prev => prev.map(r => updatedReportsMap[r.id] ? { ...r, responses: updatedReportsMap[r.id] } : r));
+    setAsyncReports(prev => prev.map(r => updatedReportsMap[r.id] ? { ...r, responses: updatedReportsMap[r.id] } : r));
+
+    // 5. Update Database for all matching reports
+    for (const rid of Object.keys(updatedReportsMap)) {
+      const isAsync = asyncReports.some(r => r.id === rid);
+      if (isAsync) {
+         // Async rooms use individual records in 'responses' table
+         const rep = matchingReports.find(r => r.id === rid);
+         const existing = (rep.responses || []).find(r => String(r.student_id).trim() === stdStudentId);
+         if (existing) {
+           await supabase.from('responses').update({ status: newStatus }).eq('id', existing.id);
+         } else {
+           const student = (classes || []).flatMap(c => c.students || []).find(s => String(s.student_id).trim() === stdStudentId);
+           await supabase.from('responses').insert({
+             room_code: rid,
+             student_id: studentId,
+             student_name: student?.name || 'Anonymous',
+             status: newStatus,
+             ts: new Date().toISOString(),
+             answers: {}
+           });
+         }
+      } else {
+         await supabase.from('reports').update({ responses: updatedReportsMap[rid] }).eq('id', rid);
+      }
     }
   };
 
