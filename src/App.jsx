@@ -584,7 +584,7 @@ function ScheduledTab({ user }) {
                 </p>
                 {room.timer_duration && (
                   <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-1">
-                    <Clock size={14} /> {room.timer_duration} min timer
+                    <Clock size={14} /> {room.timer_duration}s / question
                   </p>
                 )}
 
@@ -863,16 +863,16 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
         {category === 'async' && type === 'async_quiz' && (
           <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-            <label className="text-[10px] font-black uppercase text-blue-600 mb-1 block">Quiz Timer (minutes) — Optional</label>
+            <label className="text-[10px] font-black uppercase text-blue-600 mb-1 block">Time per Question (seconds) — Optional</label>
             <input
               type="number"
-              min="1"
-              placeholder="e.g. 30 — leave empty for no timer"
+              min="5"
+              placeholder="e.g. 30, 60, 90 — leave empty for no timer"
               className="w-full p-2 rounded-xl text-sm font-bold border border-blue-200"
               value={timerDuration}
               onChange={e => setTimerDuration(e.target.value)}
             />
-            <p className="text-[9px] font-bold text-blue-400 mt-1">Each student gets this many minutes from when they first start. Timer continues even if they leave and rejoin.</p>
+            <p className="text-[9px] font-bold text-blue-400 mt-1">Each question gets this many seconds. When time runs out the quiz auto-advances to the next question.</p>
           </div>
         )}
 
@@ -2578,8 +2578,7 @@ function StudentPortal({ setRole, initialRoom }) {
   const [idx, setIdx] = useState(0);
   const [attendanceSuccess, setAttendanceSuccess] = useState(false);
   const [roomType, setRoomType] = useState('');
-  const [quizStartedAt, setQuizStartedAt] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(null); // seconds remaining, null = no timer
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(null); // seconds remaining for current question
 
   // Keep cache synced if they successfully join
   useEffect(() => {
@@ -2637,41 +2636,42 @@ function StudentPortal({ setRole, initialRoom }) {
     };
   }, [joined, room]);
 
-  // Restore timer & answers when rejoining via cached localStorage state
-  // (confirmJoin is bypassed on cache-restore, so quizStartedAt stays null)
+  // Restore answers & question index when rejoining via cached localStorage state
   useEffect(() => {
-    if (!joined || !session || !sid || quizStartedAt) return;
-    if (!session.timer_duration) return;
+    if (!joined || !session || !sid) return;
+    if (!session.is_async) return;
     const code = room.toUpperCase();
     const respId = `${code}_${sid}`;
-    supabase.from('responses').select('answers, quiz_started_at').eq('id', respId).single().then(({ data }) => {
-      if (data?.quiz_started_at) {
-        setQuizStartedAt(data.quiz_started_at);
-      }
+    supabase.from('responses').select('answers, current_idx').eq('id', respId).single().then(({ data }) => {
       if (data?.answers && Object.keys(data.answers).length > 0 && Object.keys(answers).length === 0) {
         setAnswers(data.answers);
+      }
+      if (data?.current_idx !== undefined && data?.current_idx !== null) {
+        setIdx(data.current_idx);
       }
     });
   }, [joined, session, sid]);
 
-  const submit = async (qIdx, ans) => {
-    const next = { ...answers, [qIdx]: ans };
-    setAnswers(next);
-
+  // Save progress helper (used by submit, auto-save, and timer expiry)
+  const saveProgress = async (currentAnswers, currentIdx) => {
     const respId = `${room.toUpperCase()}_${sid || localId}`;
-
     try {
-      const upsertData = {
+      await supabase.from('responses').upsert({
         id: respId,
         room_code: room.toUpperCase(),
         student_name: name,
         student_id: sid,
-        answers: next,
+        answers: currentAnswers,
+        current_idx: currentIdx,
         ts: Date.now()
-      };
-      if (quizStartedAt) upsertData.quiz_started_at = quizStartedAt;
-      await supabase.from('responses').upsert(upsertData);
+      });
     } catch (e) { console.error("Network Error", e); }
+  };
+
+  const submit = async (qIdx, ans) => {
+    const next = { ...answers, [qIdx]: ans };
+    setAnswers(next);
+    await saveProgress(next, idx);
   };
 
   const handleNext = () => setIdx(p => Math.min(p + 1, total));
@@ -2684,36 +2684,49 @@ function StudentPortal({ setRole, initialRoom }) {
     }
   }, [session]);
 
-  // === COUNTDOWN TIMER for async standard quizzes ===
+  // === PER-QUESTION COUNTDOWN TIMER for async standard quizzes ===
   const total = session?.quiz?.questions?.length || 1;
-  const timerExpiredRef = useRef(false);
+  const questionTimerStartRef = useRef(null);
   useEffect(() => {
-    if (!session || !quizStartedAt || !session.timer_duration) return;
-    const durationMs = session.timer_duration * 60 * 1000;
-    const tick = () => {
-      const remaining = Math.max(0, Math.floor((quizStartedAt + durationMs - Date.now()) / 1000));
-      setTimeLeft(remaining);
-      if (remaining <= 0 && !timerExpiredRef.current) {
-        timerExpiredRef.current = true;
-        // Auto-submit and end
-        const respId = `${room.toUpperCase()}_${sid || localId}`;
-        supabase.from('responses').upsert({
-          id: respId,
-          room_code: room.toUpperCase(),
-          student_name: name,
-          student_id: sid,
-          answers: answers,
-          ts: Date.now(),
-          quiz_started_at: quizStartedAt
-        }).then(() => {
-          setIdx(total); // trigger finished screen
+    if (!session || !session.timer_duration) {
+      setQuestionTimeLeft(null);
+      return;
+    }
+    if (idx >= total) return; // finished
+    // Reset timer for this question
+    const duration = session.timer_duration; // seconds
+    questionTimerStartRef.current = Date.now();
+    setQuestionTimeLeft(duration);
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - questionTimerStartRef.current) / 1000);
+      const remaining = Math.max(0, duration - elapsed);
+      setQuestionTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+        // Auto-save current answer and advance
+        saveProgress(answers, idx + 1).then(() => {
+          if (idx + 1 >= total) {
+            setIdx(total); // trigger finished screen
+          } else {
+            setIdx(prev => prev + 1);
+          }
         });
       }
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
+    }, 1000);
     return () => clearInterval(interval);
-  }, [session, quizStartedAt, answers]);
+  }, [session?.timer_duration, idx, total]);
+
+  // === AUTO-SAVE on tab switch / browser hide ===
+  useEffect(() => {
+    if (!joined || !session) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveProgress(answers, idx);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [joined, session, answers, idx]);
 
   const attemptJoin = async (e) => {
     e.preventDefault();
@@ -2876,29 +2889,13 @@ function StudentPortal({ setRole, initialRoom }) {
     if (tempSession?.is_async && sid) {
       const code = tempSession.id;
       const respId = `${code}_${sid}`;
-      const { data: prevResp } = await supabase.from('responses').select('answers, quiz_started_at').eq('id', respId).single();
+      const { data: prevResp } = await supabase.from('responses').select('answers, current_idx').eq('id', respId).single();
       if (prevResp && prevResp.answers) {
         setAnswers(prevResp.answers);
       }
-      // Handle timer: restore or set quiz_started_at
-      if (tempSession.timer_duration) {
-        if (prevResp && prevResp.quiz_started_at) {
-          // Returning student — restore their original start time
-          setQuizStartedAt(prevResp.quiz_started_at);
-        } else {
-          // First time joining — record start time
-          const now = Date.now();
-          setQuizStartedAt(now);
-          await supabase.from('responses').upsert({
-            id: respId,
-            room_code: code,
-            student_name: name.trim(),
-            student_id: sid.trim(),
-            answers: prevResp?.answers || {},
-            ts: Date.now(),
-            quiz_started_at: now
-          });
-        }
+      // Restore question index so student resumes where they left off
+      if (prevResp?.current_idx !== undefined && prevResp?.current_idx !== null) {
+        setIdx(prevResp.current_idx);
       }
     }
     setNeedsConfirmation(false);
@@ -3022,12 +3019,12 @@ function StudentPortal({ setRole, initialRoom }) {
           <div className="text-[10px] font-black uppercase text-slate-300 tracking-widest">Item {idx + 1} / {total}</div>
           <div className="flex items-center gap-3">
             <div className="font-black text-slate-800 text-xl truncate px-6 italic tracking-tighter">{session.quiz.title}</div>
-            {timeLeft !== null && (
+            {questionTimeLeft !== null && (
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-black text-sm tracking-wider shrink-0 ${
-                timeLeft <= 60 ? 'bg-red-100 text-red-600 animate-pulse' : timeLeft <= 300 ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
+                questionTimeLeft <= 10 ? 'bg-red-100 text-red-600 animate-pulse' : questionTimeLeft <= 30 ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
               }`}>
                 <Clock size={14} />
-                {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
+                {questionTimeLeft}s
               </div>
             )}
           </div>
