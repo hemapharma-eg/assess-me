@@ -478,7 +478,7 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
         {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
-        {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
+        {activeTab === 'asynchronous' && <ScheduledTab user={user} classes={classes} />}
         {activeTab === 'reports' && (() => {
           const allReports = [...reports, ...asyncReports];
           const visibleReports = allReports.filter(r => !r.hidden);
@@ -491,12 +491,17 @@ function TeacherPortal({ setRole, user }) {
 
 // --- Teacher Sections ---
 
-function ScheduledTab({ user }) {
+function ScheduledTab({ user, classes }) {
   const [scheduledRooms, setScheduledRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingRoom, setEditingRoom] = useState(null);
   const [editStart, setEditStart] = useState('');
   const [editEnd, setEditEnd] = useState('');
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => {
     fetchScheduled();
@@ -548,6 +553,18 @@ function ScheduledTab({ user }) {
     setEditingRoom(null);
   };
 
+  const filteredRooms = scheduledRooms.filter(room => {
+    const matchesSearch = (room.quiz?.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          room.id.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const assignedClasses = room.quiz?.assigned_classes || [];
+    const matchesClass = !classFilter || assignedClasses.includes(classFilter);
+    
+    const matchesDate = !dateFilter || new Date(room.start_time).toLocaleDateString() === new Date(dateFilter).toLocaleDateString();
+    
+    return matchesSearch && matchesClass && matchesDate;
+  });
+
   if (loading) return (
     <div className="flex justify-center p-20">
       <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -555,88 +572,162 @@ function ScheduledTab({ user }) {
   );
 
   return (
-    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-8 border-b flex justify-between items-center bg-slate-50 relative overflow-hidden">
+    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[500px]">
+      <div className="p-8 border-b bg-slate-50 relative overflow-hidden shrink-0">
         <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="relative z-10">
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Scheduled Quizzes</h2>
-          <p className="text-slate-400 font-bold mt-1">Manage pending asynchronous activities</p>
+        <div className="relative z-10 flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Scheduled Quizzes</h2>
+            <p className="text-slate-400 font-bold mt-1">Manage pending asynchronous activities</p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search quiz or code..." 
+                className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all w-48"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <select 
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all"
+              value={classFilter}
+              onChange={e => setClassFilter(e.target.value)}
+            >
+              <option value="">All Classes</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+
+            <input 
+              type="date" 
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+            />
+
+            {(searchQuery || classFilter || dateFilter) && (
+              <button 
+                onClick={() => { setSearchQuery(''); setClassFilter(''); setDateFilter(''); }}
+                className="text-xs font-black text-red-500 hover:text-red-700 transition-colors uppercase tracking-widest"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="p-8 grid gap-4 grid-cols-1 md:grid-cols-2">
-        {scheduledRooms.length === 0 ? (
-          <div className="col-span-full p-20 text-center border-2 border-dashed border-slate-100 rounded-3xl">
-            <h3 className="text-2xl font-black text-slate-400 mb-2">No Scheduled Quizzes</h3>
-            <p className="text-slate-400 font-bold">Launch an asynchronous quiz to see it here.</p>
+      <div className="flex-1 overflow-x-auto">
+        {filteredRooms.length === 0 ? (
+          <div className="p-20 text-center">
+            <h3 className="text-2xl font-black text-slate-400 mb-2">No Quizzes Found</h3>
+            <p className="text-slate-400 font-bold">Try adjusting your filters or launch a new quiz.</p>
           </div>
         ) : (
-          scheduledRooms.map(room => (
-            <div key={room.id} className="border-2 border-slate-100 p-6 rounded-[2rem] hover:border-blue-200 transition-colors bg-white flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tighter w-3/4">{room.quiz?.title || 'Untitled Quiz'}</h3>
-                  <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-2xl font-black text-xl tracking-widest">{room.id}</div>
-                </div>
-                
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                  Type: {room.type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
-                </p>
-                {room.timer_duration && (
-                  <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-1">
-                    <Clock size={14} /> {room.timer_duration}s / question
-                  </p>
-                )}
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50">
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Quiz Title</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Code</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Type</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Timer</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Schedule</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredRooms.map(room => {
+                const isEditing = editingRoom === room.id;
+                const assignedClassNames = classes
+                  .filter(c => (room.quiz?.assigned_classes || []).includes(c.id))
+                  .map(c => c.name)
+                  .join(', ');
 
-                {editingRoom === room.id ? (
-                  <div className="bg-slate-50 p-4 rounded-2xl space-y-3 mb-4 border border-blue-100">
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Start Time</label>
-                      <input type="datetime-local" className="w-full p-2 text-sm font-bold border border-slate-200 rounded-xl" value={editStart} onChange={e => setEditStart(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">End Time</label>
-                      <input type="datetime-local" className="w-full p-2 text-sm font-bold border border-slate-200 rounded-xl" value={editEnd} onChange={e => setEditEnd(e.target.value)} />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 p-4 rounded-2xl flex flex-col gap-2 mb-4">
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-green-500">Opens:</span> 
-                      {new Date(room.start_time).toLocaleString()}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-red-500">Closes:</span> 
-                      {new Date(room.end_time).toLocaleString()}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-2 mt-auto pt-4 border-t border-slate-50">
-                <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.href.split('?')[0]}?room=${room.id}`);
-                    alert("Join Link Copied!");
-                  }}
-                  className="flex-1 py-3 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl font-black text-xs uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-                >
-                  <Copy size={16} /> Copy Link
-                </button>
-                
-                {editingRoom === room.id ? (
-                  <>
-                    <button onClick={() => saveEdit(room)} className="px-4 py-3 bg-green-50 hover:bg-green-100 text-green-600 rounded-xl font-black transition-colors"><CheckCircle size={18} /></button>
-                    <button onClick={() => setEditingRoom(null)} className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-400 rounded-xl font-black transition-colors"><X size={18} /></button>
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => startEdit(room)} className="px-4 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl font-black transition-colors"><Edit2 size={18} /></button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))
+                return (
+                  <tr key={room.id} className="hover:bg-slate-50/30 transition-colors group">
+                    <td className="p-4">
+                      <div className="font-black text-slate-700">{room.quiz?.title || 'Untitled Quiz'}</div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate max-w-[200px]" title={assignedClassNames}>
+                        {assignedClassNames || 'No Class Restricted'}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-black text-sm tracking-widest border border-blue-100">{room.id}</span>
+                    </td>
+                    <td className="p-4">
+                      <div className={`text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
+                        room.type === 'async_video' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'
+                      }`}>
+                        {room.type === 'async_video' ? <Video size={10} /> : <FileText size={10} />}
+                        {room.type === 'async_video' ? 'Video' : 'Standard'}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      {room.timer_duration ? (
+                        <div className="text-xs font-black text-blue-500 flex items-center gap-1">
+                          <Clock size={12} /> {room.timer_duration}s
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-[10px] font-bold uppercase tracking-widest">—</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {isEditing ? (
+                        <div className="flex flex-col gap-2 min-w-[200px]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[8px] font-black uppercase text-slate-400 w-8">Start</span>
+                            <input type="datetime-local" className="flex-1 p-1 text-xs font-bold border border-slate-200 rounded" value={editStart} onChange={e => setEditStart(e.target.value)} />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[8px] font-black uppercase text-slate-400 w-8">End</span>
+                            <input type="datetime-local" className="flex-1 p-1 text-xs font-bold border border-slate-200 rounded" value={editEnd} onChange={e => setEditEnd(e.target.value)} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-bold text-slate-500 space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                            {new Date(room.start_time).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                            {new Date(room.end_time).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.href.split('?')[0]}?room=${room.id}`);
+                            alert("Join Link Copied!");
+                          }}
+                          className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                          title="Copy Link"
+                        >
+                          <Copy size={16} />
+                        </button>
+                        
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => saveEdit(room)} className="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors" title="Save"><CheckCircle size={16} /></button>
+                            <button onClick={() => setEditingRoom(null)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-400 rounded-lg transition-colors" title="Cancel"><X size={16} /></button>
+                          </>
+                        ) : (
+                          <button onClick={() => startEdit(room)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors" title="Edit Schedule"><Edit2 size={16} /></button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
