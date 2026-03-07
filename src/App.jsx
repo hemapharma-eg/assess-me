@@ -44,6 +44,7 @@ function MainApp() {
   const [initialRoom, setInitialRoom] = useState('');
   const [authError, setAuthError] = useState(null);
   const [loadingContext, setLoadingContext] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   // Sync role to localStorage whenever it changes
   useEffect(() => {
@@ -72,8 +73,12 @@ function MainApp() {
       setLoadingContext(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+        setRole('teacher');
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -82,7 +87,7 @@ function MainApp() {
   if (loadingContext) return <SplashScreen message="Establishing Secure Connection..." />;
   if (authError) return <SplashScreen message={`Connection Error: ${authError}`} isError={true} />;
 
-  if (!role) return <RolePicker setRole={setRole} user={user} />;
+  if (!role) return <RolePicker setRole={setRole} user={user} isRecoveryMode={isRecoveryMode} setIsRecoveryMode={setIsRecoveryMode} />;
 
   return role === 'teacher' ? (
     <TeacherPortal setRole={setRole} user={user} />
@@ -102,7 +107,7 @@ function SplashScreen({ message, isError }) {
   );
 }
 
-function RolePicker({ setRole, user }) {
+function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
   const [showTeacherAuth, setShowTeacherAuth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -110,7 +115,7 @@ function RolePicker({ setRole, user }) {
   const [country, setCountry] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [schoolUniversity, setSchoolUniversity] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [authMode, setAuthMode] = useState(isRecoveryMode ? 'recovery' : 'login'); // 'login', 'signup', 'forgot', 'recovery'
   const [loading, setLoading] = useState(false);
 
   const handleTeacherAccess = async (e) => {
@@ -130,7 +135,7 @@ function RolePicker({ setRole, user }) {
 
     // Process authentication
     setLoading(true);
-    if (isSignUp) {
+    if (authMode === 'signup') {
       const { error } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -147,7 +152,21 @@ function RolePicker({ setRole, user }) {
       if (error) alert("Sign Up Error: " + error.message);
       else {
         alert("Account created! You can now log in.");
-        setIsSignUp(false);
+        setAuthMode('login');
+      }
+    } else if (authMode === 'forgot') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin
+      });
+      if (error) alert("Error: " + error.message);
+      else alert("Check your email for the password reset link!");
+    } else if (authMode === 'recovery') {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) alert("Error updating password: " + error.message);
+      else {
+        alert("Password updated successfully! You are now logged in.");
+        setIsRecoveryMode(false);
+        setRole('teacher');
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -178,17 +197,19 @@ function RolePicker({ setRole, user }) {
                 required
               />
             </div>
-            <div>
-              <input
-                type="password"
-                placeholder="Password"
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {isSignUp && (
+            {authMode !== 'forgot' && (
+              <div>
+                <input
+                  type="password"
+                  placeholder={authMode === 'recovery' ? "Enter New Password" : "Password"}
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+            {authMode === 'signup' && (
               <>
                 <div>
                   <input
@@ -237,16 +258,40 @@ function RolePicker({ setRole, user }) {
               disabled={loading}
               className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xl transition-all shadow-lg shadow-blue-100 active:scale-95 disabled:opacity-50"
             >
-              {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Log In Securely')}
+              {loading ? 'Processing...' : (
+                authMode === 'signup' ? 'Create Account' : 
+                authMode === 'forgot' ? 'Send Reset Link' :
+                authMode === 'recovery' ? 'Update Password' : 'Log In Securely'
+              )}
             </button>
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-xs font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
-              >
-                {isSignUp ? 'Already have an account? Log In' : 'Need an account? Sign Up'}
-              </button>
+            <div className="flex flex-col gap-2 text-center pt-2">
+              {authMode === 'login' && (
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('forgot')}
+                  className="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
+                >
+                  Forgot Password?
+                </button>
+              )}
+              {authMode !== 'recovery' && (
+                <button
+                  type="button"
+                  onClick={() => setAuthMode(authMode === 'signup' ? 'login' : 'signup')}
+                  className="text-xs font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
+                >
+                  {authMode === 'signup' ? 'Already have an account? Log In' : 'Need an account? Sign Up'}
+                </button>
+              )}
+              {authMode === 'forgot' && (
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('login')}
+                  className="text-xs font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
+                >
+                  Back to Login
+                </button>
+              )}
             </div>
           </form>
         ) : (
