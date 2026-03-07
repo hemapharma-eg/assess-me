@@ -3775,7 +3775,7 @@ function StudentPortal({ setRole, initialRoom }) {
     }
 
     if (roomData.type === 'feedback') {
-      setSid('anonymous');
+      setSid(`anon_${localId}`);
       setName('Anonymous Student');
       setTempSession(roomData);
       setJoined(true);
