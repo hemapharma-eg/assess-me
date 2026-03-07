@@ -391,6 +391,126 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
   );
 }
 
+// --- Profile Completion Overlay for Google/OAuth Sign-ups ---
+function ProfileCompletionOverlay({ profile, setProfile, user }) {
+  const [fullName, setFullName] = useState(profile?.full_name || user?.user_metadata?.full_name || '');
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [customCountry, setCustomCountry] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [schoolUniversity, setSchoolUniversity] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedCountry) {
+      alert("Please select your country.");
+      return;
+    }
+
+    setLoading(true);
+    const updates = {
+      id: user.id,
+      full_name: fullName,
+      country: selectedCountry === 'Other' ? customCountry : selectedCountry,
+      job_title: jobTitle,
+      school_university: schoolUniversity,
+      updated_at: new Date()
+    };
+
+    const { error } = await supabase.from('profiles').upsert(updates);
+    if (error) {
+      alert("Error updating profile: " + error.message);
+    } else {
+      setProfile({ ...profile, ...updates });
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 text-center">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 max-w-md w-full border border-slate-100 animate-in fade-in zoom-in duration-300">
+        <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-200">
+          <Activity size={40} />
+        </div>
+        <h2 className="text-3xl font-black text-slate-800 mb-2">Welcome!</h2>
+        <p className="text-slate-500 mb-8 font-medium">Please complete your profile to continue.</p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="text-left">
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Full Name</label>
+            <input
+              type="text"
+              placeholder="Your Full Name"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="text-left">
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Country</label>
+            <select
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+              value={selectedCountry}
+              onChange={e => setSelectedCountry(e.target.value)}
+              required
+            >
+              <option value="" disabled>Select Country</option>
+              {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {selectedCountry === 'Other' && (
+            <div className="text-left">
+              <input
+                type="text"
+                placeholder="Enter Country Name"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                value={customCountry}
+                onChange={e => setCustomCountry(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          <div className="text-left">
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Job Title</label>
+            <input
+              type="text"
+              placeholder="e.g. Science Teacher"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+              value={jobTitle}
+              onChange={e => setJobTitle(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="text-left">
+            <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">School / University</label>
+            <input
+              type="text"
+              placeholder="Institution Name"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+              value={schoolUniversity}
+              onChange={e => setSchoolUniversity(e.target.value)}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xl transition-all shadow-lg shadow-blue-100 active:scale-95 disabled:opacity-50"
+          >
+            {loading ? 'Saving...' : 'Complete Profile'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ==========================================
 //               TEACHER PORTAL
 // ==========================================
@@ -608,10 +728,11 @@ function TeacherPortal({ setRole, user }) {
     setRole(null);
   };
 
-  if (loadingData) return <SplashScreen message="Syncing with Cloud Database..." />;
+  const isProfileIncomplete = profile && (!profile.country || !profile.job_title || !profile.school_university);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col relative">
+      {isProfileIncomplete && <ProfileCompletionOverlay profile={profile} setProfile={setProfile} user={user} />}
       {/* Top Header */}
       <header className="bg-white border-b px-4 md:px-6 h-16 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-10">
