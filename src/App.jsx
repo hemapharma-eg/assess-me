@@ -502,7 +502,7 @@ function ScheduledTab({ user, classes }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('running'); // 'all', 'running', 'past', 'paused'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'running', 'past', 'paused'
   const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'quiz', 'video'
 
   useEffect(() => {
@@ -560,6 +560,8 @@ function ScheduledTab({ user, classes }) {
     const { error } = await supabase.from('rooms').update({ is_paused: newState }).eq('id', room.id);
     if (!error) {
       setScheduledRooms(prev => prev.map(r => r.id === room.id ? { ...r, is_paused: newState } : r));
+    } else {
+      alert("Error: " + error.message);
     }
   };
 
