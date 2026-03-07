@@ -226,6 +226,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
               <div>
                 <input
                   type="email"
+                  name="email"
+                  autocomplete="username"
                   placeholder="Teacher Email"
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                   value={email}
@@ -238,6 +240,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
               <div>
                 <input
                   type="password"
+                  name="password"
+                  autocomplete={authMode === 'signup' || authMode === 'recovery' ? "new-password" : "current-password"}
                   placeholder={authMode === 'recovery' ? "Enter New Password" : "Password"}
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                   value={password}
@@ -251,6 +255,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                 <div>
                   <input
                     type="text"
+                    name="name"
+                    autocomplete="name"
                     placeholder="Full Name"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                     value={fullName}
@@ -261,6 +267,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Country</label>
                   <select
+                    name="country"
+                    autocomplete="country-name"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
                     value={selectedCountry}
                     onChange={e => setSelectedCountry(e.target.value)}
@@ -274,6 +282,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                   <div>
                     <input
                       type="text"
+                      name="custom_country"
                       placeholder="Enter Country Name"
                       className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                       value={customCountry}
@@ -285,6 +294,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                 <div>
                   <input
                     type="text"
+                    name="job_title"
+                    autocomplete="organization-title"
                     placeholder="Job Title"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                     value={jobTitle}
@@ -295,6 +306,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                 <div>
                   <input
                     type="text"
+                    name="organization"
+                    autocomplete="organization"
                     placeholder="School / University"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                     value={schoolUniversity}
@@ -440,6 +453,8 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Full Name</label>
             <input
               type="text"
+              name="name"
+              autocomplete="name"
               placeholder="Your Full Name"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
               value={fullName}
@@ -451,6 +466,8 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
           <div className="text-left">
             <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Country</label>
             <select
+              name="country"
+              autocomplete="country-name"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
               value={selectedCountry}
               onChange={e => setSelectedCountry(e.target.value)}
@@ -478,6 +495,8 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Job Title</label>
             <input
               type="text"
+              name="job_title"
+              autocomplete="organization-title"
               placeholder="e.g. Science Teacher"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
               value={jobTitle}
@@ -490,6 +509,8 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">School / University</label>
             <input
               type="text"
+              name="organization"
+              autocomplete="organization"
               placeholder="Institution Name"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
               value={schoolUniversity}
