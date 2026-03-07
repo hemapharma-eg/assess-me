@@ -2380,6 +2380,43 @@ function ReportsTab({ reports, allReports, classes }) {
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
   const getEffectiveResponses = (r) => localReportPatch[r.id]?.responses ?? (r.responses || []);
 
+  const updateAttendanceStatus = async (reportId, studentId, newStatus) => {
+    const report = (allReports || reports).find(r => r.id === reportId);
+    if (!report) return;
+
+    const currentResponses = getEffectiveResponses(report);
+    const existingResp = currentResponses.find(r => r.student_id === studentId);
+
+    let updatedResponses;
+    if (existingResp) {
+      updatedResponses = currentResponses.map(resp =>
+        resp.student_id === studentId ? { ...resp, status: newStatus } : resp
+      );
+    } else {
+      // Inject new response for "Absent" students being marked Present/Late
+      const student = classes.flatMap(c => c.students || []).find(s => s.student_id === studentId);
+      const newResp = {
+        id: Math.random().toString(36).substring(2, 9),
+        student_id: studentId,
+        student_name: student?.name || 'Anonymous',
+        status: newStatus,
+        ts: Date.now(),
+        answers: {}
+      };
+      updatedResponses = [...currentResponses, newResp];
+    }
+
+    setLocalReportPatch(prev => ({ ...prev, [reportId]: { ...(prev[reportId] || {}), responses: updatedResponses } }));
+    if (openReport && openReport.id === reportId) {
+      setOpenReport({ ...openReport, responses: updatedResponses });
+    }
+
+    const { error } = await supabase.from('reports').update({ responses: updatedResponses }).eq('id', reportId);
+    if (error) {
+      alert("Database update failed, but local view updated. Error: " + error.message);
+    }
+  };
+
   const handleRename = async (r) => {
     const newTitle = renameValue.trim();
     if (!newTitle) return;
@@ -2620,22 +2657,7 @@ function ReportsTab({ reports, allReports, classes }) {
                               'bg-red-50 text-red-600 border-red-100'
                             }`}
                             value={s.status || 'present'}
-                            onChange={async (e) => {
-                              const newStatus = e.target.value;
-                              const updatedResponses = openReport.responses.map(resp => 
-                                resp.student_id === s.student_id ? { ...resp, status: newStatus } : resp
-                              );
-                              
-                              // Update DB
-                              const { error } = await supabase.from('reports').update({ responses: updatedResponses }).eq('id', openReport.id);
-                              if (error) {
-                                alert("Update failed: " + error.message);
-                              } else {
-                                // Update local state for immediate feedback
-                                setLocalReportPatch(prev => ({ ...prev, [openReport.id]: { ...(prev[openReport.id] || {}), responses: updatedResponses } }));
-                                setOpenReport({ ...openReport, responses: updatedResponses });
-                              }
-                            }}
+                            onChange={(e) => updateAttendanceStatus(openReport.id, s.student_id, e.target.value)}
                           >
                             <option value="present">Present</option>
                             <option value="late">Late</option>
@@ -2655,7 +2677,10 @@ function ReportsTab({ reports, allReports, classes }) {
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <a
-                            href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
+                            href={openReport.type === 'attendance' 
+                              ? `mailto:${s.email}?subject=Attendance Status: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour attendance status for "${openReport.title}" is marked as ${s.status?.toUpperCase() || 'PRESENT'}.`
+                              : `mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`
+                            }
                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
                             title={hasEmail ? "Send Email" : "No email address found"}
                           >
@@ -2666,7 +2691,7 @@ function ReportsTab({ reports, allReports, classes }) {
                     </tr>
                   );
                 })}
-                {scored.length > 0 && (
+                {openReport.type !== 'attendance' && scored.length > 0 && (
                   <tr className="bg-slate-50/50 border-t-4 border-slate-200">
                     <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">% Correct</td>
                     {difficultyIndices.map((di, i) => (
@@ -2677,7 +2702,8 @@ function ReportsTab({ reports, allReports, classes }) {
                     <td colSpan="2"></td>
                   </tr>
                 )}
-                {scored.length === 0 && <tr><td colSpan={openReport.questions.length + 6} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
+                {openReport.type !== 'attendance' && scored.length === 0 && <tr><td colSpan={openReport.questions.length + 6} className="p-16 text-center text-slate-400 italic">No participants in this session.</td></tr>}
+                {openReport.type === 'attendance' && scored.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-slate-400 italic">No attendance records in this session.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2802,9 +2828,9 @@ function ReportsTab({ reports, allReports, classes }) {
                let weight = 1;
                if (stuResp.status === 'late') weight = 0.5;
                else if (stuResp.status === 'absent') weight = 0;
-               attendanceRecords[rep.title] = { present: true, status: stuResp.status || 'present', weight };
+               attendanceRecords[rep.title] = { reportId: rep.id, present: true, status: stuResp.status || 'present', weight };
             } else {
-               attendanceRecords[rep.title] = { present: false, status: 'absent', weight: 0 };
+               attendanceRecords[rep.title] = { reportId: rep.id, present: false, status: 'absent', weight: 0 };
             }
           });
 
@@ -3173,13 +3199,22 @@ function ReportsTab({ reports, allReports, classes }) {
                          .map(title => {
                            const rec = row.attendanceRecords[title];
                            const status = rec?.status || 'absent';
+                           const reportId = rec?.reportId;
                            return (
                              <td key={`a-${title}`} className={`p-4 font-black text-center ${
                                status === 'present' ? 'text-green-500 bg-green-50/10' : 
                                status === 'late' ? 'text-orange-500 bg-orange-50/10' : 
                                'text-red-400 bg-red-50/30'
                              }`}>
-                               {status.charAt(0).toUpperCase() + status.slice(1)}
+                               <select
+                                 className="bg-transparent border-none text-center font-black cursor-pointer focus:outline-none"
+                                 value={status}
+                                 onChange={(e) => updateAttendanceStatus(reportId, row.student_id, e.target.value)}
+                               >
+                                 <option value="present">Present</option>
+                                 <option value="late">Late</option>
+                                 <option value="absent">Absent</option>
+                               </select>
                              </td>
                            );
                          })}
