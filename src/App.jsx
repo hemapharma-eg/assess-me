@@ -106,6 +106,10 @@ function RolePicker({ setRole, user }) {
   const [showTeacherAuth, setShowTeacherAuth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [country, setCountry] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [schoolUniversity, setSchoolUniversity] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -127,7 +131,19 @@ function RolePicker({ setRole, user }) {
     // Process authentication
     setLoading(true);
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            country,
+            job_title: jobTitle,
+            school_university: schoolUniversity,
+            subscription: 'beta' // all new users start as beta
+          }
+        }
+      });
       if (error) alert("Sign Up Error: " + error.message);
       else {
         alert("Account created! You can now log in.");
@@ -172,6 +188,50 @@ function RolePicker({ setRole, user }) {
                 required
               />
             </div>
+            {isSignUp && (
+              <>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Full Name"
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Country"
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                    value={country}
+                    onChange={e => setCountry(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Job Title"
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                    value={jobTitle}
+                    onChange={e => setJobTitle(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="School / University"
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                    value={schoolUniversity}
+                    onChange={e => setSchoolUniversity(e.target.value)}
+                    required
+                  />
+                </div>
+              </>
+            )}
             <button
               type="submit"
               disabled={loading}
@@ -226,6 +286,7 @@ function TeacherPortal({ setRole, user }) {
   const [session, setSession] = useState(null);
   const [responses, setResponses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('ClassLabX_TeacherTab', activeTab);
@@ -239,13 +300,15 @@ function TeacherPortal({ setRole, user }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true);
-      const [resQuizzes, resReports, resClass, resAsyncRooms] = await Promise.all([
+      const [resProfile, resQuizzes, resReports, resClass, resAsyncRooms] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('quizzes').select('*').order('created_at', { ascending: false }),
         supabase.from('reports').select('*').order('ts', { ascending: false }),
         supabase.from('classes').select(`*, students(*)`).order('created_at', { ascending: false }),
         supabase.from('rooms').select('*').eq('is_async', true) // Fetch async rooms
       ]);
 
+      if (resProfile.data) setProfile(resProfile.data);
       if (resQuizzes.data) setQuizzes(resQuizzes.data);
       if (resReports.data) setReports(resReports.data);
       if (resClass.data) setClasses(resClass.data);
@@ -474,9 +537,9 @@ function TeacherPortal({ setRole, user }) {
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-        {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
+        {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
-        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
+        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} profile={profile} />}
         {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
         {activeTab === 'asynchronous' && <ScheduledTab user={user} classes={classes} />}
         {activeTab === 'reports' && (() => {
@@ -806,7 +869,7 @@ function ScheduledTab({ user, classes }) {
   );
 }
 
-function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab }) {
+function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile }) {
   const [selected, setSelected] = useState('');
   const [category, setCategory] = useState(null); // 'sync', 'async', 'attendance'
   const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video', 'attendance'
@@ -883,6 +946,13 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     let launchedQuiz;
 
     if (category === 'attendance') {
+      if (profile?.subscription === 'free') {
+        const attendanceCount = reports.filter(r => r.type === 'attendance').length;
+        if (attendanceCount >= 3) {
+          alert("Free Tier Limit: You can only have up to 3 attendance sessions. Please upgrade to Pro to start more.");
+          return;
+        }
+      }
       if (assignedClasses.length === 0) {
         alert("Please select at least one class.");
         return;
@@ -1288,17 +1358,44 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   );
 } // Close LaunchTab
 
-function QuizzesTab({ quizzes, setQuizzes, user }) {
+function QuizzesTab({ quizzes, setQuizzes, user, profile }) {
   const [edit, setEdit] = useState(null);
 
   const save = async (data) => {
     let saved;
-    if (data.id) {
-      const { data: ret, error } = await supabase.from('quizzes').update({ title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).eq('id', data.id).select().single();
+    if (!data.id) {
+      // New creation limits for free tier
+      if (profile?.subscription === 'free') {
+        if (data.type === 'survey') {
+          const surveysCount = quizzes.filter(q => q.type === 'survey').length;
+          if (surveysCount >= 3) {
+            alert("Free Tier Limit: You can only have up to 3 surveys. Please upgrade to Pro to create more.");
+            return;
+          }
+        } else {
+          const quizzesCount = quizzes.filter(q => q.type !== 'survey').length;
+          if (quizzesCount >= 3) {
+            alert("Free Tier Limit: You can only have up to 3 quizzes. Please upgrade to Pro to create more.");
+            return;
+          }
+        }
+      }
+
+      const { data: ret, error } = await supabase.from('quizzes').insert({ user_id: user.id, title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).select().single();
       if (error) alert("Save error: " + error.message);
       else saved = ret;
     } else {
-      const { data: ret, error } = await supabase.from('quizzes').insert({ user_id: user.id, title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).select().single();
+      // Edit limits for free tier: only the first 3 are editable if they have more
+      if (profile?.subscription === 'free') {
+        const sorted = [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const indexInHistory = sorted.findIndex(q => q.id === data.id);
+        if (indexInHistory >= 3) {
+          alert("Free Tier Restriction: You can only edit your 3 oldest items. This item is locked. Please upgrade to Pro to edit all items.");
+          return;
+        }
+      }
+
+      const { data: ret, error } = await supabase.from('quizzes').update({ title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).eq('id', data.id).select().single();
       if (error) alert("Save error: " + error.message);
       else saved = ret;
     }
@@ -1318,7 +1415,7 @@ function QuizzesTab({ quizzes, setQuizzes, user }) {
     }
   };
 
-  if (edit) return <QuizEditor quiz={edit} onSave={save} onCancel={() => setEdit(null)} />;
+  if (edit) return <QuizEditor quiz={edit} onSave={save} onCancel={() => setEdit(null)} profile={profile} />;
 
   return (
     <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
@@ -1333,15 +1430,21 @@ function QuizzesTab({ quizzes, setQuizzes, user }) {
           <div key={q.id} className="p-8 flex items-center justify-between hover:bg-slate-50 transition-colors">
             <div>
               <div className="flex items-center gap-2">
-                {q.type === 'video' ? <Video size={16} className="text-purple-500" /> : <FileText size={16} className="text-blue-500" />}
+                {q.type === 'video' ? <Video size={16} className="text-purple-500" /> : (q.type === 'survey' ? <BarChart2 size={16} className="text-green-500" /> : <FileText size={16} className="text-blue-500" />)}
                 <h3 className="text-lg font-black text-slate-800">{q.title}</h3>
               </div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">
-                {q.type === 'video' ? 'Video Quiz' : 'Standard Quiz'} • {(q.questions || []).length} Items
+                {q.type === 'video' ? 'Video Quiz' : (q.type === 'survey' ? 'Survey' : 'Standard Quiz')} • {(q.questions || []).length} Items
               </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setEdit(q)} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={20} /></button>
+              <button 
+                onClick={() => setEdit(q)} 
+                className={`p-3 rounded-xl transition-all ${profile?.subscription === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                title={profile?.subscription === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? "Locked for Free Tier" : "Edit"}
+              >
+                <Edit2 size={20} />
+              </button>
               <button onClick={() => del(q.id)} className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20} /></button>
             </div>
           </div>
@@ -1352,7 +1455,7 @@ function QuizzesTab({ quizzes, setQuizzes, user }) {
   );
 }
 
-function QuizEditor({ quiz, onSave, onCancel }) {
+function QuizEditor({ quiz, onSave, onCancel, profile }) {
   const [title, setTitle] = useState(quiz.title || '');
   const [type, setType] = useState(quiz.type || null);
   const [videoUrl, setVideoUrl] = useState(quiz.video_url || '');
@@ -1378,6 +1481,11 @@ function QuizEditor({ quiz, onSave, onCancel }) {
             <h3 className="text-xl font-black text-slate-800">Video Quiz</h3>
             <p className="text-sm text-slate-500 font-medium">Embed a YouTube video and add questions at specific timestamps.</p>
           </button>
+          <button onClick={() => setType('survey')} className="p-8 rounded-[2rem] border-2 border-slate-100 hover:border-green-500 hover:bg-green-50 transition-all flex flex-col items-center gap-4 group md:col-span-2">
+            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><BarChart2 size={32} /></div>
+            <h3 className="text-xl font-black text-slate-800">Feedback Survey</h3>
+            <p className="text-sm text-slate-500 font-medium">Collect student opinions and feedback anonymously or with names.</p>
+          </button>
         </div>
         <button onClick={onCancel} className="mt-12 px-8 py-3 text-slate-400 font-black hover:text-slate-600 transition-colors">Cancel</button>
       </div>
@@ -1388,6 +1496,10 @@ function QuizEditor({ quiz, onSave, onCancel }) {
     if (!file) return;
     if (file.size > 1 * 1024 * 1024) {
       alert(`Image too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Please upload an image under 1 MB.`);
+      return;
+    }
+    if (profile?.subscription === 'free' || profile?.subscription === 'beta') {
+      alert("Photo uploads are not available on your current subscription plan. Please upgrade to Pro.");
       return;
     }
     setUploadingImageFor(idx);
