@@ -4,7 +4,7 @@ import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, 
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, PlayCircle as PlayCircleIcon, Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
@@ -502,6 +502,8 @@ function ScheduledTab({ user, classes }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('running'); // 'all', 'running', 'past', 'paused'
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'quiz', 'video'
 
   useEffect(() => {
     fetchScheduled();
@@ -553,6 +555,14 @@ function ScheduledTab({ user, classes }) {
     setEditingRoom(null);
   };
 
+  const togglePause = async (room) => {
+    const newState = !room.is_paused;
+    const { error } = await supabase.from('rooms').update({ is_paused: newState }).eq('id', room.id);
+    if (!error) {
+      setScheduledRooms(prev => prev.map(r => r.id === room.id ? { ...r, is_paused: newState } : r));
+    }
+  };
+
   const filteredRooms = scheduledRooms.filter(room => {
     const matchesSearch = (room.quiz?.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
                           room.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -562,7 +572,24 @@ function ScheduledTab({ user, classes }) {
     
     const matchesDate = !dateFilter || new Date(room.start_time).toLocaleDateString() === new Date(dateFilter).toLocaleDateString();
     
-    return matchesSearch && matchesClass && matchesDate;
+    const now = Date.now();
+    const start = new Date(room.start_time).getTime();
+    const end = new Date(room.end_time).getTime();
+    
+    const isRunning = now >= start && now <= end && !room.is_paused;
+    const isPast = now > end;
+    const isPaused = room.is_paused;
+    
+    let matchesStatus = true;
+    if (statusFilter === 'running') matchesStatus = isRunning;
+    else if (statusFilter === 'past') matchesStatus = isPast;
+    else if (statusFilter === 'paused') matchesStatus = isPaused;
+    
+    let matchesType = true;
+    if (typeFilter === 'quiz') matchesType = room.type === 'async_quiz';
+    else if (typeFilter === 'video') matchesType = room.type === 'async_video';
+
+    return matchesSearch && matchesClass && matchesDate && matchesStatus && matchesType;
   });
 
   if (loading) return (
@@ -587,7 +614,7 @@ function ScheduledTab({ user, classes }) {
               <input 
                 type="text" 
                 placeholder="Search quiz or code..." 
-                className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all w-48"
+                className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all w-40"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -602,6 +629,27 @@ function ScheduledTab({ user, classes }) {
               {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
 
+            <select 
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="running">Running</option>
+              <option value="paused">Paused</option>
+              <option value="past">Past</option>
+            </select>
+
+            <select 
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all"
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+            >
+              <option value="all">All Types</option>
+              <option value="quiz">Standard Quiz</option>
+              <option value="video">Video Quiz</option>
+            </select>
+
             <input 
               type="date" 
               className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all"
@@ -609,9 +657,9 @@ function ScheduledTab({ user, classes }) {
               onChange={e => setDateFilter(e.target.value)}
             />
 
-            {(searchQuery || classFilter || dateFilter) && (
+            {(searchQuery || classFilter || dateFilter || statusFilter !== 'running' || typeFilter !== 'all') && (
               <button 
-                onClick={() => { setSearchQuery(''); setClassFilter(''); setDateFilter(''); }}
+                onClick={() => { setSearchQuery(''); setClassFilter(''); setDateFilter(''); setStatusFilter('running'); setTypeFilter('all'); }}
                 className="text-xs font-black text-red-500 hover:text-red-700 transition-colors uppercase tracking-widest"
               >
                 Clear
@@ -633,7 +681,7 @@ function ScheduledTab({ user, classes }) {
               <tr className="bg-slate-50/50">
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Quiz Title</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Code</th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Type</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Status</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Timer</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Schedule</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100 text-right">Actions</th>
@@ -659,11 +707,25 @@ function ScheduledTab({ user, classes }) {
                       <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-black text-sm tracking-widest border border-blue-100">{room.id}</span>
                     </td>
                     <td className="p-4">
-                      <div className={`text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
-                        room.type === 'async_video' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'
-                      }`}>
-                        {room.type === 'async_video' ? <Video size={10} /> : <FileText size={10} />}
-                        {room.type === 'async_video' ? 'Video' : 'Standard'}
+                      <div className="flex flex-col gap-1.5">
+                        <div className={`text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit ${
+                          room.type === 'async_video' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'
+                        }`}>
+                          {room.type === 'async_video' ? <Video size={10} /> : <FileText size={10} />}
+                          {room.type === 'async_video' ? 'Video' : 'Standard'}
+                        </div>
+                        {room.is_paused ? (
+                          <div className="text-[10px] font-black uppercase text-red-500 flex items-center gap-1">
+                            <PauseCircle size={10} /> Paused
+                          </div>
+                        ) : (
+                          (() => {
+                            const now = Date.now();
+                            const end = new Date(room.end_time).getTime();
+                            if (now > end) return <div className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1"><Check size={10} /> Past</div>;
+                            return <div className="text-[10px] font-black uppercase text-green-500 flex items-center gap-1"><PlayCircle size={10} /> Running</div>;
+                          })()
+                        )}
                       </div>
                     </td>
                     <td className="p-4">
@@ -702,6 +764,14 @@ function ScheduledTab({ user, classes }) {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => togglePause(room)}
+                          className={`p-2 rounded-lg transition-colors ${room.is_paused ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-orange-50 text-orange-600 hover:bg-orange-100'}`}
+                          title={room.is_paused ? "Resume Activity" : "Pause Activity"}
+                        >
+                          {room.is_paused ? <Play size={16} /> : <Pause size={16} />}
+                        </button>
+
                         <button 
                           onClick={() => {
                             navigator.clipboard.writeText(`${window.location.href.split('?')[0]}?room=${room.id}`);
@@ -2833,8 +2903,13 @@ function StudentPortal({ setRole, initialRoom }) {
       return;
     }
 
-    // --- Async Time Check ---
+    // --- Async Pause/Time Check ---
     if (roomData.is_async && roomData.type !== 'attendance') {
+      if (roomData.is_paused) {
+        setIdError("This activity has been paused by the teacher.");
+        setCheckingId(false);
+        return;
+      }
       const now = Date.now();
       const start = new Date(roomData.start_time).getTime();
       const end = new Date(roomData.end_time).getTime();
