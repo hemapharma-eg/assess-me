@@ -597,6 +597,66 @@ function TeacherPortal({ setRole, user }) {
     fetchData();
   }, [user.id]);
 
+  const updateReportStatus = async (reportId, studentId, newStatus) => {
+    // 1. Find the report locally to get current responses
+    const allReps = [...reports, ...asyncReports];
+    const report = allReps.find(r => r.id === reportId);
+    if (!report) return;
+
+    // Standardize comparison
+    const stdStudentId = String(studentId).trim();
+    const currentResponses = report.responses || [];
+    const existingResp = currentResponses.find(r => String(r.student_id).trim() === stdStudentId);
+
+    let updatedResponses;
+    if (existingResp) {
+      updatedResponses = currentResponses.map(resp =>
+        String(resp.student_id).trim() === stdStudentId ? { ...resp, status: newStatus } : resp
+      );
+    } else {
+      // Inject new response for "Absent" students being marked Present/Late
+      const student = (classes || []).flatMap(c => c.students || []).find(s => String(s.student_id).trim() === stdStudentId);
+      const newResp = {
+        id: Math.random().toString(36).substring(2, 9),
+        student_id: studentId,
+        student_name: student?.name || 'Anonymous',
+        status: newStatus,
+        ts: Date.now(),
+        answers: {}
+      };
+      updatedResponses = [...currentResponses, newResp];
+    }
+
+    // 2. Update local state immediately for both arrays
+    setReports(prev => prev.map(r => r.id === reportId ? { ...r, responses: updatedResponses } : r));
+    setAsyncReports(prev => prev.map(r => r.id === reportId ? { ...r, responses: updatedResponses } : r));
+
+    // 3. Update Database
+    // Check if it's a pseudo-report (async) or a real report
+    const isAsync = asyncReports.some(r => r.id === reportId);
+    if (isAsync) {
+      // For async reports, we need to update the individual response in the 'responses' table
+      // OR update the room's old_responses if it's a relaunch? Actually asyncRooms don't have old_responses JSON.
+      // They just have responses in the table.
+      if (existingResp) {
+        await supabase.from('responses').update({ status: newStatus }).eq('id', existingResp.id);
+      } else {
+        const student = (classes || []).flatMap(c => c.students || []).find(s => String(s.student_id).trim() === stdStudentId);
+        await supabase.from('responses').insert({
+          room_code: reportId,
+          student_id: studentId,
+          student_name: student?.name || 'Anonymous',
+          status: newStatus,
+          ts: new Date().toISOString(),
+          answers: {}
+        });
+      }
+    } else {
+      const { error } = await supabase.from('reports').update({ responses: updatedResponses }).eq('id', reportId);
+      if (error) alert("Database update failed: " + error.message);
+    }
+  };
+
   // Listen to Active Room & Responses on Realtime Postgres Changes
   useEffect(() => {
     if (!roomCode) return;
@@ -814,7 +874,7 @@ function TeacherPortal({ setRole, user }) {
         {activeTab === 'reports' && (() => {
           const allReports = [...reports, ...asyncReports];
           const visibleReports = allReports.filter(r => !r.hidden);
-          return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} />;
+          return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} updateReportStatus={updateReportStatus} />;
         })()}
       </main>
     </div>
@@ -2356,66 +2416,25 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
   );
 }
 
-function ReportsTab({ reports, allReports, classes }) {
-  const [view, setView] = useState('history'); // history, gradebook
-  const [selectedClassId, setSelectedClassId] = useState('');
+function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
+  const [view, setView] = useState('history'); 
+  const [openReport, setOpenReport] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
-  const [openReport, setOpenReport] = useState(null); // for detail view
-  const [typeFilter, setTypeFilter] = useState({
-    teacher_paced: true,
-    student_paced: true,
-    attendance: true
-  });
+  const [selectedClassId, setSelectedClassId] = useState('');
   const [hiddenSessions, setHiddenSessions] = useState(() => {
     try { return JSON.parse(localStorage.getItem('ClassLabX_HiddenSessions')) || []; }
     catch { return []; }
   });
-  // Repair state for old sessions
-  const [renamingReport, setRenamingReport] = useState(null); // report being renamed
+  const [typeFilter, setTypeFilter] = useState({ teacher_paced: true, student_paced: true, attendance: true });
+  const [renamingReport, setRenamingReport] = useState(null);
   const [renameValue, setRenameValue] = useState('');
-  const [assigningClassReport, setAssigningClassReport] = useState(null); // report being class-assigned
+  const [assigningClassReport, setAssigningClassReport] = useState(null);
   const [assignClassValue, setAssignClassValue] = useState('');
+  const [selectedForEmail, setSelectedForEmail] = useState([]);
   const [localReportPatch, setLocalReportPatch] = useState({}); // id -> {title?, assigned_classes?}
 
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
-  const getEffectiveResponses = (r) => localReportPatch[r.id]?.responses ?? (r.responses || []);
-
-  const updateAttendanceStatus = async (reportId, studentId, newStatus) => {
-    const report = (allReports || reports).find(r => r.id === reportId);
-    if (!report) return;
-
-    const currentResponses = getEffectiveResponses(report);
-    const existingResp = currentResponses.find(r => r.student_id === studentId);
-
-    let updatedResponses;
-    if (existingResp) {
-      updatedResponses = currentResponses.map(resp =>
-        resp.student_id === studentId ? { ...resp, status: newStatus } : resp
-      );
-    } else {
-      // Inject new response for "Absent" students being marked Present/Late
-      const student = classes.flatMap(c => c.students || []).find(s => s.student_id === studentId);
-      const newResp = {
-        id: Math.random().toString(36).substring(2, 9),
-        student_id: studentId,
-        student_name: student?.name || 'Anonymous',
-        status: newStatus,
-        ts: Date.now(),
-        answers: {}
-      };
-      updatedResponses = [...currentResponses, newResp];
-    }
-
-    setLocalReportPatch(prev => ({ ...prev, [reportId]: { ...(prev[reportId] || {}), responses: updatedResponses } }));
-    if (openReport && openReport.id === reportId) {
-      setOpenReport({ ...openReport, responses: updatedResponses });
-    }
-
-    const { error } = await supabase.from('reports').update({ responses: updatedResponses }).eq('id', reportId);
-    if (error) {
-      alert("Database update failed, but local view updated. Error: " + error.message);
-    }
-  };
+  const getEffectiveResponses = (r) => r.responses || []; // now synced directly by parent state
 
   const handleRename = async (r) => {
     const newTitle = renameValue.trim();
@@ -2443,8 +2462,16 @@ function ReportsTab({ reports, allReports, classes }) {
     });
   };
 
-  const deleteReport = async (id, roomId, isAsync) => { /* implementation for deleteReport */ };
-  const [selectedForEmail, setSelectedForEmail] = useState([]);
+  const deleteReport = async (id, roomId, isAsync) => {
+    if (!window.confirm("Delete this session from history?")) return;
+    const isAsyncRep = asyncReports.some(ar => ar.id === id);
+    if (isAsyncRep) {
+       await supabase.from('rooms').delete().eq('id', id);
+       // State update happens via parent prop sync if we use the update callbacks, but for now we rely on re-fetch or manual delete prop
+    } else {
+       await supabase.from('reports').delete().eq('id', id);
+    }
+  };
 
 
   useEffect(() => {
@@ -2657,7 +2684,7 @@ function ReportsTab({ reports, allReports, classes }) {
                               'bg-red-50 text-red-600 border-red-100'
                             }`}
                             value={s.status || 'present'}
-                            onChange={(e) => updateAttendanceStatus(openReport.id, s.student_id, e.target.value)}
+                            onChange={(e) => updateReportStatus(openReport.id, s.student_id, e.target.value)}
                           >
                             <option value="present">Present</option>
                             <option value="late">Late</option>
@@ -2691,7 +2718,7 @@ function ReportsTab({ reports, allReports, classes }) {
                     </tr>
                   );
                 })}
-                {openReport.type !== 'attendance' && scored.length > 0 && (
+                {openReport.type !== 'attendance' && openReport.type !== 'async_survey' && scored.length > 0 && (
                   <tr className="bg-slate-50/50 border-t-4 border-slate-200">
                     <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">% Correct</td>
                     {difficultyIndices.map((di, i) => (
@@ -2793,7 +2820,9 @@ function ReportsTab({ reports, allReports, classes }) {
         // Process Quizzes
         quizReports.forEach(rep => {
           const stuResp = getEffectiveResponses(rep).find(res => {
-            if (res.student_id !== stu.student_id) return false;
+            const resId = String(res.student_id).trim();
+            const stuId = String(stu.student_id).trim();
+            if (resId !== stuId) return false;
             if (hasDuplicateId) return res.student_name === stu.name;
             return true;
           });
@@ -2816,7 +2845,9 @@ function ReportsTab({ reports, allReports, classes }) {
           // Process Attendance
           attendanceReports.forEach(rep => {
             const stuResp = getEffectiveResponses(rep).find(res => {
-              if (res.student_id !== stu.student_id) return false;
+              const resId = String(res.student_id).trim();
+              const stuId = String(stu.student_id).trim();
+              if (resId !== stuId) return false;
               // Name matching check for duplicates happens on submission side for attendance, but just to be safe:
               if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
                 return res.student_name === stu.name;
@@ -2905,7 +2936,7 @@ function ReportsTab({ reports, allReports, classes }) {
                     <th className="p-4 border-b border-slate-200">Session Name</th>
                     <th className="p-4 border-b border-slate-200">Date/Time</th>
                     <th className="p-4 border-b border-slate-200 text-center">Students</th>
-                    <th className="p-4 border-b border-slate-200 text-center">Questions</th>
+                    <th className="p-4 border-b border-slate-200 text-center">% Correct</th>
                     <th className="p-4 border-b border-slate-200 text-right pr-6">Actions</th>
                   </tr>
                 </thead>
@@ -3009,7 +3040,24 @@ function ReportsTab({ reports, allReports, classes }) {
                         {getEffectiveResponses(r).length}
                       </td>
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
-                        {(r.questions || []).length}
+                        {(() => {
+                           if (r.type === 'attendance') return '';
+                           const resps = getEffectiveResponses(r);
+                           if (resps.length === 0) return '-';
+                           const totalScore = resps.reduce((acc, rp) => {
+                             let correct = 0;
+                             const qs = r.questions || [];
+                             qs.forEach((q, qi) => {
+                               const ans = rp.answers?.[qi];
+                               if (ans !== undefined) {
+                                 const ok = q.type === 'sa' ? (q.correct && String(ans).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(ans) === String(q.correct));
+                                 if (ok) correct++;
+                               }
+                             });
+                             return acc + Math.round((correct / (qs.length || 1)) * 100);
+                           }, 0);
+                           return Math.round(totalScore / resps.length) + '%';
+                        })()}
                       </td>
                       <td className="p-3 text-right align-middle pr-6 space-x-2">
                         <button onClick={() => toggleHidden(r.id)} className="px-3 py-2 inline-flex bg-slate-50 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg font-black text-xs transition-all items-center gap-2" title="Hide Session">
@@ -3209,7 +3257,7 @@ function ReportsTab({ reports, allReports, classes }) {
                                <select
                                  className="bg-transparent border-none text-center font-black cursor-pointer focus:outline-none"
                                  value={status}
-                                 onChange={(e) => updateAttendanceStatus(reportId, row.student_id, e.target.value)}
+                                 onChange={(e) => updateReportStatus(reportId, row.student_id, e.target.value)}
                                >
                                  <option value="present">Present</option>
                                  <option value="late">Late</option>
