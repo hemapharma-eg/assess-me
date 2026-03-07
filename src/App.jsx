@@ -2444,11 +2444,43 @@ function ReportsTab({ reports, allReports, classes }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reports
-                    .filter(r => !hiddenSessions.includes(r.id))
-                    .filter(r => typeFilter[r.type])
-                    .filter(r => !searchFilter || (r.title || '').toLowerCase().includes(searchFilter.toLowerCase()))
-                    .map(r => {
+                  {(() => {
+                    const grouped = {};
+                    reports
+                      .filter(r => !hiddenSessions.includes(r.id))
+                      .filter(r => typeFilter[r.type])
+                      .filter(r => {
+                        const title = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
+                        return !searchFilter || title.toLowerCase().includes(searchFilter.toLowerCase());
+                      })
+                      .forEach(r => {
+                        const title = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
+                        const assignedClasses = getEffectiveField(r, 'assigned_classes') || [];
+                        const classKey = JSON.stringify(assignedClasses.sort());
+                        const key = `${title}|${classKey}|${r.type}`;
+
+                        if (!grouped[key]) {
+                          grouped[key] = { ...r, title, responses: [...(r.responses || [])] };
+                        } else {
+                          const existing = grouped[key];
+                          if (r.ts > existing.ts) {
+                            existing.ts = r.ts;
+                            existing.questions = r.questions;
+                          }
+                          const respMap = {};
+                          existing.responses.forEach(resp => { respMap[resp.student_id] = resp; });
+                          (r.responses || []).forEach(resp => {
+                            if (!respMap[resp.student_id] || (resp.ts > respMap[resp.student_id].ts)) {
+                              respMap[resp.student_id] = resp;
+                            }
+                          });
+                          existing.responses = Object.values(respMap);
+                        }
+                      });
+
+                    return Object.values(grouped)
+                      .sort((a, b) => b.ts - a.ts)
+                      .map(r => {
                       const effectiveTitle = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
                       const effectiveClasses = getEffectiveField(r, 'assigned_classes') || [];
                       const assignedClassName = effectiveClasses.length > 0 ? (classes.find(c => c.id === effectiveClasses[0])?.name) : null;
@@ -2522,15 +2554,26 @@ function ReportsTab({ reports, allReports, classes }) {
                         </button>
                       </td>
                     </tr>
+                      );
+                    });
+                  })()}
+                  {(() => {
+                    const hasVisible = reports
+                      .filter(r => !hiddenSessions.includes(r.id))
+                      .filter(r => typeFilter[r.type])
+                      .filter(r => {
+                        const title = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
+                        return !searchFilter || title.toLowerCase().includes(searchFilter.toLowerCase());
+                      }).length > 0;
+                    
+                    return !hasVisible && (
+                      <tr>
+                        <td colSpan="6" className="p-16 text-center text-slate-300 font-bold italic border-b-0">
+                          No sessions match your filters.
+                        </td>
+                      </tr>
                     );
-                    })}
-                  {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).length === 0 && (
-                    <tr>
-                      <td colSpan="6" className="p-16 text-center text-slate-300 font-bold italic border-b-0">
-                        No sessions match your filter.
-                      </td>
-                    </tr>
-                  )}
+                  })()}
                 </tbody>
               </table>
             </div>
