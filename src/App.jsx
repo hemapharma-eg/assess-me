@@ -87,7 +87,7 @@ function MainApp() {
   if (loadingContext) return <SplashScreen message="Establishing Secure Connection..." />;
   if (authError) return <SplashScreen message={`Connection Error: ${authError}`} isError={true} />;
 
-  if (!role) return <RolePicker setRole={setRole} user={user} isRecoveryMode={isRecoveryMode} setIsRecoveryMode={setIsRecoveryMode} />;
+  if (!role || isRecoveryMode) return <RolePicker setRole={setRole} user={user} isRecoveryMode={isRecoveryMode} setIsRecoveryMode={setIsRecoveryMode} />;
 
   return role === 'teacher' ? (
     <TeacherPortal setRole={setRole} user={user} />
@@ -118,11 +118,18 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
   const [authMode, setAuthMode] = useState(isRecoveryMode ? 'recovery' : 'login'); // 'login', 'signup', 'forgot', 'recovery'
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (isRecoveryMode) {
+      setAuthMode('recovery');
+      setShowTeacherAuth(true);
+    }
+  }, [isRecoveryMode]);
+
   const handleTeacherAccess = async (e) => {
     if (e) e.preventDefault();
 
     // If they are already authenticated securely
-    if (user) {
+    if (user && !isRecoveryMode) {
       setRole('teacher');
       return;
     }
@@ -185,18 +192,20 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
         <h1 className="text-4xl font-black text-slate-800 text-center mb-2">ClassLab<span className="text-blue-600">X</span></h1>
         <p className="text-slate-400 text-center mb-10 font-bold text-xs uppercase tracking-widest">Cloud Assessments</p>
 
-        {!user && showTeacherAuth ? (
+        {(isRecoveryMode || !user) && showTeacherAuth ? (
           <form onSubmit={handleTeacherAccess} className="space-y-4 mb-4">
-            <div>
-              <input
-                type="email"
-                placeholder="Teacher Email"
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-            </div>
+            {authMode !== 'recovery' && (
+              <div>
+                <input
+                  type="email"
+                  placeholder="Teacher Email"
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+            )}
             {authMode !== 'forgot' && (
               <div>
                 <input
