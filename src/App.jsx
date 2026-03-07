@@ -3062,6 +3062,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
       const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
 
       assignedReports = (allReports || reports).filter(r => {
+        if (r.type === 'feedback') return false;
+        
         // Apply any local repair patches (from the Assign-Class UI in Session History)
         const effectiveClasses = localReportPatch[r.id]?.assigned_classes ?? (r.assigned_classes || []);
 
@@ -3578,7 +3580,11 @@ function StudentPortal({ setRole, initialRoom }) {
   });
 
   const [room, setRoom] = useState(initialRoom || cachedState?.room || '');
-  const [sid, setSid] = useState(cachedState?.sid || '');
+  const [sid, setSid] = useState(() => {
+    const cachedSid = cachedState?.sid || '';
+    if (cachedSid === 'anonymous' || cachedSid.startsWith('anon_')) return '';
+    return cachedSid;
+  });
   const [name, setName] = useState(cachedState?.name || ''); 
   const [joined, setJoined] = useState((!initialRoom || initialRoom === cachedState?.room) ? (cachedState?.joined || false) : false);
 
@@ -4012,7 +4018,7 @@ function StudentPortal({ setRole, initialRoom }) {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300 text-center uppercase tracking-[0.2em]"
-                    placeholder="STUDENT ID #" value={sid} onChange={e => setSid(e.target.value)}
+                    placeholder="STUDENT ID" value={sid} onChange={e => setSid(e.target.value)}
                   />
                 </div>
                 <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
