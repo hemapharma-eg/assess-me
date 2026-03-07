@@ -1,10 +1,38 @@
+// --- index.html ---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClassLabX</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+// --- src/main.jsx ---
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.jsx'
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+// --- src/App.jsx ---
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, 
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, Video, Clock, Copy
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
@@ -40,19 +68,10 @@ export default function App() {
 
 function MainApp() {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(() => localStorage.getItem('ClassLabX_Role') || null);
+  const [role, setRole] = useState(null);
   const [initialRoom, setInitialRoom] = useState('');
   const [authError, setAuthError] = useState(null);
   const [loadingContext, setLoadingContext] = useState(true);
-
-  // Sync role to localStorage whenever it changes
-  useEffect(() => {
-    if (role) {
-      localStorage.setItem('ClassLabX_Role', role);
-    } else {
-      localStorage.removeItem('ClassLabX_Role');
-    }
-  }, [role]);
 
   useEffect(() => {
     // Check URL params for QR scanning
@@ -219,17 +238,13 @@ function TeacherPortal({ setRole, user }) {
     return null;
   }
 
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ClassLabX_TeacherTab') || 'quizzes');
+  const [activeTab, setActiveTab] = useState('quizzes');
   const [quizzes, setQuizzes] = useState([]);
   const [reports, setReports] = useState([]);
   const [classes, setClasses] = useState([]);
   const [session, setSession] = useState(null);
   const [responses, setResponses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
-
-  useEffect(() => {
-    localStorage.setItem('ClassLabX_TeacherTab', activeTab);
-  }, [activeTab]);
 
   // Keep a stable room code for the browser
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('ClassLabX_RoomCode') || '');
@@ -325,24 +340,13 @@ function TeacherPortal({ setRole, user }) {
       id: newCode,
       user_id: user.id,
       type,
-      quiz: type === 'attendance'
-        ? {
-            title: quiz.attendanceMode === 'relaunch'
-              ? (quiz.selectedOldAttendance?.title || quiz.sessionName || 'Attendance')
-              : (quiz.sessionName || 'Attendance'),
-            questions: [],
-            assigned_classes: quiz.assigned_classes || [],
-            old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null,
-            old_responses: quiz.attendanceMode === 'relaunch' ? (quiz.selectedOldAttendance?.responses || []) : []
-          }
-        : { ...quiz, current_question_idx: 0, show_results: false },
+      quiz: { ...quiz, current_question_idx: 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
       ts: Date.now(),
       is_async: isAsync,
-      start_time: type === 'attendance' ? new Date().toISOString() : quiz?.start_time,
-      end_time: quiz?.end_time,
-      prevent_skipping: quiz?.prevent_skipping,
-      timer_duration: quiz?.timer_duration || null
+      start_time: quiz.start_time,
+      end_time: quiz.end_time,
+      prevent_skipping: quiz.prevent_skipping
     };
 
     const { error } = await supabase.from('rooms').insert(data);
@@ -365,52 +369,27 @@ function TeacherPortal({ setRole, user }) {
 
   const onEnd = async () => {
     if (!session) return;
+    const repId = Date.now().toString();
 
-    const isRelaunch = !!(session.quiz?.old_report_id);
-    const oldReportId = session.quiz?.old_report_id;
+    const newReport = {
+      id: repId,
+      user_id: user.id,
+      title: session.quiz.title,
+      type: session.type,
+      ts: Date.now(),
+      responses: responses,
+      questions: session.quiz.questions,
+      assigned_classes: session.quiz.assigned_classes || []
+    };
 
-    if (isRelaunch && oldReportId) {
-      // RELAUNCH: merge new check-ins into the existing report
-      const oldResponses = session.quiz?.old_responses || [];
+    // 1. Save to Reports in DB
+    await supabase.from('reports').insert(newReport);
+    setReports(prev => [newReport, ...prev]);
 
-      // Build a map of previous responses keyed by student_id
-      const mergedMap = {};
-      oldResponses.forEach(r => { mergedMap[String(r.student_id).trim()] = r; });
-
-      // Add/overwrite with NEW check-ins (students who scanned this relaunch)
-      responses.forEach(r => { mergedMap[String(r.student_id).trim()] = r; });
-
-      const mergedResponses = Object.values(mergedMap);
-
-      // UPDATE existing report
-      await supabase.from('reports').update({ responses: mergedResponses }).eq('id', oldReportId);
-
-      // Update local state
-      setReports(prev => prev.map(rep =>
-        rep.id === oldReportId ? { ...rep, responses: mergedResponses } : rep
-      ));
-    } else {
-      // NEW session: insert fresh report
-      const repId = Date.now().toString();
-      const newReport = {
-        id: repId,
-        user_id: user.id,
-        title: session.quiz.title,
-        type: session.type,
-        ts: Date.now(),
-        responses: responses,
-        questions: session.quiz.questions,
-        assigned_classes: session.quiz?.assigned_classes?.length > 0
-          ? session.quiz.assigned_classes
-          : (session.assigned_classes || [])
-      };
-      await supabase.from('reports').insert(newReport);
-      setReports(prev => [newReport, ...prev]);
-    }
-
-    // Clear PUBLIC network buffer
+    // 2. Clear PUBLIC network buffer
     try {
       await supabase.from('rooms').delete().eq('id', roomCode);
+      // Responses cascade delete automatically due to ON DELETE CASCADE
     } catch (e) { console.error("Cleanup error", e); }
 
     setSession(null);
@@ -476,7 +455,7 @@ function TeacherPortal({ setRole, user }) {
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
         {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
-        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
+        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} />}
         {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
         {activeTab === 'asynchronous' && <ScheduledTab user={user} />}
         {activeTab === 'reports' && (() => {
@@ -515,7 +494,13 @@ function ScheduledTab({ user }) {
     setLoading(false);
   };
 
-
+  const handleUnschedule = async (id) => {
+    if (!window.confirm('Are you sure you want to unschedule this quiz? It will delete the room entirely.')) return;
+    
+    // Deleting the room will automatically cascade and delete responses.
+    await supabase.from('rooms').delete().eq('id', id);
+    setScheduledRooms(prev => prev.filter(r => r.id !== id));
+  };
 
   const startEdit = (room) => {
     setEditingRoom(room.id);
@@ -579,14 +564,9 @@ function ScheduledTab({ user }) {
                   <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-2xl font-black text-xl tracking-widest">{room.id}</div>
                 </div>
                 
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
                   Type: {room.type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
                 </p>
-                {room.timer_duration && (
-                  <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-1">
-                    <Clock size={14} /> {room.timer_duration} min timer
-                  </p>
-                )}
 
                 {editingRoom === room.id ? (
                   <div className="bg-slate-50 p-4 rounded-2xl space-y-3 mb-4 border border-blue-100">
@@ -632,6 +612,7 @@ function ScheduledTab({ user }) {
                 ) : (
                   <>
                     <button onClick={() => startEdit(room)} className="px-4 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl font-black transition-colors"><Edit2 size={18} /></button>
+                    <button onClick={() => handleUnschedule(room.id)} className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl font-black transition-colors"><Trash2 size={18} /></button>
                   </>
                 )}
               </div>
@@ -643,10 +624,10 @@ function ScheduledTab({ user }) {
   );
 }
 
-function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab }) {
+function LaunchTab({ quizzes, classes, onLaunch, session, roomCode, setActiveTab }) {
   const [selected, setSelected] = useState('');
-  const [category, setCategory] = useState(null); // 'sync', 'async', 'attendance'
-  const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video', 'attendance'
+  const [category, setCategory] = useState(null); // 'sync' or 'async'
+  const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video'
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
@@ -654,13 +635,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [scheduledLink, setScheduledLink] = useState(null);
-  const [sessionName, setSessionName] = useState('');
-  const [timerDuration, setTimerDuration] = useState('');
-  
-  // Attendance Relaunch State
-  const [attendanceMode, setAttendanceMode] = useState('new'); // 'new' | 'relaunch'
-  const [selectedOldAttendance, setSelectedOldAttendance] = useState(null);
-  const [relaunchSearch, setRelaunchSearch] = useState('');
 
   if (session) return (
     <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-blue-100">
@@ -707,9 +681,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         setPreventSkipping(false);
         setStartTime('');
         setEndTime('');
-        setTimerDuration('');
-        setAttendanceMode('new');
-        setSelectedOldAttendance(null);
       }} className="w-full py-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-[2rem] font-black uppercase tracking-widest transition-colors shadow-sm">
         Schedule Another
       </button>
@@ -717,31 +688,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   );
 
   const start = async () => {
-    let launchedQuiz;
-
-    if (category === 'attendance') {
-      if (assignedClasses.length === 0) {
-        alert("Please select at least one class.");
-        return;
-      }
-      if (attendanceMode === 'new' && !sessionName) {
-        alert("Please enter a session name.");
-        return;
-      }
-      if (attendanceMode === 'relaunch' && !selectedOldAttendance) {
-        alert("Please select a previous session to relaunch.");
-        return;
-      }
-
-      await onLaunch({ 
-        attendanceMode, 
-        sessionName, 
-        selectedOldAttendance, 
-        assigned_classes: assignedClasses 
-      }, 'attendance');
-      return;
-    }
-
     const q = quizzes.find(x => x.id === selected);
     if (q) {
       let launchedQuiz = JSON.parse(JSON.stringify(q));
@@ -767,9 +713,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         launchedQuiz.start_time = new Date(startTime).toISOString();
         launchedQuiz.end_time = new Date(endTime).toISOString();
         launchedQuiz.prevent_skipping = preventSkipping;
-        if (type === 'async_quiz' && timerDuration && parseInt(timerDuration) > 0) {
-          launchedQuiz.timer_duration = parseInt(timerDuration);
-        }
       }
 
       const code = await onLaunch({ ...launchedQuiz, assigned_classes: assignedClasses }, type);
@@ -788,9 +731,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       setPreventSkipping(false);
       setStartTime('');
       setEndTime('');
-      setTimerDuration('');
-      setAttendanceMode('new');
-      setSelectedOldAttendance(null);
     }
   };
 
@@ -804,7 +744,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     return true; // Sync can theoretically take any, but we'll let teachers decide
   });
 
-  if (type && category !== 'attendance') return (
+  if (type) return (
     <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100">
       <h2 className="text-2xl font-black mb-6 text-slate-800">
         Choose a {type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
@@ -825,10 +765,10 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No matching quizzes found. Go to Quizzes to create one.</p>}
       </div>
 
-      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
+      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Cohorts (Optional)</h2>
       <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
         {classes.length === 0 ? (
-          <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Please create a class first.</p>
+          <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. All students can join.</p>
         ) : (
           classes.map(c => (
             <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
@@ -861,21 +801,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           </div>
         )}
 
-        {category === 'async' && type === 'async_quiz' && (
-          <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-            <label className="text-[10px] font-black uppercase text-blue-600 mb-1 block">Quiz Timer (minutes) — Optional</label>
-            <input
-              type="number"
-              min="1"
-              placeholder="e.g. 30 — leave empty for no timer"
-              className="w-full p-2 rounded-xl text-sm font-bold border border-blue-200"
-              value={timerDuration}
-              onChange={e => setTimerDuration(e.target.value)}
-            />
-            <p className="text-[9px] font-bold text-blue-400 mt-1">Each student gets this many minutes from when they first start. Timer continues even if they leave and rejoin.</p>
-          </div>
-        )}
-
         {type === 'async_video' && (
           <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors bg-purple-50">
             <input type="checkbox" className="w-5 h-5 accent-purple-600 rounded" checked={preventSkipping} onChange={e => setPreventSkipping(e.target.checked)} />
@@ -899,7 +824,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         <button onClick={() => { setType(null); setCategory(null); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
-          disabled={!selected || assignedClasses.length === 0 || (category === 'async' && (!startTime || !endTime))}
+          disabled={!selected || (category === 'async' && (!startTime || !endTime))}
           className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
         >
           {category === 'async' ? 'Schedule' : 'Launch'}
@@ -908,174 +833,24 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     </div>
   );
 
-  if (category === 'attendance') return (
-    <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-in zoom-in duration-300">
-      <div className="mb-8 text-center">
-        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <UserCheck size={32} />
-        </div>
-        <h2 className="text-3xl font-black text-slate-800">Start Attendance</h2>
-        <p className="text-slate-400 font-bold mt-1">Capture student check-ins quickly</p>
-      </div>
-
-      <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl mb-6">
-        <button 
-          onClick={() => { setAttendanceMode('new'); setSelectedOldAttendance(null); setAssignedClasses([]); setSessionName(''); }}
-          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${attendanceMode === 'new' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-        >New Session</button>
-        <button 
-          onClick={() => setAttendanceMode('relaunch')}
-          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${attendanceMode === 'relaunch' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-        >Relaunch Old</button>
-      </div>
-
-      {attendanceMode === 'new' ? (
-        <div className="space-y-6 mb-8">
-          <div>
-            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Session Name (e.g., Lecture 1: Intro)</label>
-            <input
-              type="text"
-              className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 transition-all"
-              value={sessionName}
-              onChange={(e) => setSessionName(e.target.value)}
-              placeholder="Enter a title..."
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Target Class(s)</label>
-            <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
-              {classes.length === 0 ? (
-                <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Cannot start attendance.</p>
-              ) : (
-                classes.map(c => (
-                  <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-                    <input
-                      type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
-                      checked={assignedClasses.includes(c.id)}
-                      onChange={() => toggleClass(c.id)}
-                    />
-                    <div>
-                      <div className="font-bold text-slate-700 text-sm">{c.name}</div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6 mb-8">
-          <div>
-            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Previous Session</label>
-            {/* Search bar */}
-            <div className="relative mb-3">
-              <input
-                type="text"
-                value={relaunchSearch}
-                onChange={e => setRelaunchSearch(e.target.value)}
-                placeholder="Search by name, class or date (DD/MM/YYYY)..."
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border-2 border-slate-100 focus:border-blue-400 rounded-xl text-sm font-bold text-slate-700 focus:outline-none transition-all placeholder:text-slate-300"
-              />
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-            </div>
-            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scroll">
-              {(() => {
-                const allAttendance = reports.filter(r => r.type === 'attendance').sort((a, b) => new Date(b.ts) - new Date(a.ts));
-                const q = relaunchSearch.trim().toLowerCase();
-                const filtered = !q ? allAttendance : allAttendance.filter(rep => {
-                  const className = rep.assigned_classes?.length > 0
-                    ? (classes.find(c => c.id === rep.assigned_classes[0])?.name || '').toLowerCase()
-                    : '';
-                  const dateStr = new Date(rep.ts).toLocaleDateString('en-GB').toLowerCase();
-                  return (
-                    (rep.title || '').toLowerCase().includes(q) ||
-                    className.includes(q) ||
-                    dateStr.includes(q)
-                  );
-                });
-
-                if (allAttendance.length === 0) return <p className="text-slate-400 italic text-center text-sm py-4">No past attendance sessions found.</p>;
-                if (filtered.length === 0) return <p className="text-slate-400 italic text-center text-sm py-4">No sessions match your search.</p>;
-
-                return filtered.map(rep => {
-                  const targetClassName = rep.assigned_classes?.length > 0
-                    ? (classes.find(c => c.id === rep.assigned_classes[0])?.name || 'Unknown Class')
-                    : 'No Class Assigned';
-                  return (
-                    <button
-                      key={rep.id}
-                      onClick={() => {
-                        setSelectedOldAttendance(rep);
-                        setAssignedClasses(rep.assigned_classes || []);
-                      }}
-                      className={`w-full text-left p-4 rounded-xl border-2 transition-all flex justify-between items-center ${selectedOldAttendance?.id === rep.id ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
-                    >
-                      <div>
-                        <div className="font-black text-slate-800 text-sm mb-1">{rep.title || 'Untitled Session'}</div>
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <Clock size={12} />
-                          {new Date(rep.ts).toLocaleDateString('en-GB')} {new Date(rep.ts).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                        </div>
-                      </div>
-                      <div className="text-[10px] font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-lg uppercase whitespace-nowrap ml-2">
-                        {targetClassName}
-                      </div>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-            {selectedOldAttendance && (
-               <div className="mt-4 p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-800 text-xs font-bold flex gap-3 items-start">
-                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                 <p>Relaunching this session will generate a new live access code. Any students who check in will be ADDED to the existing report list. Prevously present students will remain present.</p>
-               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-3">
-        <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
-        <button
-          onClick={start}
-          disabled={(attendanceMode === 'new' && (!sessionName || assignedClasses.length === 0)) || (attendanceMode === 'relaunch' && !selectedOldAttendance)}
-          className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
-        >
-          {attendanceMode === 'relaunch' ? 'Relaunch Session' : 'Start Session'}
-        </button>
-      </div>
-    </div>
-  );
-
   if (category === null) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <button
           onClick={() => setCategory('sync')}
-          className="bg-blue-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
+          className="bg-blue-600 text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center"
         >
-          <div className="p-3 bg-white/10 rounded-2xl"><Users size={40} /></div>
-          <span className="text-2xl font-black">Synchronous</span>
-          <span className="text-xs font-medium opacity-80 leading-relaxed">Launch a live quiz for students to take right now together.</span>
+          <div className="p-4 bg-white/10 rounded-2xl"><Users size={48} /></div>
+          <span className="text-3xl font-black">Synchronous</span>
+          <span className="text-sm font-medium opacity-80">Launch a live quiz for students to take right now.</span>
         </button>
         <button
           onClick={() => setCategory('async')}
-          className="bg-orange-500 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
+          className="bg-orange-500 text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center"
         >
-          <div className="p-3 bg-white/10 rounded-2xl"><Clock size={40} /></div>
-          <span className="text-2xl font-black">Asynchronous</span>
-          <span className="text-xs font-medium opacity-80 leading-relaxed">Schedule quizzes for students to complete on their own time.</span>
-        </button>
-        <button
-          onClick={() => setCategory('attendance')}
-          className="bg-green-500 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
-        >
-          <div className="p-3 bg-white/10 rounded-2xl"><UserCheck size={40} /></div>
-          <span className="text-2xl font-black">Attendance</span>
-          <span className="text-xs font-medium opacity-80 leading-relaxed">Instantly capture secure, device-verified student check-ins.</span>
+          <div className="p-4 bg-white/10 rounded-2xl"><Clock size={48} /></div>
+          <span className="text-3xl font-black">Asynchronous</span>
+          <span className="text-sm font-medium opacity-80">Schedule quizzes for students to complete on their own time.</span>
         </button>
       </div>
     );
@@ -1108,22 +883,20 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         )) : [
           { id: 'async_quiz', name: 'Standard Quiz', icon: <FileText size={48} />, color: 'bg-blue-600', desc: 'Schedule a standard quiz.' },
           { id: 'async_video', name: 'Video Quiz', icon: <Video size={48} />, color: 'bg-purple-600', desc: 'Schedule a video quiz with timestamped questions.' }
-        ].map(c => {
-          return (
-            <button
-              key={c.id} onClick={() => setType(c.id)}
-              className={`${c.color} text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center`}
-            >
-              <div className="p-4 bg-white/10 rounded-2xl">{c.icon}</div>
-              <span className="text-3xl font-black">{c.name}</span>
-              <span className="text-sm font-medium opacity-80">{c.desc}</span>
-            </button>
-          )
-        })}
+        ].map(c => (
+          <button
+            key={c.id} onClick={() => setType(c.id)}
+            className={`${c.color} text-white p-12 rounded-[3rem] shadow-xl flex flex-col items-center gap-6 transition-transform hover:scale-[1.03] active:scale-95 text-center`}
+          >
+            <div className="p-4 bg-white/10 rounded-2xl">{c.icon}</div>
+            <span className="text-3xl font-black">{c.name}</span>
+            <span className="text-sm font-medium opacity-80">{c.desc}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
-} // Close LaunchTab
+}
 
 function QuizzesTab({ quizzes, setQuizzes, user }) {
   const [edit, setEdit] = useState(null);
@@ -1223,10 +996,6 @@ function QuizEditor({ quiz, onSave, onCancel }) {
 
   const handleImageUpload = async (idx, file) => {
     if (!file) return;
-    if (file.size > 1 * 1024 * 1024) {
-      alert(`Image too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Please upload an image under 1 MB.`);
-      return;
-    }
     setUploadingImageFor(idx);
     try {
       const fileExt = file.name.split('.').pop();
@@ -1490,21 +1259,8 @@ function QuizEditor({ quiz, onSave, onCancel }) {
 
 function ResultsTab({ session, responses, onEnd, roomCode }) {
   const [showQR, setShowQR] = useState(true);
-  const [attendanceToken, setAttendanceToken] = useState(() => Date.now().toString());
-
-  useEffect(() => {
-    if (session?.type !== 'attendance') return;
-    const interval = setInterval(() => {
-      setAttendanceToken(Date.now().toString());
-    }, 10000); // 10 seconds
-    return () => clearInterval(interval);
-  }, [session?.type]);
-
-  const joinUrl = session?.type === 'attendance'
-    ? `${window.location.href.split('?')[0]}?room=${roomCode}&token=${attendanceToken}`
-    : `${window.location.href.split('?')[0]}?room=${roomCode}`;
-    
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(joinUrl)}`;
+  const joinUrl = `${window.location.href.split('?')[0]}?room=${roomCode}`;
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(joinUrl)}`;
 
   if (!session) return <div className="text-center py-40 text-slate-300 font-black uppercase tracking-widest">No Active Sessions</div>;
 
@@ -1542,9 +1298,9 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
     <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border flex flex-col min-h-[70vh]">
       <div className="bg-slate-900 text-white p-8 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0 z-10">
         <div>
-          <h2 className="text-2xl font-black text-white">{session.quiz?.title || session.title || 'Live Session'}</h2>
+          <h2 className="text-2xl font-black">{session.quiz.title}</h2>
           <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
-            Live • {session.type === 'teacher_paced' ? 'Teacher Paced' : session.type === 'attendance' ? 'Attendance Mode' : 'Student Paced'} • {responses.length} Participants
+            Live • {session.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'} • {responses.length} Participants
           </p>
         </div>
         <div className="flex gap-4">
@@ -1556,54 +1312,17 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
       </div>
 
       {showQR && (
-        <div className="p-10 bg-blue-50 border-b flex flex-col items-center justify-center gap-8 text-center animate-in slide-in-from-top duration-300 shrink-0 z-0 relative">
-          {session.type === 'attendance' && (
-            <div className="bg-red-100 text-red-600 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-[-1rem] animate-pulse">
-              <Activity size={14} /> Dynamic QR Active (Refreshes every 10s)
-            </div>
-          )}
-          <img src={qr} className="w-56 h-56 border-8 border-white rounded-[2rem] shadow-2xl" />
+        <div className="p-10 bg-blue-50 border-b flex flex-col md:flex-row items-center justify-center gap-12 text-center md:text-left animate-in slide-in-from-top duration-300 shrink-0 z-0 relative">
+          <img src={qr} className="w-44 h-44 border-8 border-white rounded-[2rem] shadow-2xl" />
           <div>
-            <h3 className="text-3xl font-black text-slate-800 mb-2">Join {session.type === 'attendance' ? 'Attendance' : 'Class'}</h3>
-            <p className="text-slate-500 mb-6 font-medium max-w-sm mx-auto">
-              Scan the code to join.
-              {session.type === 'attendance' && " This QR refreshes continuously for security to prevent proxy scanning."}
-            </p>
-            {session.type !== 'attendance' && (
-              <div className="text-4xl font-black tracking-[0.3em] text-blue-600 bg-white px-8 py-3 rounded-2xl shadow-inner border-2 border-blue-100 inline-block">{roomCode}</div>
-            )}
+            <h3 className="text-3xl font-black text-slate-800 mb-2">Join Class</h3>
+            <p className="text-slate-500 mb-6 font-medium max-w-xs">Have students scan the code or enter room code on mobile devices.</p>
+            <div className="text-4xl font-black tracking-[0.3em] text-blue-600 bg-white px-8 py-3 rounded-2xl shadow-inner border-2 border-blue-100 inline-block">{roomCode}</div>
           </div>
         </div>
       )}
 
-      {session.type === 'attendance' ? (
-        <div className="flex-1 overflow-x-auto p-6 md:p-12 relative">
-           <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-             <UserCheck size={400} />
-           </div>
-           <div className="max-w-4xl mx-auto relative z-10">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {responses.map((r, i) => (
-                  <div key={i} className="bg-white p-4 rounded-3xl border-2 border-green-100 shadow-sm shadow-green-50 flex flex-col items-center text-center animate-in zoom-in duration-300">
-                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mb-3">
-                      <CheckCircle size={24} />
-                    </div>
-                    <div className="font-black text-slate-800 text-sm leading-tight mb-1">{r.student_name}</div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{r.student_id}</div>
-                  </div>
-                ))}
-              </div>
-              {responses.length === 0 && (
-                <div className="text-center py-20">
-                  <div className="w-20 h-20 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-6">
-                     <QrCode size={32} />
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-300">Waiting for check-ins...</h3>
-                </div>
-              )}
-           </div>
-        </div>
-      ) : session.type === 'teacher_paced' ? (
+      {session.type === 'teacher_paced' ? (
         <TeacherPacedDashboard
           session={session}
           responses={responses}
@@ -1813,53 +1532,7 @@ function ReportsTab({ reports, allReports, classes }) {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [openReport, setOpenReport] = useState(null); // for detail view
-  const [typeFilter, setTypeFilter] = useState({
-    teacher_paced: true,
-    student_paced: true,
-    attendance: true
-  });
-  const [hiddenSessions, setHiddenSessions] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('ClassLabX_HiddenSessions')) || []; }
-    catch { return []; }
-  });
-  // Repair state for old sessions
-  const [renamingReport, setRenamingReport] = useState(null); // report being renamed
-  const [renameValue, setRenameValue] = useState('');
-  const [assigningClassReport, setAssigningClassReport] = useState(null); // report being class-assigned
-  const [assignClassValue, setAssignClassValue] = useState('');
-  const [localReportPatch, setLocalReportPatch] = useState({}); // id -> {title?, assigned_classes?}
-
-  const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
-
-  const handleRename = async (r) => {
-    const newTitle = renameValue.trim();
-    if (!newTitle) return;
-    await supabase.from('reports').update({ title: newTitle }).eq('id', r.id);
-    setLocalReportPatch(prev => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), title: newTitle } }));
-    setRenamingReport(null);
-    setRenameValue('');
-  };
-
-  const handleAssignClass = async (r) => {
-    if (!assignClassValue) return;
-    const newClasses = [assignClassValue];
-    await supabase.from('reports').update({ assigned_classes: newClasses }).eq('id', r.id);
-    setLocalReportPatch(prev => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), assigned_classes: newClasses } }));
-    setAssigningClassReport(null);
-    setAssignClassValue('');
-  };
-
-  const toggleHidden = (id) => {
-    setHiddenSessions(prev => {
-      const newHidden = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
-      localStorage.setItem('ClassLabX_HiddenSessions', JSON.stringify(newHidden));
-      return newHidden;
-    });
-  };
-
-  const deleteReport = async (id, roomId, isAsync) => { /* implementation for deleteReport */ };
   const [selectedForEmail, setSelectedForEmail] = useState([]);
-
 
   useEffect(() => {
     if (openReport) setSelectedForEmail([]);
@@ -1868,66 +1541,40 @@ function ReportsTab({ reports, allReports, classes }) {
   const exportToExcel = (report) => {
     try {
       const wb = XLSX.utils.book_new();
-      const safeTitle = (report.title || 'Report').replace(/[\\/*?[\]:]/g, '').replace(/\s+/g, '_');
-      const typeLabel = report.type === 'teacher_paced' ? 'Teacher Paced' : report.type === 'attendance' ? 'Attendance' : 'Student Paced';
-
       const overviewData = [
-        ['Report Title', report.title || 'Untitled'],
+        ['Report Title', report.title],
         ['Date', new Date(report.ts).toLocaleString()],
-        ['Type', typeLabel],
-        ['Total Participants', (report.responses || []).length],
-        ['Total Questions', (report.questions || []).length],
+        ['Type', report.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'],
+        ['Total Participants', report.responses?.length || 0],
+        ['Total Questions', report.questions?.length || 0],
         []
       ];
-      const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
-      XLSX.utils.book_append_sheet(wb, wsOverview, 'Overview');
-
-      if (report.type === 'attendance') {
-        // Attendance: just show who attended
-        const attHeaders = ['#', 'Student ID', 'Student Name'];
-        const attRows = [attHeaders];
-        (report.responses || [])
-          .sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''))
-          .forEach((r, i) => { attRows.push([i + 1, r.student_id || '', r.student_name || 'Anonymous']); });
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), 'Attendees');
-      } else {
-        // Quiz: full scores + per-question breakdown
-        const questions = report.questions || [];
-        const headers = [
-          'Student ID', 'Student Name', 'Overall Score (%)',
-          ...questions.map((_, i) => `Q${i + 1} Answer`),
-          ...questions.map((_, i) => `Q${i + 1} Correct?`)
-        ];
-        const resultsData = [headers];
-        (report.responses || []).forEach(r => {
-          let correctCount = 0;
-          const ansRow = [];
-          const isCorrectRow = [];
-          questions.forEach((q, qIdx) => {
-            const rawAns = r.answers?.[qIdx];
-            let formattedAns = rawAns;
-            if (rawAns !== undefined && q.type !== 'sa') {
-              formattedAns = q.options && q.type === 'mc'
-                ? String.fromCharCode(65 + Number(rawAns))
-                : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
-            }
-            ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
-            const isOk = rawAns !== undefined && (
-              q.type === 'sa'
-                ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
-                : (String(rawAns) === String(q.correct))
-            );
-            isCorrectRow.push(isOk ? 'Yes' : 'No');
-            if (isOk) correctCount++;
-          });
-          const score = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 'N/A';
-          resultsData.push([r.student_id, r.student_name, score, ...ansRow, ...isCorrectRow]);
+      const headers = ['Student ID', 'Student Name', 'Overall Score (%)', ...report.questions.map((_, i) => `Q${i + 1} Answer`), ...report.questions.map((_, i) => `Q${i + 1} Correct?`)];
+      const resultsData = [headers];
+      (report.responses || []).forEach(r => {
+        let correctCount = 0;
+        const ansRow = [];
+        const isCorrectRow = [];
+        report.questions.forEach((q, qIdx) => {
+          const rawAns = r.answers?.[qIdx];
+          let formattedAns = rawAns;
+          if (rawAns !== undefined && q.type !== 'sa') {
+            formattedAns = q.options && q.type === 'mc' ? String.fromCharCode(65 + Number(rawAns)) : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
+          }
+          ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
+          const isOk = rawAns !== undefined && (q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct)));
+          isCorrectRow.push(isOk ? 'Yes' : 'No');
+          if (isOk) correctCount++;
         });
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resultsData), 'Student Results');
-      }
-
-      XLSX.writeFile(wb, `ClassLabX_Report_${safeTitle}_${new Date(report.ts).getTime()}.xlsx`);
-    } catch (e) { alert('Error exporting to Excel: ' + e.message); }
+        const score = Math.round((correctCount / report.questions.length) * 100);
+        resultsData.push([r.student_id, r.student_name, score, ...ansRow, ...isCorrectRow]);
+      });
+      const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
+      const wsResults = XLSX.utils.aoa_to_sheet(resultsData);
+      XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
+      XLSX.utils.book_append_sheet(wb, wsResults, "Student Results");
+      XLSX.writeFile(wb, `ClassLabX_Report_${report.title.replace(/\s+/g, '_')}_${new Date(report.ts).getTime()}.xlsx`);
+    } catch (e) { alert("Error exporting to Excel: " + e.message); }
   };
 
   // Helper to compute student scores for a report
@@ -2026,8 +1673,8 @@ function ReportsTab({ reports, allReports, classes }) {
                   <th className="p-4 border-b border-slate-200 z-10">Student Name</th>
                   <th className="p-4 border-b border-slate-200">ID</th>
                   {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
-                  {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
-                  {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Actions</th>}
+                  <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>
+                  <th className="p-4 border-b border-slate-200 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
@@ -2056,20 +1703,16 @@ function ReportsTab({ reports, allReports, classes }) {
                           {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
                         </td>
                       ))}
-                      {openReport.type !== 'attendance' && (
-                        <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
-                      )}
-                      {openReport.type !== 'attendance' && (
-                        <td className="p-4 text-center">
-                          <a
-                            href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
-                            title={hasEmail ? "Send Email" : "No email address found"}
-                          >
-                            Email
-                          </a>
-                        </td>
-                      )}
+                      <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
+                      <td className="p-4 text-center">
+                        <a
+                          href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
+                          title={hasEmail ? "Send Email" : "No email address found"}
+                        >
+                          Email
+                        </a>
+                      </td>
                     </tr>
                   );
                 })}
@@ -2093,38 +1736,24 @@ function ReportsTab({ reports, allReports, classes }) {
     );
   }
 
-  const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles, attendanceOnly = false) => {
+  const exportGradebook = (cls, assignedReps, matrix) => {
     try {
       const wb = XLSX.utils.book_new();
 
-      // Separate out quizzes from attendance
-      const quizTitles = attendanceOnly ? [] : Array.from(new Set(assignedReps.filter(r => r.type !== 'attendance').map(r => r.title)));
+      // Group reports by unique titles for column headers
+      const uniqueQuizTitles = Array.from(new Set(assignedReps.map(r => r.title)));
 
-      const headers = ['Student ID', 'Student Name'];
-      if (!attendanceOnly) headers.push('Average Quiz Score (%)');
-      if (hasAttendance) headers.push('Overall Attendance (%)');
-      if (!attendanceOnly) headers.push(...quizTitles);
-      if (hasAttendance) headers.push(...attendanceTitles);
-
+      const headers = ['Student ID', 'Student Name', 'Average Score (%)', ...uniqueQuizTitles];
       const rows = [headers];
       matrix.forEach(row => {
-        const studentData = [row.student_id, row.name];
-        if (!attendanceOnly) studentData.push(row.average);
-        if (hasAttendance) studentData.push(row.attendanceTotal);
-        
-        if (!attendanceOnly) quizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
-        if (hasAttendance) {
-          attendanceTitles.forEach(title => { studentData.push(row.attendanceRecords[title] ? 'Present' : 'Absent'); });
-        }
-        
+        const studentData = [row.student_id, row.name, row.average];
+        uniqueQuizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
         rows.push(studentData);
       });
       const ws = XLSX.utils.aoa_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, attendanceOnly ? "Attendance" : "Gradebook");
-      XLSX.writeFile(wb, attendanceOnly
-        ? `ClassLabX_Attendance_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`
-        : `ClassLabX_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
-    } catch (e) { alert("Error exporting: " + e.message); }
+      XLSX.utils.book_append_sheet(wb, ws, "Gradebook");
+      XLSX.writeFile(wb, `ClassLabX_Gradebook_${cls.name.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
+    } catch (e) { alert("Error exporting Gradebook: " + e.message); }
   };
 
   // Gradebook Logic
@@ -2132,50 +1761,38 @@ function ReportsTab({ reports, allReports, classes }) {
   let assignedReports = [];
   let gradeMatrix = [];
 
-  if ((view === 'gradebook' || view === 'attendance') && selectedClassId) {
+  if (view === 'gradebook' && selectedClassId) {
     gradebookClass = classes.find(c => c.id === selectedClassId);
     if (gradebookClass) {
       const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
 
       assignedReports = (allReports || reports).filter(r => {
-        // Apply any local repair patches (from the Assign-Class UI in Session History)
-        const effectiveClasses = localReportPatch[r.id]?.assigned_classes ?? (r.assigned_classes || []);
+        // Automatically include if explicitly assigned
+        if (r.assigned_classes?.includes(selectedClassId)) return true;
 
-        // Include if explicitly assigned (in DB or via local patch)
-        if (effectiveClasses.includes(selectedClassId)) return true;
-
-        // For reports with no assigned_classes (old format before the fix)
-        if (effectiveClasses.length === 0) {
-          // Determine which class the session belongs to by checking students who responded
-          const responderIds = (r.responses || []).map(resp => String(resp.student_id).trim().toLowerCase());
-          if (responderIds.length === 0) return false; // can't determine class if nobody responded
-          
-          const classIds = classStudentIds.map(id => String(id).trim().toLowerCase());
-          return responderIds.some(id => classIds.includes(id));
+        // Also include 'Open' quizzes (none assigned) if any student from this class participated
+        if (!r.assigned_classes || r.assigned_classes.length === 0) {
+          return (r.responses || []).some(resp => classStudentIds.includes(resp.student_id));
         }
 
         return false;
       });
-      // Separation of Quiz Reports and Attendance Reports
-      const quizReports = assignedReports.filter(r => r.type !== 'attendance');
-      const attendanceReports = assignedReports.filter(r => r.type === 'attendance');
-
-      // We want to group by Quiz/Attendance Title
-      const uniqueQuizTitles = Array.from(new Set(quizReports.map(r => r.title)));
-      const uniqueAttendanceTitles = Array.from(new Set(attendanceReports.map(r => r.title)));
+      // We want to group by Quiz Title in the gradebook to handle multiple attempts
+      const uniqueQuizTitles = Array.from(new Set(assignedReports.map(r => r.title)));
 
       gradeMatrix = (gradebookClass.students || []).map(stu => {
-        const scores = {}; // Keys: Quiz Title, Values: HIGHEST score
-        const attendanceRecords = {}; // Keys: Attendance Title, Values: Boolean (Present/Absent)
+        const scores = {}; // Keys will be Quiz Title, Values will be HIGHEST score
 
-        // Check if there are other students in this class with the exact same ID
+        // Check if there are other students in this cohort with the exact same ID
         const hasDuplicateId = (gradebookClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
 
-        // Process Quizzes
-        quizReports.forEach(rep => {
+        assignedReports.forEach(rep => {
           const stuResp = (rep.responses || []).find(res => {
             if (res.student_id !== stu.student_id) return false;
-            if (hasDuplicateId) return res.student_name === stu.name;
+            // If the ID is duplicated in the cohort, we MUST also match the name exactly to avoid assigning scores to the wrong person.
+            if (hasDuplicateId) {
+              return res.student_name === stu.name;
+            }
             return true;
           });
           if (stuResp) {
@@ -2188,29 +1805,15 @@ function ReportsTab({ reports, allReports, classes }) {
               }
             });
             const score = Math.round((correctCount / rep.questions.length) * 100);
+
+            // Only keep the highest score for this specific quiz title
             if (scores[rep.title] === undefined || score > scores[rep.title]) {
               scores[rep.title] = score;
             }
           }
         });
 
-        // Process Attendance
-        attendanceReports.forEach(rep => {
-          const stuResp = (rep.responses || []).find(res => {
-            if (res.student_id !== stu.student_id) return false;
-            // Name matching check for duplicates happens on submission side for attendance, but just to be safe:
-            if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
-              return res.student_name === stu.name;
-            }
-            return true;
-          });
-          // If they have ANY response in this attendance session, they are present
-          if (stuResp) {
-             attendanceRecords[rep.title] = true;
-          }
-        });
-
-        // Calculate Averages
+        // Calculate average based on the highest scores of unique quizzes taken
         let totalScore = 0;
         let attemptCount = 0;
         Object.values(scores).forEach(highestScore => {
@@ -2218,17 +1821,7 @@ function ReportsTab({ reports, allReports, classes }) {
           attemptCount++;
         });
 
-        const attendanceTotal = uniqueAttendanceTitles.length > 0 
-          ? Math.round((Object.keys(attendanceRecords).length / uniqueAttendanceTitles.length) * 100) 
-          : 0;
-
-        return { 
-          ...stu, 
-          scores, 
-          average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0,
-          attendanceRecords,
-          attendanceTotal
-        };
+        return { ...stu, scores, average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0 };
       }).sort((a, b) => a.name.localeCompare(b.name));
     }
   }
@@ -2237,35 +1830,18 @@ function ReportsTab({ reports, allReports, classes }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-[600px] mx-auto overflow-x-auto whitespace-nowrap custom-scroll">
-        <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
-        <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Class Gradebook</button>
-        <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
+      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-sm mx-auto">
+        <button onClick={() => setView('history')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
+        <button onClick={() => setView('gradebook')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all uppercase tracking-widest ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Cohort Gradebook</button>
       </div>
 
       {view === 'history' ? (
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row gap-4 mb-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
-            <div className="flex flex-wrap gap-2 items-center">
-              {[
-                { id: 'teacher_paced', label: 'Sync', icon: <BarChart2 size={14} />, color: 'purple' },
-                { id: 'student_paced', label: 'Async', icon: <BarChart2 size={14} />, color: 'blue' },
-                { id: 'attendance', label: 'Attendance', icon: <UserCheck size={14} />, color: 'green' }
-              ].map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setTypeFilter(prev => ({ ...prev, [f.id]: !prev[f.id] }))}
-                  className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-colors border-2 ${typeFilter[f.id] ? `bg-${f.color}-100 text-${f.color}-700 border-${f.color}-200` : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
-                >
-                  {f.icon} {f.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-4">
+              <div className="text-slate-400 font-bold text-sm whitespace-nowrap">{reports.length} Session{reports.length !== 1 ? 's' : ''}</div>
             </div>
-          </div>
-          <div className="flex justify-between items-center px-2">
-             <div className="text-slate-400 font-bold text-xs uppercase tracking-widest">{reports.filter(r => !hiddenSessions.includes(r.id)).length} Visible Sessions</div>
-             <button onClick={() => setHiddenSessions([])} className="text-[10px] uppercase font-black tracking-widest text-slate-400 hover:text-blue-500 underline underline-offset-4">Reset Hidden</button>
           </div>
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto custom-scroll">
@@ -2281,68 +1857,21 @@ function ReportsTab({ reports, allReports, classes }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reports
-                    .filter(r => !hiddenSessions.includes(r.id))
-                    .filter(r => typeFilter[r.type])
-                    .filter(r => !searchFilter || (r.title || '').toLowerCase().includes(searchFilter.toLowerCase()))
-                    .map(r => {
-                      const effectiveTitle = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
-                      const effectiveClasses = getEffectiveField(r, 'assigned_classes') || [];
-                      const assignedClassName = effectiveClasses.length > 0 ? (classes.find(c => c.id === effectiveClasses[0])?.name) : null;
-                      const isUnlinkedAttendance = r.type === 'attendance' && effectiveClasses.length === 0;
-                      return (
+                  {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).map(r => (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 text-center align-middle">
-                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                          {r.type === 'attendance' ? <UserCheck size={16} /> : <BarChart2 size={16} />}
+                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                          <BarChart2 size={16} />
                         </div>
                       </td>
                       <td className="p-3 align-middle">
-                        {renamingReport === r.id ? (
-                          <div className="flex gap-2 items-center">
-                            <input
-                              autoFocus
-                              className="flex-1 border-2 border-blue-300 rounded-lg px-2 py-1 text-sm font-bold text-slate-700 focus:outline-blue-500"
-                              value={renameValue}
-                              onChange={e => setRenameValue(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') handleRename(r); if (e.key === 'Escape') { setRenamingReport(null); setRenameValue(''); } }}
-                            />
-                            <button onClick={() => handleRename(r)} className="text-blue-600 font-black text-xs px-2 py-1 bg-blue-50 rounded-lg hover:bg-blue-100">Save</button>
-                            <button onClick={() => { setRenamingReport(null); setRenameValue(''); }} className="text-slate-400 font-black text-xs px-2 py-1 bg-slate-50 rounded-lg hover:bg-slate-100">✕</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="font-black text-slate-800 text-sm truncate max-w-[160px] sm:max-w-xs">{effectiveTitle}</div>
-                            <button onClick={() => { setRenamingReport(r.id); setRenameValue(effectiveTitle === 'Attendance Session' ? '' : effectiveTitle); }} className="text-slate-300 hover:text-blue-400 transition-colors shrink-0" title="Rename">
-                              <Pencil size={12} />
-                            </button>
-                          </div>
-                        )}
-                        {assignedClassName && (
-                          <div className="text-[9px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{assignedClassName}</div>
-                        )}
-                        {isUnlinkedAttendance && (
-                          assigningClassReport === r.id ? (
-                            <div className="flex gap-2 items-center mt-1">
-                              <select autoFocus className="text-xs border border-orange-300 rounded-lg px-2 py-1 font-bold text-slate-700" value={assignClassValue} onChange={e => setAssignClassValue(e.target.value)}>
-                                <option value="">-- Select Class --</option>
-                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                              </select>
-                              <button onClick={() => handleAssignClass(r)} className="text-orange-600 font-black text-xs px-2 py-1 bg-orange-50 rounded-lg hover:bg-orange-100">Link</button>
-                              <button onClick={() => { setAssigningClassReport(null); setAssignClassValue(''); }} className="text-slate-400 text-xs px-2 py-1 bg-slate-50 rounded-lg hover:bg-slate-100">✕</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => { setAssigningClassReport(r.id); setAssignClassValue(''); }} className="mt-1 text-[9px] text-orange-500 font-black uppercase tracking-widest hover:text-orange-700 flex items-center gap-1">
-                              ⚠ Unlinked — click to assign class
-                            </button>
-                          )
-                        )}
+                        <div className="font-black text-slate-800 text-sm truncate max-w-[200px] sm:max-w-xs">{r.title}</div>
                       </td>
                       <td className="p-3 align-middle">
                         <div className="text-xs font-bold text-slate-500">
-                          {new Date(r.ts).toLocaleDateString('en-GB')} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(r.ts).toLocaleDateString()} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : r.type === 'attendance' ? 'Attendance' : 'Student Paced'}</div>
+                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : 'Student Paced'}</div>
                       </td>
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {(r.responses || []).length}
@@ -2350,17 +1879,13 @@ function ReportsTab({ reports, allReports, classes }) {
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {(r.questions || []).length}
                       </td>
-                      <td className="p-3 text-right align-middle pr-6 space-x-2">
-                        <button onClick={() => toggleHidden(r.id)} className="px-3 py-2 inline-flex bg-slate-50 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg font-black text-xs transition-all items-center gap-2" title="Hide Session">
-                          <EyeOff size={14} />
-                        </button>
+                      <td className="p-3 text-right align-middle pr-6">
                         <button onClick={() => setOpenReport(r)} className="px-4 py-2 inline-flex bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg font-black text-xs transition-all items-center gap-2">
                           <Eye size={14} /> Open
                         </button>
                       </td>
                     </tr>
-                    );
-                    })}
+                  ))}
                   {reports.filter(r => !searchFilter || r.title.toLowerCase().includes(searchFilter.toLowerCase())).length === 0 && (
                     <tr>
                       <td colSpan="6" className="p-16 text-center text-slate-300 font-bold italic border-b-0">
@@ -2373,25 +1898,20 @@ function ReportsTab({ reports, allReports, classes }) {
             </div>
           </div>
         </div>
-      ) : view === 'gradebook' ? (
+      ) : (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Class</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Cohort</label>
               <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
                 <option value="">-- Choose Class --</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             {gradebookClass && (
-              <div className="flex gap-2">
-                <button onClick={() => {
-                   const qs = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
-                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, false, []);
-                }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
-                  <Download size={18} /> Export Gradebook
-                </button>
-              </div>
+              <button onClick={() => exportGradebook(gradebookClass, assignedReports, gradeMatrix)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
+                <Download size={18} /> Export Gradebook
+              </button>
             )}
           </div>
           {!selectedClassId ? (
@@ -2403,34 +1923,26 @@ function ReportsTab({ reports, allReports, classes }) {
                   <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
                     <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
-                    <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average Score</th>
-                    
-                    {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
-                      <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
+                    <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average</th>
+                    {Array.from(new Set(assignedReports.map(r => r.title))).map(title => (
+                      <th key={title} className="p-4 border-b border-slate-200 min-w-[120px]">
                         <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
-                        <div className="text-slate-300 font-medium text-[8px] mt-1">Quiz Best Score</div>
+                        <div className="text-slate-300 font-medium text-[8px] mt-1">Best Score</div>
                       </th>
                     ))}
-
-                    {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No quizzes recorded yet.</th>}
+                    {assignedReports.length === 0 && <th className="p-4 border-b border-slate-200">No activities recorded yet.</th>}
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
                   {gradeMatrix.map((row, i) => (
                     <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs bg-white" title={row.name}>
-                        <div className="flex items-center gap-2">
-                           {row.name}
-                        </div>
-                      </td>
+                      <td className="p-4 sticky left-0 bg-white z-10 whitespace-nowrap truncate max-w-xs" title={row.name}>{row.name}</td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
-                      <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-slate-400'}`}>{row.average > 0 ? `${row.average}%` : '-'}</td>
-                      
-                      {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
-                        <td key={`q-${title}`} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
+                      <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{row.average}%</td>
+                      {Array.from(new Set(assignedReports.map(r => r.title))).map(title => (
+                        <td key={title} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
                       ))}
-
-                      {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <td className="p-4"></td>}
+                      {assignedReports.length === 0 && <td className="p-4"></td>}
                     </tr>
                   ))}
                   {gradeMatrix.length === 0 && (<tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
@@ -2439,107 +1951,7 @@ function ReportsTab({ reports, allReports, classes }) {
             </div>
           ) : null}
         </div>
-      ) : view === 'attendance' ? (
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div className="flex-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Class</label>
-              <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
-                <option value="">-- Choose Class --</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            {gradebookClass && (
-              <div className="flex gap-2">
-                {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
-                  <a
-                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=⚠ Attendance Warning – Immediate Action Required&body=Dear Student,%0D%0A%0D%0AThis is an official notification from your course instructor.%0D%0A%0D%0AOur records show that your current attendance rate has dropped BELOW the required minimum of 75%.%0D%0A%0D%0APlease contact your instructor IMMEDIATELY to discuss your attendance record and any possible remediation.`}
-                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95"
-                  >
-                    <AlertCircle size={18} /> Email At-Risk
-                  </a>
-                )}
-                <button onClick={() => {
-                   const as = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)));
-                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as, true);
-                }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
-                  <Download size={18} /> Export Attendance
-                </button>
-              </div>
-            )}
-          </div>
-          {!selectedClassId ? (
-            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">Select a class above to view the attendance record.</div>
-          ) : gradebookClass ? (
-            <div className="overflow-x-auto custom-scroll border rounded-[2rem]">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
-                    <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
-                    <th className="p-4 border-b border-slate-200 w-32">ID</th>
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && (
-                      <th className="p-4 border-b border-slate-200 text-center text-green-600 w-28">Overall Attendance</th>
-                    )}
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)))
-                      .sort((a, b) => {
-                         const repA = assignedReports.find(r => r.title === a && r.type === 'attendance');
-                         const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
-                         return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
-                      })
-                      .map(title => {
-                       const rep = assignedReports.find(r => r.title === title && r.type === 'attendance');
-                       return (
-                         <th key={title} className="p-4 border-b border-slate-200 min-w-[120px] text-center">
-                           <div className="truncate w-full max-w-[150px] text-slate-700" title={title}>{title}</div>
-                           <div className="text-slate-400 font-black text-[8px] mt-1">{new Date(rep?.ts).toLocaleDateString('en-GB')} {new Date(rep?.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                         </th>
-                       )
-                    })}
-                    {assignedReports.filter(r => r.type === 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No attendance sessions recorded yet.</th>}
-                  </tr>
-                </thead>
-                <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                  {gradeMatrix.map((row, i) => {
-                    const hasAttendance = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0;
-                    const isAtRisk = hasAttendance && row.attendanceTotal < 75;
-                    return (
-                    <tr key={i} className={`hover:bg-blue-50/30 transition-colors ${isAtRisk ? 'bg-red-50/20' : ''}`}>
-                      <td className={`p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs ${isAtRisk ? 'bg-red-50/40 text-red-700 font-black' : 'bg-white'}`} title={row.name}>
-                        <div className="flex items-center gap-2">
-                           {row.name}
-                           {isAtRisk && <span className="bg-red-500 text-white px-2 py-0.5 rounded-md text-[8px] uppercase tracking-widest font-black shrink-0 shadow-sm animate-pulse">At Risk</span>}
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
-                      
-                      {hasAttendance && (
-                        <td className={`p-4 text-center font-black ${row.attendanceTotal >= 75 ? 'text-green-600' : 'text-red-500'}`}>
-                          {row.attendanceTotal}%
-                        </td>
-                      )}
-
-                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)))
-                         .sort((a, b) => {
-                           const repA = assignedReports.find(r => r.title === a && r.type === 'attendance');
-                           const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
-                           return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
-                         })
-                         .map(title => (
-                         <td key={`a-${title}`} className={`p-4 font-black text-center ${row.attendanceRecords[title] ? 'text-green-500 bg-green-50/10' : 'text-red-400 bg-red-50/30'}`}>
-                           {row.attendanceRecords[title] ? 'Present' : 'Absent'}
-                         </td>
-                      ))}
-
-                      {assignedReports.filter(r => r.type === 'attendance').length === 0 && <td className="p-4"></td>}
-                    </tr>
-                  )})}
-                  {gradeMatrix.length === 0 && (<tr><td colSpan={10} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -2549,19 +1961,9 @@ function ReportsTab({ reports, allReports, classes }) {
 //               STUDENT PORTAL
 // ==========================================
 function StudentPortal({ setRole, initialRoom }) {
-  // Initialize from cache if refresh happened mid-session
-  const [cachedState] = useState(() => {
-    try {
-      const stored = localStorage.getItem('ClassLabX_StudentState');
-      if (stored) return JSON.parse(stored);
-    } catch(e) {}
-    return null;
-  });
-
-  const [room, setRoom] = useState(cachedState?.room || initialRoom);
-  const [sid, setSid] = useState(cachedState?.sid || '');
-  const [name, setName] = useState(cachedState?.name || ''); 
-  const [joined, setJoined] = useState(cachedState?.joined || false);
+  const [room, setRoom] = useState(initialRoom);
+  const [sid, setSid] = useState('');
+  const [name, setName] = useState(''); // Will be auto-filled if restricted
 
   // Stable random ID for open rooms
   const [localId] = useState(() => Math.random().toString(36).substring(2, 9));
@@ -2572,36 +1974,11 @@ function StudentPortal({ setRole, initialRoom }) {
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [tempSession, setTempSession] = useState(null); // hold room data before full join
 
+  const [joined, setJoined] = useState(false);
   const [session, setSession] = useState(null);
   const [quizEnded, setQuizEnded] = useState(false);
   const [answers, setAnswers] = useState({});
   const [idx, setIdx] = useState(0);
-  const [attendanceSuccess, setAttendanceSuccess] = useState(false);
-  const [roomType, setRoomType] = useState('');
-  const [quizStartedAt, setQuizStartedAt] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(null); // seconds remaining, null = no timer
-
-  // Keep cache synced if they successfully join
-  useEffect(() => {
-    if (joined && room && (sid || name)) {
-      localStorage.setItem('ClassLabX_StudentState', JSON.stringify({ room, sid, name, joined }));
-    }
-  }, [joined, room, sid, name]);
-
-  const clearStudentSession = () => {
-    localStorage.removeItem('ClassLabX_StudentState');
-    setRole(null);
-  };
-
-  useEffect(() => {
-    if (room?.trim().length >= 4) {
-      supabase.from('rooms').select('type').eq('id', room.toUpperCase()).single().then(res => {
-        if (res.data) setRoomType(res.data.type);
-      });
-    } else {
-      setRoomType('');
-    }
-  }, [room]);
 
   // Video Quiz States
   const playerRef = useRef(null);
@@ -2644,16 +2021,14 @@ function StudentPortal({ setRole, initialRoom }) {
     const respId = `${room.toUpperCase()}_${sid || localId}`;
 
     try {
-      const upsertData = {
+      await supabase.from('responses').upsert({
         id: respId,
         room_code: room.toUpperCase(),
         student_name: name,
         student_id: sid,
         answers: next,
         ts: Date.now()
-      };
-      if (quizStartedAt) upsertData.quiz_started_at = quizStartedAt;
-      await supabase.from('responses').upsert(upsertData);
+      });
     } catch (e) { console.error("Network Error", e); }
   };
 
@@ -2682,7 +2057,7 @@ function StudentPortal({ setRole, initialRoom }) {
     }
 
     // --- Async Time Check ---
-    if (roomData.is_async && roomData.type !== 'attendance') {
+    if (roomData.is_async) {
       const now = Date.now();
       const start = new Date(roomData.start_time).getTime();
       const end = new Date(roomData.end_time).getTime();
@@ -2699,158 +2074,58 @@ function StudentPortal({ setRole, initialRoom }) {
       }
     }
 
-    if (roomData.type === 'attendance') {
+    const assigned = roomData.quiz?.assigned_classes;
+    if (assigned && assigned.length > 0) {
       if (!sid.trim()) {
-        setIdError("Student ID is required for Attendance.");
+        setIdError("Student ID is required for this room.");
         setCheckingId(false);
         return;
       }
 
-      // 1. Validate Token (must be within 20-30 seconds of creation to prevent sharing static pictures)
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const urlToken = params.get('token');
-        if (urlToken) {
-          const tokenTime = parseInt(urlToken, 10);
-          if (isNaN(tokenTime) || (Date.now() - tokenTime > 30000)) {
-             setIdError("Invalid or Expired QR Code. Please scan the live code on the screen again.");
-             setCheckingId(false);
-             return;
-          }
-        }
-      } catch(e) {}
-
-      // 2. Anti-Fraud Device Lock
-      // Generate a simple fingerprint (userAgent + language + screen resolution + a localStorage persistent id)
-      let deviceId = localStorage.getItem('ClassLabX_DeviceID');
-      if (!deviceId) {
-        deviceId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('ClassLabX_DeviceID', deviceId);
-      }
-      const fingerprint = `${deviceId}_${navigator.userAgent}_${navigator.language}_${window.screen.width}x${window.screen.height}`;
-
-      // Check if this fingerprint already voted in this room
-      const { data: existingVotes } = await supabase.from('responses')
+      // Check if student is in any of the assigned classes
+      const { data: stuData, error: stuErr } = await supabase.from('students')
         .select('*')
-        .eq('room_code', code)
-        .like('id', `%|${fingerprint}`); // we will store it like ROOM_SID|fingerprint
-
-      if (existingVotes && existingVotes.length > 0) {
-        // Did they already vote with THIS exact sid on THIS device? That's fine, maybe they refreshed.
-        const votedWithThisSid = existingVotes.find(v => v.student_id === sid.trim());
-        if (!votedWithThisSid) {
-           // They voted with another SID on this device
-           setIdError("Anti-Fraud Alert: Only one attendance entry allowed per device.");
-           setCheckingId(false);
-           return;
-        }
-      }
-
-      // Check student in database
-      const assigned = roomData.quiz?.assigned_classes;
-      let stuQuery = supabase.from('students').select('*').eq('student_id', sid.trim());
-      
-      if (assigned && assigned.length > 0) {
-        stuQuery = stuQuery.in('class_id', assigned);
-      }
-      
-      const { data: stuData } = await stuQuery;
+        .in('class_id', assigned)
+        .eq('student_id', sid.trim());
 
       if (!stuData || stuData.length === 0) {
-        setIdError(assigned && assigned.length > 0 ? "ID not found in assigned classes." : "Student ID not found in database.");
+        setIdError("ID not found in assigned cohorts. Please check your ID.");
         setCheckingId(false);
         return;
       }
-      
-      // Ask for confirmation
-      const stuName = stuData[0].name;
-      setName(stuName);
+
+      // Found the student - ask for confirmation
+      setName(stuData[0].name);
       setTempSession(roomData);
       setNeedsConfirmation(true);
       setCheckingId(false);
-      return;
+    } else {
+      // Open room
+      if (!name.trim()) {
+        setIdError("Your Name is required for this open room.");
+        setCheckingId(false);
+        return;
+      }
+      // If it's an async room, fetch previous responses to allow resuming
+      if (roomData.is_async && sid.trim()) {
+        const respId = `${code}_${sid.trim()}`;
+        const { data: prevResp } = await supabase.from('responses').select('answers').eq('id', respId).single();
+        if (prevResp && prevResp.answers) {
+          setAnswers(prevResp.answers);
+        }
+      }
+      setJoined(true);
     }
-
-    const assigned = roomData.quiz?.assigned_classes;
-    
-    if (!sid.trim()) {
-      setIdError("Student ID is required.");
-      setCheckingId(false);
-      return;
-    }
-
-    let stuQuery = supabase.from('students').select('*').eq('student_id', sid.trim());
-    if (assigned && assigned.length > 0) {
-      stuQuery = stuQuery.in('class_id', assigned);
-    }
-
-    const { data: stuData, error: stuErr } = await stuQuery;
-
-    if (!stuData || stuData.length === 0) {
-      setIdError(assigned && assigned.length > 0 ? "ID not found in assigned classes." : "Student ID not found in database.");
-      setCheckingId(false);
-      return;
-    }
-
-    // Found the student - ask for confirmation
-    setName(stuData[0].name);
-    setTempSession(roomData);
-    setNeedsConfirmation(true);
-    setCheckingId(false);
   };
 
   const confirmJoin = async () => {
-    if (tempSession?.type === 'attendance') {
-        const code = tempSession.id;
-        let deviceId = localStorage.getItem('ClassLabX_DeviceID');
-        if (!deviceId) {
-          deviceId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-          localStorage.setItem('ClassLabX_DeviceID', deviceId);
-        }
-        const fingerprint = `${deviceId}_${navigator.userAgent}_${navigator.language}_${window.screen.width}x${window.screen.height}`;
-        const respId = `${code}_${sid.trim()}|${fingerprint}`;
-        
-        await supabase.from('responses').upsert({
-          id: respId,
-          room_code: code,
-          student_name: name.trim(),
-          student_id: sid.trim(),
-          answers: {},
-          ts: Date.now()
-        });
-
-        setNeedsConfirmation(false);
-        setAttendanceSuccess(true);
-        return;
-    }
-
     // If it's an async room, fetch previous responses to allow resuming
     if (tempSession?.is_async && sid) {
       const code = tempSession.id;
       const respId = `${code}_${sid}`;
-      const { data: prevResp } = await supabase.from('responses').select('answers, quiz_started_at').eq('id', respId).single();
+      const { data: prevResp } = await supabase.from('responses').select('answers').eq('id', respId).single();
       if (prevResp && prevResp.answers) {
         setAnswers(prevResp.answers);
-      }
-      // Handle timer: restore or set quiz_started_at
-      if (tempSession.timer_duration) {
-        if (prevResp && prevResp.quiz_started_at) {
-          // Returning student — restore their original start time
-          setQuizStartedAt(prevResp.quiz_started_at);
-        } else {
-          // First time joining — record start time
-          const now = Date.now();
-          setQuizStartedAt(now);
-          await supabase.from('responses').upsert({
-            id: respId,
-            room_code: code,
-            student_name: name.trim(),
-            student_id: sid.trim(),
-            answers: prevResp?.answers || {},
-            ts: Date.now(),
-            quiz_started_at: now
-          });
-        }
       }
     }
     setNeedsConfirmation(false);
@@ -2868,25 +2143,9 @@ function StudentPortal({ setRole, initialRoom }) {
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Is this you?</h2>
             <p className="text-slate-500 font-bold mt-4 text-xl bg-slate-50 py-3 rounded-2xl border border-slate-100">{name}</p>
             <div className="mt-8 space-y-3">
-              <button onClick={confirmJoin} className="w-full bg-green-500 hover:bg-green-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-green-100 transition-all active:scale-95">Yes, {tempSession?.type === 'attendance' ? 'Confirm Attendance' : 'Start Quiz'}</button>
+              <button onClick={confirmJoin} className="w-full bg-green-500 hover:bg-green-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-green-100 transition-all active:scale-95">Yes, Start Quiz</button>
               <button onClick={() => setNeedsConfirmation(false)} className="w-full bg-white hover:bg-slate-50 text-slate-400 py-4 rounded-[2rem] font-black tracking-widest uppercase transition-colors">No, go back</button>
             </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (attendanceSuccess) {
-      return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 text-center animate-in zoom-in duration-300">
-          <div className="bg-white p-12 md:p-16 flex flex-col items-center rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative overflow-hidden">
-             <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-green-50 to-transparent"></div>
-             <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6 relative z-10 shadow-inner">
-               <CheckCircle size={48} />
-             </div>
-             <h2 className="text-4xl font-black text-slate-800 tracking-tighter relative z-10 mb-2">Present!</h2>
-             <p className="text-slate-500 font-bold mb-8 relative z-10">Your attendance has been recorded. You may close this page.</p>
-             <button onClick={clearStudentSession} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors relative z-10">Done</button>
           </div>
         </div>
       );
@@ -2901,7 +2160,7 @@ function StudentPortal({ setRole, initialRoom }) {
               <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />
             </div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
-            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2 px-2 text-center break-words">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} className="shrink-0" /> {idError}</span> : "Enter details below"}</p>
+            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} /> {idError}</span> : "Enter details below"}</p>
           </div>
           <div className="space-y-4">
             <div>
@@ -2912,18 +2171,22 @@ function StudentPortal({ setRole, initialRoom }) {
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
-                className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300 text-center uppercase tracking-[0.2em]"
-                placeholder="STUDENT ID #" value={sid} onChange={e => setSid(e.target.value)}
+                className="w-full sm:flex-[2] p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                placeholder="Full Name (if open)" value={name} onChange={e => setName(e.target.value)}
+              />
+              <input
+                className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300"
+                placeholder="ID #" value={sid} onChange={e => setSid(e.target.value)}
               />
             </div>
             <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
-              Please enter your exact Student ID number to access this activity.
+              If your teacher assigned a cohort, you MUST enter your exact Student ID number. You can leave Name blank.
             </p>
             <button type="submit" disabled={checkingId} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-100 mt-2 transition-transform active:scale-95 flex justify-center items-center">
               {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : 'ENTER ROOM'}
             </button>
           </div>
-          <button type="button" onClick={clearStudentSession} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
+          <button type="button" onClick={() => setRole(null)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
             <X size={24} />
           </button>
         </form>
@@ -2934,36 +2197,6 @@ function StudentPortal({ setRole, initialRoom }) {
   const total = session?.quiz?.questions?.length || 1;
   const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ?
     (session?.quiz?.type === 'video' ? idx >= total : idx >= total) : false;
-
-  // === COUNTDOWN TIMER for async standard quizzes ===
-  const timerExpiredRef = useRef(false);
-  useEffect(() => {
-    if (!session || !quizStartedAt || !session.timer_duration) return;
-    const durationMs = session.timer_duration * 60 * 1000;
-    const tick = () => {
-      const remaining = Math.max(0, Math.floor((quizStartedAt + durationMs - Date.now()) / 1000));
-      setTimeLeft(remaining);
-      if (remaining <= 0 && !timerExpiredRef.current) {
-        timerExpiredRef.current = true;
-        // Auto-submit and end
-        const respId = `${room.toUpperCase()}_${sid || localId}`;
-        supabase.from('responses').upsert({
-          id: respId,
-          room_code: room.toUpperCase(),
-          student_name: name,
-          student_id: sid,
-          answers: answers,
-          ts: Date.now(),
-          quiz_started_at: quizStartedAt
-        }).then(() => {
-          setIdx(total); // trigger finished screen
-        });
-      }
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [session, quizStartedAt, answers]);
 
   if (quizEnded || isFinished) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
@@ -3003,17 +2236,7 @@ function StudentPortal({ setRole, initialRoom }) {
       {session.quiz.type !== 'video' && (
         <header className="bg-white border-b p-6 flex justify-between items-center sticky top-0 z-10 shadow-sm">
           <div className="text-[10px] font-black uppercase text-slate-300 tracking-widest">Item {idx + 1} / {total}</div>
-          <div className="flex items-center gap-3">
-            <div className="font-black text-slate-800 text-xl truncate px-6 italic tracking-tighter">{session.quiz.title}</div>
-            {timeLeft !== null && (
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-black text-sm tracking-wider shrink-0 ${
-                timeLeft <= 60 ? 'bg-red-100 text-red-600 animate-pulse' : timeLeft <= 300 ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
-              }`}>
-                <Clock size={14} />
-                {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
-              </div>
-            )}
-          </div>
+          <div className="font-black text-slate-800 text-xl truncate px-6 italic tracking-tighter">{session.quiz.title}</div>
           <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">ID: {sid}</div>
         </header>
       )}
@@ -3253,11 +2476,11 @@ function ClassesTab({ classes, setClasses, user }) {
       <div className="p-8 border-b flex justify-between items-center bg-slate-50 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
         <div className="relative z-10">
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Student Classes</h2>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Student Cohorts</h2>
           <p className="text-slate-400 font-bold mt-1">Manage classes and verified rosters</p>
         </div>
         <button onClick={() => setIsCreating(true)} className="relative z-10 bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-blue-100 hover:bg-blue-700 hover:scale-105 active:scale-95 transition-all">
-          <Plus size={18} /> New Class
+          <Plus size={18} /> New Cohort
         </button>
       </div>
 
@@ -3285,8 +2508,8 @@ function ClassesTab({ classes, setClasses, user }) {
         {classes.length === 0 && (
           <div className="col-span-full flex flex-col items-center justify-center text-center p-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-[2.5rem]">
             <Users size={48} className="text-slate-200 mb-4" />
-            <p className="font-black text-xl mb-2 text-slate-600">No Classes Found</p>
-            <p className="font-bold text-sm">Create a new class to restrict quiz access to specific students.</p>
+            <p className="font-black text-xl mb-2 text-slate-600">No Cohorts Found</p>
+            <p className="font-bold text-sm">Create a new cohort to restrict quiz access to specific students.</p>
           </div>
         )}
       </div>
@@ -3398,7 +2621,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
   return (
     <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300">
       <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-        <h2 className="text-2xl font-black text-slate-800">Create New Class</h2>
+        <h2 className="text-2xl font-black text-slate-800">Create New Cohort</h2>
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
       </div>
 
@@ -3406,7 +2629,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
         {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl font-bold flex items-center gap-2"><AlertCircle size={18} />{error}</div>}
 
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Class Name <span className="text-red-500">*</span></label>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Cohort Name <span className="text-red-500">*</span></label>
           <input
             className="w-full text-2xl font-black text-slate-800 border-b-4 border-slate-100 focus:border-blue-600 focus:outline-none transition-all pb-2 bg-transparent"
             placeholder="e.g. Fall 2026 Biology" value={name} onChange={e => setName(e.target.value)}
@@ -3460,7 +2683,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
           <button onClick={onCancel} className="px-6 py-3 font-black text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">Discard</button>
           <button disabled={uploading || !name.trim()} onClick={submit} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
             {uploading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <CheckCircle size={18} />}
-            Save Class
+            Save Cohort
           </button>
         </div>
       </div>
@@ -3534,7 +2757,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           }
 
           if (duplicatesSkipped > 0) {
-            alert(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this class.`);
+            alert(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this cohort.`);
           }
 
           if (parsedStudents.length > 0) {
@@ -3591,7 +2814,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   };
 
   const clearRoster = async () => {
-    if (!window.confirm("ARE YOU SURE? This removes all students from this class.")) return;
+    if (!window.confirm("ARE YOU SURE? This removes all students from this cohort.")) return;
     setLoading(true);
     const { error } = await supabase.from('students').delete().eq('class_id', cls.id);
     setLoading(false);
@@ -3602,7 +2825,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   };
 
   const triggerDeleteClass = async () => {
-    if (!window.confirm("Delete entire class and its roster? This action is permanent!")) return;
+    if (!window.confirm("Delete entire cohort and its roster? This action is permanent!")) return;
     setLoading(true);
     const { error } = await supabase.from('classes').delete().eq('id', cls.id);
     setLoading(false);
@@ -3622,11 +2845,11 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 
     // Uniqueness Checks
     const isDuplicateId = students.find(x => x.id !== s.id && String(x.student_id).toLowerCase().trim() === editSid.toLowerCase().trim());
-    if (isDuplicateId) return alert("Error: That Student ID is already used by another student in this class.");
+    if (isDuplicateId) return alert("Error: That Student ID is already used by another student in this cohort.");
 
     if (editEmail.trim()) {
       const isDuplicateEmail = students.find(x => x.id !== s.id && x.email && String(x.email).toLowerCase().trim() === editEmail.toLowerCase().trim());
-      if (isDuplicateEmail) return alert("Error: That Email is already used by another student in this class.");
+      if (isDuplicateEmail) return alert("Error: That Email is already used by another student in this cohort.");
     }
 
     const { error } = await supabase.from('students').update({ name: editName, student_id: editSid, email: editEmail }).eq('id', s.id);
@@ -3652,7 +2875,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
         </div>
         <div className="flex gap-2">
           <button onClick={triggerDeleteClass} className="px-5 py-2.5 bg-white border-2 border-slate-100 text-red-500 hover:bg-red-50 hover:border-red-200 rounded-xl font-black text-sm transition-all flex items-center gap-2">
-            <Trash2 size={16} /> Delete Class
+            <Trash2 size={16} /> Delete Cohort
           </button>
         </div>
       </div>
@@ -3729,4 +2952,51 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
       </div>
     </div>
   );
+}
+
+/* --- src/index.css --- */
+@import "tailwindcss";
+
+/* --- src/App.css --- */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
 }
