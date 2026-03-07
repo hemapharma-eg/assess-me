@@ -2721,10 +2721,10 @@ function StudentPortal({ setRole, initialRoom }) {
     return null;
   });
 
-  const [room, setRoom] = useState(cachedState?.room || initialRoom);
+  const [room, setRoom] = useState(initialRoom || cachedState?.room || '');
   const [sid, setSid] = useState(cachedState?.sid || '');
   const [name, setName] = useState(cachedState?.name || ''); 
-  const [joined, setJoined] = useState(cachedState?.joined || false);
+  const [joined, setJoined] = useState((!initialRoom || initialRoom === cachedState?.room) ? (cachedState?.joined || false) : false);
 
   // Stable random ID for open rooms
   const [localId] = useState(() => Math.random().toString(36).substring(2, 9));
@@ -2742,6 +2742,19 @@ function StudentPortal({ setRole, initialRoom }) {
   const [attendanceSuccess, setAttendanceSuccess] = useState(false);
   const [roomType, setRoomType] = useState('');
   const [questionTimeLeft, setQuestionTimeLeft] = useState(null); // seconds remaining for current question
+
+  // Reset session if entering a NEW room via initialRoom (QR scan/URL)
+  useEffect(() => {
+    if (initialRoom && initialRoom !== cachedState?.room) {
+      setRoom(initialRoom);
+      setJoined(false);
+      setSession(null);
+      setAnswers({});
+      setIdx(0);
+      setAttendanceSuccess(false);
+      setQuizEnded(false);
+    }
+  }, [initialRoom]);
 
   // Keep cache synced if they successfully join
   useEffect(() => {
