@@ -1377,7 +1377,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
   const filteredQuizzes = quizzes.filter(q => {
     if (type === 'async_video') return q.type === 'video';
-    if (type === 'async_survey') return q.type === 'survey';
     if (type === 'async_quiz' || category === 'sync') return q.type === 'standard' || !q.type;
     return true; 
   });
@@ -1385,7 +1384,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   if (type && category !== 'attendance') return (
     <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100">
       <h2 className="text-2xl font-black mb-6 text-slate-800">
-        Choose a {type === 'async_video' ? 'Video Quiz' : (type === 'async_survey' ? 'Feedback Survey' : 'Standard Quiz')}
+        Choose a {type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
       </h2>
       <div className="space-y-3 mb-10 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
         {filteredQuizzes.map(q => (
@@ -1461,13 +1460,13 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           </label>
         )}
 
-        {type !== 'async_video' && type !== 'async_survey' && (
+        {type !== 'async_video' && (
           <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
             <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} />
             <span className="font-bold text-slate-700 text-sm">Shuffle Questions</span>
           </label>
         )}
-        {type !== 'async_survey' && (
+        {true && (
           <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
             <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
             <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
@@ -1630,9 +1629,86 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     </div>
   );
 
+  if (category === 'feedback') return (
+    <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-in zoom-in duration-300">
+      <div className="mb-8 text-center">
+        <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <BarChart2 size={32} />
+        </div>
+        <h2 className="text-3xl font-black text-slate-800">Launch Feedback</h2>
+        <p className="text-slate-400 font-bold mt-1">Anonymous session satisfaction survey</p>
+      </div>
+
+      <div className="space-y-6 mb-8">
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Feedback Title (e.g., Lecture 1 Feedback)</label>
+          <input
+            type="text"
+            className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-purple-500 transition-all"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+            placeholder="Enter a title..."
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest text-center">Select ONE Target Class</label>
+          <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scroll">
+            {classes.length === 0 ? (
+              <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet.</p>
+            ) : (
+              classes.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setAssignedClasses([c.id])}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${assignedClasses.includes(c.id) ? 'border-purple-600 bg-purple-50 shadow-sm' : 'border-slate-100 hover:bg-slate-50'}`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${assignedClasses.includes(c.id) ? 'border-purple-600 bg-purple-600' : 'border-slate-300'}`}>
+                    {assignedClasses.includes(c.id) && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                  </div>
+                  <div className="text-left">
+                    <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
+        <button
+          onClick={() => {
+            const feedbackQuiz = {
+              title: sessionName || 'Feedback Session',
+              assigned_classes: assignedClasses,
+              questions: [
+                { id: 1, text: "The session’s objectives and content were clearly presented and well-organized.", type: "rating" },
+                { id: 2, text: "The session significantly enhanced my knowledge, skills, or understanding of the topic.", type: "rating" },
+                { id: 3, text: "The instructor/facilitator effectively guided the session and maintained a productive learning environment.", type: "rating" },
+                { id: 4, text: "The activities, examples, or materials used were highly relevant and supported the goals of the session.", type: "rating" },
+                { id: 5, text: "Additional Comments & Suggestions (Optional).", type: "text" }
+              ]
+            };
+            onLaunch(feedbackQuiz, 'feedback');
+            setCategory(null);
+            setSessionName('');
+            setAssignedClasses([]);
+          }}
+          disabled={!sessionName || assignedClasses.length === 0}
+          className="flex-1 py-4 font-black text-white bg-purple-600 rounded-2xl shadow-lg shadow-purple-100 disabled:opacity-50"
+        >
+          Launch Now
+        </button>
+      </div>
+    </div>
+  );
+
   if (category === null) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         <button
           onClick={() => setCategory('sync')}
           className="bg-blue-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
@@ -1656,6 +1732,14 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           <div className="p-3 bg-white/10 rounded-2xl"><UserCheck size={40} /></div>
           <span className="text-2xl font-black">Attendance</span>
           <span className="text-xs font-medium opacity-80 leading-relaxed">Instantly capture secure, device-verified student check-ins.</span>
+        </button>
+        <button
+          onClick={() => setCategory('feedback')}
+          className="bg-purple-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
+        >
+          <div className="p-3 bg-white/10 rounded-2xl"><BarChart2 size={40} /></div>
+          <span className="text-2xl font-black">Feedback Survey</span>
+          <span className="text-xs font-medium opacity-80 leading-relaxed">Collect anonymous session satisfaction feedback with graphical analytics.</span>
         </button>
       </div>
     );
@@ -1688,7 +1772,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         )) : [
           { id: 'async_quiz', name: 'Standard Quiz', icon: <FileText size={48} />, color: 'bg-blue-600', desc: 'Schedule a standard quiz.' },
           { id: 'async_video', name: 'Video Quiz', icon: <Video size={48} />, color: 'bg-purple-600', desc: 'Schedule a video quiz with timestamped questions.' },
-          { id: 'async_survey', name: 'Feedback Survey', icon: <BarChart2 size={48} />, color: 'bg-green-600', desc: 'Schedule an anonymous or named survey.' }
         ].map(c => {
           return (
             <button
@@ -1832,7 +1915,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
           <button onClick={() => setType('survey')} className="p-8 rounded-[2rem] border-2 border-slate-100 hover:border-green-500 hover:bg-green-50 transition-all flex flex-col items-center gap-4 group md:col-span-2">
             <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><BarChart2 size={32} /></div>
             <h3 className="text-xl font-black text-slate-800">Feedback Survey</h3>
-            <p className="text-sm text-slate-500 font-medium">Collect student opinions and feedback anonymously or with names.</p>
+            <p className="text-sm text-slate-500 font-medium">Collect student opinions and feedback anonymously.</p>
           </button>
         </div>
         <button onClick={onCancel} className="mt-12 px-8 py-3 text-slate-400 font-black hover:text-slate-600 transition-colors">Cancel</button>
@@ -2431,6 +2514,175 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
   );
 }
 
+function FeedbackSurvey({ session, answers, submit, onFinish }) {
+  const [localAnswers, setLocalAnswers] = useState(answers || {});
+  const questions = session.quiz.questions;
+
+  const handleRating = (qIdx, val) => {
+    const next = { ...localAnswers, [qIdx]: val };
+    setLocalAnswers(next);
+    submit(qIdx, val);
+  };
+
+  const handleText = (qIdx, val) => {
+    const next = { ...localAnswers, [qIdx]: val };
+    setLocalAnswers(next);
+    submit(qIdx, val);
+  };
+
+  const isComplete = questions.every((q, i) => q.type === 'text' || localAnswers[i] !== undefined);
+
+  return (
+    <div className="max-w-2xl mx-auto py-10 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-white rounded-[3rem] shadow-2xl p-10 border border-slate-100 mb-8">
+        <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-6">
+          <BarChart2 size={32} />
+        </div>
+        <h2 className="text-3xl font-black text-slate-800 mb-2 leading-tight">{session.quiz.title}</h2>
+        <p className="text-slate-400 font-bold mb-10">Please share your honest feedback. This survey is completely anonymous.</p>
+
+        <div className="space-y-12">
+          {questions.map((q, i) => (
+            <div key={q.id}>
+              <div className="flex items-start gap-4 mb-6">
+                <span className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-xs font-black text-slate-400 shrink-0">{i + 1}</span>
+                <h3 className="text-xl font-black text-slate-700 leading-snug">{q.text}</h3>
+              </div>
+              
+              {q.type === 'rating' ? (
+                <div className="flex flex-row-reverse justify-center gap-2 md:gap-4">
+                  {[5, 4, 3, 2, 1].map(val => (
+                    <button
+                      key={val}
+                      onClick={() => handleRating(i, val)}
+                      className={`flex-1 max-w-[80px] aspect-square rounded-2xl border-4 transition-all flex flex-col items-center justify-center gap-1 ${localAnswers[i] === val ? 'border-purple-600 bg-purple-50 text-purple-600 shadow-xl shadow-purple-100 scale-110 z-10' : 'border-slate-50 bg-slate-50 text-slate-300 hover:border-purple-200 hover:bg-white'}`}
+                    >
+                      <span className="text-2xl font-black">{val}</span>
+                      <span className="text-[8px] font-black uppercase tracking-widest">{val === 5 ? 'Highest' : (val === 1 ? 'Lowest' : '')}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <textarea
+                  className="w-full bg-slate-50 border-4 border-slate-100 rounded-[2rem] p-6 font-bold text-slate-700 focus:outline-none focus:border-purple-500 focus:bg-white transition-all min-h-[150px]"
+                  placeholder="Your suggestions/comments (optional)..."
+                  value={localAnswers[i] || ''}
+                  onChange={(e) => handleText(i, e.target.value)}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        onClick={onFinish}
+        disabled={!isComplete}
+        className="w-full py-6 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-purple-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+      >
+        Submit Feedback <CheckCircle size={24} />
+      </button>
+      <p className="text-center text-slate-400 font-bold text-[10px] mt-6 uppercase tracking-widest">Thank you for helping us improve!</p>
+    </div>
+  );
+}
+
+function FeedbackDashboard({ reports, classes }) {
+  const feedbackReports = reports.filter(r => r.type === 'feedback');
+  const [classFilter, setClassFilter] = useState('');
+  const [sessionFilter, setSessionFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+
+  const filtered = feedbackReports.filter(r => {
+    if (classFilter && !r.assigned_classes?.includes(classFilter)) return false;
+    if (sessionFilter && r.title !== sessionFilter) return false;
+    if (dateFilter && new Date(r.created_at).toLocaleDateString() !== new Date(dateFilter).toLocaleDateString()) return false;
+    return true;
+  });
+
+  const allResponses = filtered.flatMap(r => r.responses || []);
+  const questionStats = [0, 1, 2, 3].map(idx => {
+    const scores = allResponses.map(resp => resp.answers[idx]).filter(val => val !== undefined);
+    const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    const satisfaction = (avg / 5) * 100;
+    return { avg, satisfaction, count: scores.length };
+  });
+
+  const comments = allResponses.map(resp => resp.answers[4]).filter(val => val && val.trim());
+
+  const uniqueTitles = [...new Set(feedbackReports.map(r => r.title))];
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400">
+          <option value="">All Classes</option>
+          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={sessionFilter} onChange={e => setSessionFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400">
+          <option value="">All Sessions</option>
+          {uniqueTitles.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400" />
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
+          <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3">
+            <span className="p-2 bg-purple-50 text-purple-600 rounded-xl"><BarChart2 size={20} /></span>
+            Average Satisfaction
+          </h3>
+          <div className="space-y-8">
+            {[
+              "Course Content & Clarity",
+              "Knowledge Enhancement",
+              "Instruction Quality",
+              "Materials & Support"
+            ].map((label, i) => (
+              <div key={label} className="space-y-3">
+                <div className="flex justify-between items-end">
+                  <span className="text-sm font-black text-slate-600">{label}</span>
+                  <span className="text-xl font-black text-purple-600">{Math.round(questionStats[i].satisfaction)}%</span>
+                </div>
+                <div className="h-4 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-1">
+                  <div 
+                    className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-1000 ease-out shadow-sm"
+                    style={{ width: `${questionStats[i].satisfaction}%` }}
+                  ></div>
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{questionStats[i].count} Responses • Avg: {questionStats[i].avg.toFixed(1)}/5.0</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100 flex flex-col">
+          <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3">
+            <span className="p-2 bg-blue-50 text-blue-600 rounded-xl"><FileText size={20} /></span>
+            Student Comments
+          </h3>
+          <div className="flex-1 overflow-y-auto max-h-[400px] pr-4 custom-scroll space-y-4">
+            {comments.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
+                <AlertCircle size={40} className="mb-4 opacity-20" />
+                <p className="font-black uppercase tracking-widest text-xs">No comments yet</p>
+              </div>
+            ) : (
+              comments.map((c, i) => (
+                <div key={i} className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                  <p className="text-slate-600 font-bold leading-relaxed italic">"{c}"</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   const [view, setView] = useState('history'); 
   const [openReport, setOpenReport] = useState(null);
@@ -2912,6 +3164,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
         <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
         <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Class Gradebook</button>
         <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
+        <button onClick={() => setView('feedback')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Feedback Reports</button>
       </div>
 
       {view === 'history' ? (
@@ -2955,6 +3208,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                   {(() => {
                     const grouped = {};
                     reports
+                      .filter(r => r.type !== 'feedback')
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => typeFilter[r.type])
                       .filter(r => {
@@ -3104,6 +3358,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             </div>
           </div>
         </div>
+      ) : view === 'feedback' ? (
+        <FeedbackDashboard reports={allReports} classes={classes} />
       ) : view === 'gradebook' ? (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
@@ -3503,6 +3759,15 @@ function StudentPortal({ setRole, initialRoom }) {
       return;
     }
 
+    if (roomData.type === 'feedback') {
+      setSid('anonymous');
+      setName('Anonymous Student');
+      setTempSession(roomData);
+      setJoined(true);
+      setCheckingId(false);
+      return;
+    }
+
     // --- Async Pause/Time Check ---
     if (roomData.is_async && roomData.type !== 'attendance') {
       if (roomData.is_paused) {
@@ -3627,6 +3892,12 @@ function StudentPortal({ setRole, initialRoom }) {
   };
 
   const confirmJoin = async () => {
+    if (tempSession?.type === 'feedback') {
+        setJoined(true);
+        setNeedsConfirmation(false);
+        return;
+    }
+
     if (tempSession?.type === 'attendance') {
         const code = tempSession.id;
         let deviceId = localStorage.getItem('ClassLabX_DeviceID');
@@ -3707,9 +3978,9 @@ function StudentPortal({ setRole, initialRoom }) {
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
         <form onSubmit={attemptJoin} className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
           <div className="text-center mb-10">
-            <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative">
-              <Users size={40} />
-              <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />
+            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative ${roomType === 'feedback' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
+              {roomType === 'feedback' ? <BarChart2 size={40} /> : <Users size={40} />}
+              {roomType !== 'feedback' && <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />}
             </div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
             <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2 px-2 text-center break-words">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} className="shrink-0" /> {idError}</span> : "Enter details below"}</p>
@@ -3721,17 +3992,26 @@ function StudentPortal({ setRole, initialRoom }) {
                 placeholder="ROOM CODE" value={room} onChange={e => setRoom(e.target.value.toUpperCase())} required
               />
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300 text-center uppercase tracking-[0.2em]"
-                placeholder="STUDENT ID #" value={sid} onChange={e => setSid(e.target.value)}
-              />
-            </div>
-            <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
-              Please enter your exact Student ID number to access this activity.
-            </p>
-            <button type="submit" disabled={checkingId} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-100 mt-2 transition-transform active:scale-95 flex justify-center items-center">
-              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : 'ENTER ROOM'}
+            {roomType !== 'feedback' && (
+              <>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    className="w-full sm:flex-1 p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-slate-700 focus:outline-none focus:border-orange-200 transition-all text-sm placeholder:text-slate-300 text-center uppercase tracking-[0.2em]"
+                    placeholder="STUDENT ID #" value={sid} onChange={e => setSid(e.target.value)}
+                  />
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 text-center px-4 leading-relaxed">
+                  Please enter your exact Student ID number to access this activity.
+                </p>
+              </>
+            )}
+            {roomType === 'feedback' && (
+              <p className="text-[10px] font-bold text-purple-400 text-center px-4 leading-relaxed bg-purple-50 py-3 rounded-2xl border border-purple-100">
+                This is an anonymous feedback session. No Student ID is required to join.
+              </p>
+            )}
+            <button type="submit" disabled={checkingId} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl mt-2 transition-transform active:scale-95 flex justify-center items-center text-white ${roomType === 'feedback' ? 'bg-purple-600 shadow-purple-100' : 'bg-orange-500 shadow-orange-100'}`}>
+              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : (roomType === 'feedback' ? 'JOIN ANONYMOUSLY' : 'ENTER ROOM')}
             </button>
           </div>
           <button type="button" onClick={clearStudentSession} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
@@ -3777,6 +4057,10 @@ function StudentPortal({ setRole, initialRoom }) {
 
   // Lock editing if teacher is showing results
   const isLocked = session.type === 'teacher_paced' && session.quiz?.show_results;
+
+  if (session.type === 'feedback') {
+    return <FeedbackSurvey session={session} answers={answers} submit={submit} onFinish={() => setIdx(total)} />;
+  }
 
   return (
     <div className={`min-h-screen bg-slate-50 flex flex-col ${session.quiz.type === 'video' ? 'lg:flex-row lg:h-screen lg:overflow-hidden' : ''}`}>
