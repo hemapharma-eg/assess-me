@@ -2667,6 +2667,37 @@ function StudentPortal({ setRole, initialRoom }) {
     }
   }, [session]);
 
+  // === COUNTDOWN TIMER for async standard quizzes ===
+  const total = session?.quiz?.questions?.length || 1;
+  const timerExpiredRef = useRef(false);
+  useEffect(() => {
+    if (!session || !quizStartedAt || !session.timer_duration) return;
+    const durationMs = session.timer_duration * 60 * 1000;
+    const tick = () => {
+      const remaining = Math.max(0, Math.floor((quizStartedAt + durationMs - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining <= 0 && !timerExpiredRef.current) {
+        timerExpiredRef.current = true;
+        // Auto-submit and end
+        const respId = `${room.toUpperCase()}_${sid || localId}`;
+        supabase.from('responses').upsert({
+          id: respId,
+          room_code: room.toUpperCase(),
+          student_name: name,
+          student_id: sid,
+          answers: answers,
+          ts: Date.now(),
+          quiz_started_at: quizStartedAt
+        }).then(() => {
+          setIdx(total); // trigger finished screen
+        });
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [session, quizStartedAt, answers]);
+
   const attemptJoin = async (e) => {
     e.preventDefault();
     setCheckingId(true);
@@ -2931,39 +2962,8 @@ function StudentPortal({ setRole, initialRoom }) {
     );
   }
 
-  const total = session?.quiz?.questions?.length || 1;
   const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video') ?
     (session?.quiz?.type === 'video' ? idx >= total : idx >= total) : false;
-
-  // === COUNTDOWN TIMER for async standard quizzes ===
-  const timerExpiredRef = useRef(false);
-  useEffect(() => {
-    if (!session || !quizStartedAt || !session.timer_duration) return;
-    const durationMs = session.timer_duration * 60 * 1000;
-    const tick = () => {
-      const remaining = Math.max(0, Math.floor((quizStartedAt + durationMs - Date.now()) / 1000));
-      setTimeLeft(remaining);
-      if (remaining <= 0 && !timerExpiredRef.current) {
-        timerExpiredRef.current = true;
-        // Auto-submit and end
-        const respId = `${room.toUpperCase()}_${sid || localId}`;
-        supabase.from('responses').upsert({
-          id: respId,
-          room_code: room.toUpperCase(),
-          student_name: name,
-          student_id: sid,
-          answers: answers,
-          ts: Date.now(),
-          quiz_started_at: quizStartedAt
-        }).then(() => {
-          setIdx(total); // trigger finished screen
-        });
-      }
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [session, quizStartedAt, answers]);
 
   if (quizEnded || isFinished) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
