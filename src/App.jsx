@@ -2378,6 +2378,7 @@ function ReportsTab({ reports, allReports, classes }) {
   const [localReportPatch, setLocalReportPatch] = useState({}); // id -> {title?, assigned_classes?}
 
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
+  const getEffectiveResponses = (r) => localReportPatch[r.id]?.responses ?? (r.responses || []);
 
   const handleRename = async (r) => {
     const newTitle = renameValue.trim();
@@ -2420,10 +2421,10 @@ function ReportsTab({ reports, allReports, classes }) {
       const typeLabel = report.type === 'teacher_paced' ? 'Teacher Paced' : report.type === 'attendance' ? 'Attendance' : 'Student Paced';
 
       const overviewData = [
-        ['Report Title', report.title || 'Untitled'],
+        ['Report Title', getEffectiveField(report, 'title') || 'Untitled'],
         ['Date', new Date(report.ts).toLocaleString()],
         ['Type', typeLabel],
-        ['Total Participants', (report.responses || []).length],
+        ['Total Participants', getEffectiveResponses(report).length],
         ['Total Questions', (report.questions || []).length],
         []
       ];
@@ -2432,11 +2433,11 @@ function ReportsTab({ reports, allReports, classes }) {
 
       if (report.type === 'attendance') {
         // Attendance: just show who attended
-        const attHeaders = ['#', 'Student ID', 'Student Name'];
+        const attHeaders = ['#', 'Student ID', 'Student Name', 'Status'];
         const attRows = [attHeaders];
-        (report.responses || [])
+        getEffectiveResponses(report)
           .sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''))
-          .forEach((r, i) => { attRows.push([i + 1, r.student_id || '', r.student_name || 'Anonymous']); });
+          .forEach((r, i) => { attRows.push([i + 1, r.student_id || '', r.student_name || 'Anonymous', r.status || 'present']); });
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), 'Attendees');
       } else {
         // Quiz: full scores + per-question breakdown
@@ -2447,7 +2448,7 @@ function ReportsTab({ reports, allReports, classes }) {
           ...questions.map((_, i) => `Q${i + 1} Correct?`)
         ];
         const resultsData = [headers];
-        (report.responses || []).forEach(r => {
+        getEffectiveResponses(report).forEach(r => {
           let correctCount = 0;
           const ansRow = [];
           const isCorrectRow = [];
@@ -2480,7 +2481,7 @@ function ReportsTab({ reports, allReports, classes }) {
 
   // Helper to compute student scores for a report
   const computeScores = (report) => {
-    return (report.responses || []).map(r => {
+    return getEffectiveResponses(report).map(r => {
       let correctCount = 0;
       let email = '';
       for (const c of classes) {
@@ -2504,7 +2505,16 @@ function ReportsTab({ reports, allReports, classes }) {
         }
         return { display, isOk };
       });
-      return { ...r, perQ, total: Math.round((correctCount / report.questions.length) * 100), email };
+
+      // Attendance status weight
+      let attendanceWeight = 0;
+      if (report.type === 'attendance') {
+        if (r.status === 'late') attendanceWeight = 0.5;
+        else if (r.status === 'absent') attendanceWeight = 0;
+        else attendanceWeight = 1; // default to present
+      }
+
+      return { ...r, perQ, total: Math.round((correctCount / (report.questions.length || 1)) * 100), email, attendanceWeight };
     }).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
   };
 
@@ -2573,9 +2583,10 @@ function ReportsTab({ reports, allReports, classes }) {
                   <th className="p-4 border-b border-slate-200 z-10">#</th>
                   <th className="p-4 border-b border-slate-200 z-10">Student Name</th>
                   <th className="p-4 border-b border-slate-200">ID</th>
+                  {openReport.type === 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Status</th>}
                   {openReport.questions.map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
                   {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
-                  {openReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Actions</th>}
+                  <th className="p-4 border-b border-slate-200 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
@@ -2599,6 +2610,40 @@ function ReportsTab({ reports, allReports, classes }) {
                       <td className="p-4 text-slate-400">{i + 1}</td>
                       <td className="p-4 whitespace-nowrap">{s.student_name || 'Anonymous'}</td>
                       <td className="p-4 font-mono text-slate-400 text-xs">{s.student_id || '-'}</td>
+                      
+                      {openReport.type === 'attendance' && (
+                        <td className="p-4 text-center">
+                          <select
+                            className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border-2 transition-all cursor-pointer ${
+                              (s.status || 'present') === 'present' ? 'bg-green-50 text-green-600 border-green-100' :
+                              s.status === 'late' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                              'bg-red-50 text-red-600 border-red-100'
+                            }`}
+                            value={s.status || 'present'}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value;
+                              const updatedResponses = openReport.responses.map(resp => 
+                                resp.student_id === s.student_id ? { ...resp, status: newStatus } : resp
+                              );
+                              
+                              // Update DB
+                              const { error } = await supabase.from('reports').update({ responses: updatedResponses }).eq('id', openReport.id);
+                              if (error) {
+                                alert("Update failed: " + error.message);
+                              } else {
+                                // Update local state for immediate feedback
+                                setLocalReportPatch(prev => ({ ...prev, [openReport.id]: { ...(prev[openReport.id] || {}), responses: updatedResponses } }));
+                                setOpenReport({ ...openReport, responses: updatedResponses });
+                              }
+                            }}
+                          >
+                            <option value="present">Present</option>
+                            <option value="late">Late</option>
+                            <option value="absent">Absent</option>
+                          </select>
+                        </td>
+                      )}
+
                       {s.perQ.map((pq, qi) => (
                         <td key={qi} className={`p-4 text-center ${pq.display === 'N/A' ? 'text-slate-300' : pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
                           {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
@@ -2607,8 +2652,8 @@ function ReportsTab({ reports, allReports, classes }) {
                       {openReport.type !== 'attendance' && (
                         <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
                       )}
-                      {openReport.type !== 'attendance' && (
-                        <td className="p-4 text-center">
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <a
                             href={`mailto:${s.email}?subject=Your Quiz Results: ${openReport.title}&body=Hello ${s.student_name},%0D%0A%0D%0AYour score for the recent quiz "${openReport.title}" is ${s.total}%.`}
                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${hasEmail ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-slate-50 text-slate-300 pointer-events-none'}`}
@@ -2616,8 +2661,8 @@ function ReportsTab({ reports, allReports, classes }) {
                           >
                             Email
                           </a>
-                        </td>
-                      )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -2695,7 +2740,7 @@ function ReportsTab({ reports, allReports, classes }) {
         // For reports with no assigned_classes (old format before the fix)
         if (effectiveClasses.length === 0) {
           // Determine which class the session belongs to by checking students who responded
-          const responderIds = (r.responses || []).map(resp => String(resp.student_id).trim().toLowerCase());
+          const responderIds = getEffectiveResponses(r).map(resp => String(resp.student_id).trim().toLowerCase());
           if (responderIds.length === 0) return false; // can't determine class if nobody responded
           
           const classIds = classStudentIds.map(id => String(id).trim().toLowerCase());
@@ -2721,7 +2766,7 @@ function ReportsTab({ reports, allReports, classes }) {
 
         // Process Quizzes
         quizReports.forEach(rep => {
-          const stuResp = (rep.responses || []).find(res => {
+          const stuResp = getEffectiveResponses(rep).find(res => {
             if (res.student_id !== stu.student_id) return false;
             if (hasDuplicateId) return res.student_name === stu.name;
             return true;
@@ -2742,41 +2787,51 @@ function ReportsTab({ reports, allReports, classes }) {
           }
         });
 
-        // Process Attendance
-        attendanceReports.forEach(rep => {
-          const stuResp = (rep.responses || []).find(res => {
-            if (res.student_id !== stu.student_id) return false;
-            // Name matching check for duplicates happens on submission side for attendance, but just to be safe:
-            if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
-              return res.student_name === stu.name;
+          // Process Attendance
+          attendanceReports.forEach(rep => {
+            const stuResp = getEffectiveResponses(rep).find(res => {
+              if (res.student_id !== stu.student_id) return false;
+              // Name matching check for duplicates happens on submission side for attendance, but just to be safe:
+              if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
+                return res.student_name === stu.name;
+              }
+              return true;
+            });
+            // Attendance status weight
+            if (stuResp) {
+               let weight = 1;
+               if (stuResp.status === 'late') weight = 0.5;
+               else if (stuResp.status === 'absent') weight = 0;
+               attendanceRecords[rep.title] = { present: true, status: stuResp.status || 'present', weight };
+            } else {
+               attendanceRecords[rep.title] = { present: false, status: 'absent', weight: 0 };
             }
-            return true;
           });
-          // If they have ANY response in this attendance session, they are present
-          if (stuResp) {
-             attendanceRecords[rep.title] = true;
-          }
-        });
 
-        // Calculate Averages
-        let totalScore = 0;
-        let attemptCount = 0;
-        Object.values(scores).forEach(highestScore => {
-          totalScore += highestScore;
-          attemptCount++;
-        });
+          // Calculate Averages
+          let totalScore = 0;
+          let attemptCount = 0;
+          Object.values(scores).forEach(highestScore => {
+            totalScore += highestScore;
+            attemptCount++;
+          });
 
-        const attendanceTotal = uniqueAttendanceTitles.length > 0 
-          ? Math.round((Object.keys(attendanceRecords).length / uniqueAttendanceTitles.length) * 100) 
-          : 0;
+          let attendancePoints = 0;
+          Object.values(attendanceRecords).forEach(rec => {
+            attendancePoints += rec.weight;
+          });
 
-        return { 
-          ...stu, 
-          scores, 
-          average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0,
-          attendanceRecords,
-          attendanceTotal
-        };
+          const attendanceTotal = uniqueAttendanceTitles.length > 0 
+            ? Math.round((attendancePoints / uniqueAttendanceTitles.length) * 100) 
+            : 0;
+
+          return { 
+            ...stu, 
+            scores, 
+            average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0,
+            attendanceRecords,
+            attendanceTotal
+          };
       }).sort((a, b) => a.name.localeCompare(b.name));
     }
   }
@@ -2845,7 +2900,7 @@ function ReportsTab({ reports, allReports, classes }) {
                         const key = `${title}|${classKey}|${r.type}`;
 
                         if (!grouped[key]) {
-                          grouped[key] = { ...r, title, responses: [...(r.responses || [])] };
+                          grouped[key] = { ...r, title, responses: [...getEffectiveResponses(r)] };
                         } else {
                           const existing = grouped[key];
                           if (r.ts > existing.ts) {
@@ -2854,7 +2909,7 @@ function ReportsTab({ reports, allReports, classes }) {
                           }
                           const respMap = {};
                           existing.responses.forEach(resp => { respMap[resp.student_id] = resp; });
-                          (r.responses || []).forEach(resp => {
+                          getEffectiveResponses(r).forEach(resp => {
                             if (!respMap[resp.student_id] || (resp.ts > respMap[resp.student_id].ts)) {
                               respMap[resp.student_id] = resp;
                             }
@@ -2925,7 +2980,7 @@ function ReportsTab({ reports, allReports, classes }) {
                         <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : r.type === 'attendance' ? 'Attendance' : 'Student Paced'}</div>
                       </td>
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
-                        {(r.responses || []).length}
+                        {getEffectiveResponses(r).length}
                       </td>
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {(r.questions || []).length}
@@ -3115,11 +3170,19 @@ function ReportsTab({ reports, allReports, classes }) {
                            const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
                            return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
                          })
-                         .map(title => (
-                         <td key={`a-${title}`} className={`p-4 font-black text-center ${row.attendanceRecords[title] ? 'text-green-500 bg-green-50/10' : 'text-red-400 bg-red-50/30'}`}>
-                           {row.attendanceRecords[title] ? 'Present' : 'Absent'}
-                         </td>
-                      ))}
+                         .map(title => {
+                           const rec = row.attendanceRecords[title];
+                           const status = rec?.status || 'absent';
+                           return (
+                             <td key={`a-${title}`} className={`p-4 font-black text-center ${
+                               status === 'present' ? 'text-green-500 bg-green-50/10' : 
+                               status === 'late' ? 'text-orange-500 bg-orange-50/10' : 
+                               'text-red-400 bg-red-50/30'
+                             }`}>
+                               {status.charAt(0).toUpperCase() + status.slice(1)}
+                             </td>
+                           );
+                         })}
 
                       {assignedReports.filter(r => r.type === 'attendance').length === 0 && <td className="p-4"></td>}
                     </tr>
