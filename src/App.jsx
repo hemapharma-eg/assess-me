@@ -587,12 +587,12 @@ function TeacherPortal({ setRole, user }) {
         const pseudoReports = resAsyncRooms.data.map(room => ({
           id: room.id,
           user_id: room.user_id,
-          title: room.quiz.title,
+          title: room.quiz?.title || 'Untitled Quiz',
           type: room.type, // 'async_video' or 'async_quiz'
           ts: room.start_time ? new Date(room.start_time).getTime() : room.ts,
           responses: (asyncResponses || []).filter(r => r.room_code === room.id),
-          questions: room.quiz.questions,
-          assigned_classes: room.quiz.assigned_classes || []
+          questions: room.quiz?.questions || [],
+          assigned_classes: room.quiz?.assigned_classes || []
         }));
         setAsyncReports(pseudoReports);
       }
