@@ -912,12 +912,12 @@ function TeacherPortal({ setRole, user }) {
       {showCloseWarning && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
               <AlertTriangle size={32} />
             </div>
             <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Active Room Alert</h3>
             <p className="text-slate-500 font-bold mb-8 leading-relaxed">
-              You are leaving an active session. <span className="text-red-500 bg-red-50 px-1 rounded">Results will not be finalized or saved to reports until this room is closed.</span> What would you like to do?
+              You are leaving an active session. <span className="text-blue-600 bg-blue-50 px-1 rounded">Results will not be finalized or saved to reports until this room is closed.</span> What would you like to do?
             </p>
             <div className="space-y-3">
               <button 
@@ -929,7 +929,7 @@ function TeacherPortal({ setRole, user }) {
                    }
                    setPendingTab(null);
                 }} 
-                className="w-full py-4 bg-red-500 hover:bg-red-600 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-red-100"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
               >
                 Close Room (Record Results & Go)
               </button>
