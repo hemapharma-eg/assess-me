@@ -729,7 +729,8 @@ function TeacherPortal({ setRole, user }) {
               : (quiz.sessionName || 'Attendance'),
             questions: [],
             assigned_classes: quiz.assigned_classes || [],
-            old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null
+            old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null,
+            current_token: Date.now().toString()
           }
         : { ...quiz, current_question_idx: 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
@@ -2257,11 +2258,16 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
 
   useEffect(() => {
     if (session?.type !== 'attendance') return;
-    const interval = setInterval(() => {
-      setAttendanceToken(Date.now().toString());
+    const interval = setInterval(async () => {
+      const newToken = Date.now().toString();
+      setAttendanceToken(newToken);
+      // Persist Valid Token to Server for strict validation
+      await supabase.from('rooms').update({
+        quiz: { ...session.quiz, current_token: newToken }
+      }).eq('id', roomCode);
     }, 10000); // 10 seconds
     return () => clearInterval(interval);
-  }, [session?.type]);
+  }, [session?.type, roomCode, session?.quiz]);
 
   const joinUrl = session?.type === 'attendance'
     ? `${window.location.href.split('?')[0]}?room=${roomCode}&token=${attendanceToken}`
@@ -4302,17 +4308,28 @@ function StudentPortal({ setRole, initialRoom }) {
         return;
       }
 
-      // 1. Validate Token (must be within 20-30 seconds of creation to prevent sharing static pictures)
+      // 1. Server-Side Validate Token
+      // The teacher's screen rotates the token every 10s and pushes it to roomData.quiz.current_token
       try {
         const params = new URLSearchParams(window.location.search);
         const urlToken = params.get('token');
-        if (urlToken) {
-          const tokenTime = parseInt(urlToken, 10);
-          if (isNaN(tokenTime) || (Date.now() - tokenTime > 30000)) {
-             setIdError("Invalid or Expired QR Code. Please scan the live code on the screen again.");
-             setCheckingId(false);
-             return;
-          }
+        const serverTokenStr = roomData.quiz?.current_token;
+
+        if (!serverTokenStr || !urlToken) {
+          setIdError("Invalid QR Code link. Missing security token.");
+          setCheckingId(false);
+          return;
+        }
+
+        const serverToken = parseInt(serverTokenStr, 10);
+        const clientToken = parseInt(urlToken, 10);
+
+        // Allow the currently active server token, OR one that is within the previous 10-15s window (to handle transit padding)
+        // If the client token is entirely out of bounds from what the server is broadcasting right now, reject it.
+        if (isNaN(clientToken) || isNaN(serverToken) || clientToken > serverToken + 5000 || clientToken < serverToken - 15000) {
+           setIdError("Expired QR Code. Please look at the screen and scan the active QR code.");
+           setCheckingId(false);
+           return;
         }
       } catch(e) {}
 
