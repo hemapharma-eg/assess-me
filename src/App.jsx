@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
-  ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, AlertTriangle,
+  ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, AlertTriangle, Globe,
   UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, PlayCircle as PlayCircleIcon, Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -32,6 +32,60 @@ class ErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+// --- Language Selector Component ---
+function LanguageSelector() {
+  const languages = [
+    { code: 'en', label: 'English' },
+    { code: 'ar', label: 'العربية' },
+    { code: 'fr', label: 'Français' },
+    { code: 'es', label: 'Español' },
+    { code: 'it', label: 'Italiano' },
+    { code: 'pt', label: 'Português' }
+  ];
+
+  const getCookie = (name) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  };
+
+  const [currentLang, setCurrentLang] = useState('en');
+
+  useEffect(() => {
+    const googtrans = getCookie('googtrans');
+    if (googtrans) {
+      const parts = googtrans.split('/');
+      if (parts.length > 2) setCurrentLang(parts[2] || 'en');
+    }
+  }, []);
+
+  const handleLanguageChange = (e) => {
+    const targetLang = e.target.value;
+    setCurrentLang(targetLang);
+    // Google Translate looks for a cookie structured like "/en/[target_lang]"
+    document.cookie = `googtrans=/en/${targetLang}; path=/`;
+    document.cookie = `googtrans=/en/${targetLang}; domain=.${window.location.hostname}; path=/`;
+    window.location.reload();
+  };
+
+  return (
+    <div className="relative flex items-center bg-slate-100 hover:bg-slate-200 rounded-full px-3 py-1.5 transition-colors cursor-pointer group shrink-0 print:hidden">
+      <Globe size={16} className="text-blue-500 mr-2 shrink-0 group-hover:scale-110 transition-transform" />
+      <select 
+        value={currentLang} 
+        onChange={handleLanguageChange} 
+        className="bg-transparent border-none text-xs font-black text-slate-600 focus:outline-none focus:ring-0 appearance-none cursor-pointer pr-4 uppercase tracking-wider"
+      >
+        {languages.map(l => <option key={l.code} value={l.code} className="font-bold text-slate-800">{l.label.toUpperCase()}</option>)}
+      </select>
+      <div className="absolute right-3 pointer-events-none">
+        <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </div>
+    </div>
+  );
 }
 
 // --- Main Application Wrapper ---
@@ -875,6 +929,7 @@ function TeacherPortal({ setRole, user }) {
               <span className="hidden sm:inline">ROOM:</span> {roomCode}
             </div>
           )}
+          <LanguageSelector />
           <button onClick={handleSignOut} className="bg-slate-100 hover:bg-red-50 p-2 text-slate-500 hover:text-red-500 rounded-full transition-colors">
             <LogOut size={20} />
           </button>

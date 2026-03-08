@@ -1,1 +1,24 @@
 @import "tailwindcss";
+
+/* Hide Google Translate Banner and Widget completely */
+.goog-te-banner-frame.skiptranslate {
+    display: none !important;
+}
+body {
+    top: 0px !important; 
+}
+#google_translate_element {
+    display: none !important;
+}
+/* Hide tooltip */
+.goog-tooltip {
+    display: none !important;
+}
+.goog-tooltip:hover {
+    display: none !important;
+}
+.goog-text-highlight {
+    background-color: transparent !important;
+    border: none !important; 
+    box-shadow: none !important;
+}
