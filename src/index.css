@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 /* Hide Google Translate Banner and Widget completely */
-.goog-te-banner-frame.skiptranslate {
-    display: none !important;
+.skiptranslate > iframe.skiptranslate {
+    display: none !important; 
+    visibility: hidden !important;
 }
 body {
     top: 0px !important; 
+    position: static !important;
 }
 #google_translate_element {
     display: none !important;

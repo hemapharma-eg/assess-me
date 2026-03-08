@@ -1755,13 +1755,13 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <BarChart2 size={32} />
         </div>
-        <h2 className="text-3xl font-black text-slate-800">Launch Feedback</h2>
+        <h2 className="text-3xl font-black text-slate-800">Launch Student Survey</h2>
         <p className="text-slate-400 font-bold mt-1">Anonymous session satisfaction survey</p>
       </div>
 
       <div className="space-y-6 mb-8">
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Feedback Title (e.g., Lecture 1 Feedback)</label>
+          <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Survey Title (e.g., Lecture 1 Survey)</label>
           <input
             type="text"
             className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-purple-500 transition-all"
@@ -1802,7 +1802,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         <button
           onClick={() => {
             const feedbackQuiz = {
-              title: sessionName || 'Feedback Session',
+              title: sessionName || 'Student Survey Session',
               assigned_classes: assignedClasses,
               questions: [
                 { id: 1, text: "The session’s objectives and content were clearly presented and well-organized.", type: "rating" },
@@ -1858,7 +1858,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           className="bg-purple-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
         >
           <div className="p-3 bg-white/10 rounded-2xl"><BarChart2 size={40} /></div>
-          <span className="text-2xl font-black">Feedback Survey</span>
+          <span className="text-2xl font-black">Student Survey</span>
           <span className="text-xs font-medium opacity-80 leading-relaxed">Collect anonymous session satisfaction feedback with graphical analytics.</span>
         </button>
       </div>
@@ -2034,7 +2034,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
           </button>
           <button onClick={() => setType('survey')} className="p-8 rounded-[2rem] border-2 border-slate-100 hover:border-green-500 hover:bg-green-50 transition-all flex flex-col items-center gap-4 group md:col-span-2">
             <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><BarChart2 size={32} /></div>
-            <h3 className="text-xl font-black text-slate-800">Feedback Survey</h3>
+            <h3 className="text-xl font-black text-slate-800">Student Survey</h3>
             <p className="text-sm text-slate-500 font-medium">Collect student opinions and feedback anonymously.</p>
           </button>
         </div>
@@ -2714,7 +2714,7 @@ function FeedbackSurvey({ session, answers, submit, onFinish }) {
         disabled={!isComplete}
         className="w-full py-6 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-purple-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
       >
-        Submit Feedback <CheckCircle size={24} />
+        Submit Survey <CheckCircle size={24} />
       </button>
       <p className="text-center text-slate-400 font-bold text-[10px] mt-6 uppercase tracking-widest">Thank you for helping us improve!</p>
     </div>
@@ -2802,7 +2802,7 @@ function FeedbackDashboard({ reports, classes }) {
       
       {/* Print-only Dynamic Header */}
       <div className="hidden print:block text-center py-4 border-b-2 border-slate-100 mb-8">
-        <h1 className="text-3xl font-black text-slate-800 mb-2">Feedback Report</h1>
+        <h1 className="text-3xl font-black text-slate-800 mb-2">Student Survey Report</h1>
         <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">
           Class: {classFilter ? classes.find(c => c.id === classFilter)?.name : 'All Classes'}  •  
           Session: {sessionFilter || 'All Sessions'}
@@ -3370,7 +3370,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
         <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
         <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Class Gradebook</button>
         <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
-        <button onClick={() => setView('feedback')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Feedback</button>
+        <button onClick={() => setView('feedback')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Student Surveys</button>
       </div>
 
       {view === 'history' ? (
