@@ -1154,7 +1154,7 @@ function ScheduledTab({ user, classes }) {
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Code</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Status</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Timer</th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">Schedule</th>
+                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100" title={`Local: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}>Schedule</th>
                 <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100 text-right">Actions</th>
               </tr>
             </thead>
@@ -1212,11 +1212,11 @@ function ScheduledTab({ user, classes }) {
                       {isEditing ? (
                         <div className="flex flex-col gap-2 min-w-[200px]">
                           <div className="flex items-center gap-2">
-                            <span className="text-[8px] font-black uppercase text-slate-400 w-8">Start</span>
+                            <span className="text-[8px] font-black uppercase text-slate-400 w-8" title={`Local: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}>Start</span>
                             <input type="datetime-local" className="flex-1 p-1 text-xs font-bold border border-slate-200 rounded" value={editStart} onChange={e => setEditStart(e.target.value)} />
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[8px] font-black uppercase text-slate-400 w-8">End</span>
+                            <span className="text-[8px] font-black uppercase text-slate-400 w-8" title={`Local: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}>End</span>
                             <input type="datetime-local" className="flex-1 p-1 text-xs font-bold border border-slate-200 rounded" value={editEnd} onChange={e => setEditEnd(e.target.value)} />
                           </div>
                         </div>
@@ -1490,11 +1490,11 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         {category === 'async' && (
           <div className="space-y-4 mb-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
             <div>
-              <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">Start Time</label>
+              <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">Start Time (Local: {Intl.DateTimeFormat().resolvedOptions().timeZone})</label>
               <input type="datetime-local" className="w-full p-2 rounded-xl text-sm font-bold border border-orange-200" value={startTime} onChange={e => setStartTime(e.target.value)} />
             </div>
             <div>
-              <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">End Time</label>
+              <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">End Time (Local: {Intl.DateTimeFormat().resolvedOptions().timeZone})</label>
               <input type="datetime-local" className="w-full p-2 rounded-xl text-sm font-bold border border-orange-200" value={endTime} onChange={e => setEndTime(e.target.value)} />
             </div>
           </div>
@@ -4292,14 +4292,15 @@ function StudentPortal({ setRole, initialRoom }) {
       const now = Date.now();
       const start = new Date(roomData.start_time).getTime();
       const end = new Date(roomData.end_time).getTime();
+      const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       if (now < start) {
-        setIdError(`This quiz is not yet available. It starts at ${new Date(roomData.start_time).toLocaleString()}.`);
+        setIdError(`This quiz is not yet available. It starts at ${new Date(roomData.start_time).toLocaleString()} (${tzName}).`);
         setCheckingId(false);
         return;
       }
       if (now > end) {
-        setIdError(`This quiz has ended. It closed at ${new Date(roomData.end_time).toLocaleString()}.`);
+        setIdError(`This quiz has ended. It closed at ${new Date(roomData.end_time).toLocaleString()} (${tzName}).`);
         setCheckingId(false);
         return;
       }
