@@ -46,6 +46,10 @@ export default function App() {
 function MainApp() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  const [initialRoom, setInitialRoom] = useState('');
+  const [authError, setAuthError] = useState(null);
+  const [loadingContext, setLoadingContext] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   useEffect(() => {
     // Check URL params for QR scanning
