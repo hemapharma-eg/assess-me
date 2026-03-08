@@ -2854,6 +2854,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   const [draftWeights, setDraftWeights] = useState({});
   const [draftMode, setDraftMode] = useState('simple'); // 'simple' | 'weighted' | 'top_n'
   const [draftTopN, setDraftTopN] = useState(3);
+  const [saOverrides, setSaOverrides] = useState({}); // { reportId: { "studentId___qIdx": true|false } }
+  const [saAnswerPopup, setSaAnswerPopup] = useState(null); // { reportId, studentId, qIdx, answer, isOk }
 
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
   const getEffectiveResponses = (r) => r.responses || []; // now synced directly by parent state
@@ -2965,8 +2967,9 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
     } catch (e) { alert('Error exporting to Excel: ' + e.message); }
   };
 
-  // Helper to compute student scores for a report
+  // Helper to compute student scores for a report, respecting manual SA overrides
   const computeScores = (report) => {
+    const overrides = saOverrides[report.id] || report.score_overrides || {};
     return getEffectiveResponses(report).map(r => {
       let correctCount = 0;
       let email = '';
@@ -2986,10 +2989,18 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
           if (q.type === 'mc') display = String.fromCharCode(65 + Number(rawAns));
           else if (q.type === 'tf') display = Number(rawAns) === 0 ? 'True' : 'False';
           else display = String(rawAns);
-          isOk = q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct));
+          // Check for manual override first, then fall back to auto-grade
+          const overrideKey = `${r.student_id}___${qIdx}`;
+          if (overrides[overrideKey] !== undefined) {
+            isOk = overrides[overrideKey];
+          } else {
+            isOk = q.type === 'sa'
+              ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
+              : (String(rawAns) === String(q.correct));
+          }
           if (isOk) correctCount++;
         }
-        return { display, isOk };
+        return { display, isOk, isSA: q.type === 'sa', rawAns };
       });
 
       // Attendance status weight
@@ -3111,11 +3122,36 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                         </td>
                       )}
 
-                      {s.perQ.map((pq, qi) => (
-                        <td key={qi} className={`p-4 text-center ${pq.display === 'N/A' ? 'text-slate-300' : pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
-                          {pq.display === 'N/A' ? <span className="text-xs">—</span> : pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
-                        </td>
-                      ))}
+                      {s.perQ.map((pq, qi) => {
+                        if (pq.display === 'N/A') {
+                          return <td key={qi} className="p-4 text-center text-slate-300"><span className="text-xs">—</span></td>;
+                        }
+                        if (pq.isSA) {
+                          // SA cell: clickable, shows truncated answer + badge
+                          return (
+                            <td key={qi} className="p-2 text-center">
+                              <button
+                                onClick={() => setSaAnswerPopup({ reportId: activeReport.id, studentId: s.student_id, qIdx: qi, answer: pq.rawAns, isOk: pq.isOk })}
+                                title="Click to read the full answer & toggle marking"
+                                className={`max-w-[160px] text-left text-xs font-bold px-3 py-1.5 rounded-xl border-2 border-dashed transition-all hover:shadow-md ${
+                                  pq.isOk
+                                    ? 'bg-green-50 text-green-700 border-green-300'
+                                    : 'bg-red-50 text-red-700 border-red-200'
+                                }`}
+                              >
+                                <span className="block truncate max-w-[130px]">{pq.display}</span>
+                                <span className="text-[10px] font-black">{pq.isOk ? '✓ Correct' : '✗ Incorrect'}</span>
+                              </button>
+                            </td>
+                          );
+                        }
+                        // MC / TF plain cell
+                        return (
+                          <td key={qi} className={`p-4 text-center ${pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
+                            {pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
+                          </td>
+                        );
+                      })}
                       {activeReport.type !== 'attendance' && (
                         <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
                       )}
@@ -3877,9 +3913,84 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
           </div>
         </div>
       )}
+
+      {/* SA Answer Reader & Override Popup */}
+      {saAnswerPopup && (() => {
+        const { reportId, studentId, qIdx, answer, isOk } = saAnswerPopup;
+        const rep = (allReports || reports).find(r => r.id === reportId);
+        const question = rep?.questions?.[qIdx];
+        const modelAnswer = question?.correct || '';
+
+        const handleToggle = async (newIsOk) => {
+          const overrideKey = `${studentId}___${qIdx}`;
+          const prevForReport = saOverrides[reportId] || rep?.score_overrides || {};
+          const newForReport = { ...prevForReport, [overrideKey]: newIsOk };
+          setSaOverrides(prev => ({ ...prev, [reportId]: newForReport }));
+          setSaAnswerPopup(null);
+          await supabase.from('reports').update({ score_overrides: newForReport }).eq('id', reportId);
+        };
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden">
+              {/* Header */}
+              <div className="bg-slate-50 p-6 border-b flex items-start gap-4">
+                <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-black text-sm ${isOk ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {isOk ? '✓' : '✗'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Q{qIdx + 1} — Short Answer</p>
+                  <p className="font-black text-slate-800 text-sm leading-snug">{question?.question || ''}</p>
+                </div>
+                <button onClick={() => setSaAnswerPopup(null)} className="shrink-0 text-slate-400 hover:text-slate-700 font-black text-xl leading-none">✕</button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {modelAnswer && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Model Answer</p>
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm font-bold text-green-800">{modelAnswer}</div>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Student's Answer</p>
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-sm font-bold text-slate-800 min-h-[80px] max-h-[220px] overflow-y-auto leading-relaxed whitespace-pre-wrap break-words">
+                    {answer || <span className="text-slate-400 italic font-normal">No answer provided</span>}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Mark:</span>
+                  <span className={`text-xs font-black px-3 py-1 rounded-lg ${isOk ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {isOk ? '✓ Correct' : '✗ Incorrect'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 p-6 pt-0">
+                <button
+                  onClick={() => handleToggle(false)}
+                  className={`flex-1 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${!isOk ? 'bg-red-500 text-white shadow-lg shadow-red-100' : 'bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}
+                >
+                  ✗ Mark Incorrect
+                </button>
+                <button
+                  onClick={() => handleToggle(true)}
+                  className={`flex-1 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${isOk ? 'bg-green-500 text-white shadow-lg shadow-green-100' : 'bg-slate-100 text-slate-500 hover:bg-green-50 hover:text-green-600'}`}
+                >
+                  ✓ Mark Correct
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
+
+
 
 
 
