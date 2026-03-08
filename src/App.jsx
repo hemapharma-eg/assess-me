@@ -559,6 +559,10 @@ function TeacherPortal({ setRole, user }) {
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('ClassLabX_RoomCode') || '');
   const [asyncReports, setAsyncReports] = useState([]);
 
+  // Active Room Navigation Warning State
+  const [showCloseWarning, setShowCloseWarning] = useState(false);
+  const [pendingTab, setPendingTab] = useState(null);
+
   // Fetch Quizzes and Reports
   useEffect(() => {
     const fetchData = async () => {
@@ -820,6 +824,16 @@ function TeacherPortal({ setRole, user }) {
     setActiveTab('reports');
   };
 
+  const handleTabChange = (newTab) => {
+    // If navigating away from an active sync room, warn them
+    if (activeTab === 'synchronous' && session && !session.is_async && newTab !== 'synchronous') {
+      setPendingTab(newTab);
+      setShowCloseWarning(true);
+    } else {
+      setActiveTab(newTab);
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setRole(null);
@@ -840,7 +854,7 @@ function TeacherPortal({ setRole, user }) {
           <nav className="hidden md:flex gap-1">
             {['Quizzes', 'Classes', 'Launch', 'Synchronous', 'Asynchronous', 'Reports'].map(t => (
               <button
-                key={t} onClick={() => setActiveTab(t.toLowerCase())}
+                key={t} onClick={() => handleTabChange(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
               >
                 {t}
@@ -872,7 +886,7 @@ function TeacherPortal({ setRole, user }) {
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
           {['quizzes', 'classes', 'launch', 'synchronous', 'asynchronous', 'reports'].map(tab => (
             <button
-              key={tab} onClick={() => setActiveTab(tab)}
+              key={tab} onClick={() => handleTabChange(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
             >
               {tab}
@@ -893,6 +907,56 @@ function TeacherPortal({ setRole, user }) {
           return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} updateReportStatus={updateReportStatus} />;
         })()}
       </main>
+
+      {/* Close Warning Modal */}
+      {showCloseWarning && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6">
+              <AlertTriangle size={32} />
+            </div>
+            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Active Room Alert</h3>
+            <p className="text-slate-500 font-bold mb-8 leading-relaxed">
+              You are leaving an active session. <span className="text-red-500 bg-red-50 px-1 rounded">Results will not be finalized or saved to reports until this room is closed.</span> What would you like to do?
+            </p>
+            <div className="space-y-3">
+              <button 
+                onClick={async () => {
+                   setShowCloseWarning(false);
+                   await onEnd(); // trigger close
+                   if (pendingTab && pendingTab !== 'reports') {
+                      setActiveTab(pendingTab);
+                   }
+                   setPendingTab(null);
+                }} 
+                className="w-full py-4 bg-red-500 hover:bg-red-600 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-red-100"
+              >
+                Close Room (Record Results & Go)
+              </button>
+              <button 
+                onClick={() => {
+                   setShowCloseWarning(false);
+                   setActiveTab(pendingTab);
+                   setPendingTab(null);
+                }} 
+                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-sm uppercase tracking-widest transition-colors"
+              >
+                Keep Room Open (Go quietly)
+              </button>
+              <button 
+                onClick={() => {
+                   setShowCloseWarning(false);
+                   setPendingTab(null);
+                }} 
+                className="w-full py-4 bg-white hover:bg-slate-50 text-slate-400 rounded-xl font-black text-xs uppercase tracking-widest transition-colors border-2 border-slate-100"
+              >
+                Cancel (Stay Here)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
