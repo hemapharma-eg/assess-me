@@ -1988,11 +1988,6 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
             <h3 className="text-xl font-black text-slate-800">Video Quiz</h3>
             <p className="text-sm text-slate-500 font-medium">Embed a YouTube video and add questions at specific timestamps.</p>
           </button>
-          <button onClick={() => setType('survey')} className="p-8 rounded-[2rem] border-2 border-slate-100 hover:border-green-500 hover:bg-green-50 transition-all flex flex-col items-center gap-4 group md:col-span-2">
-            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><BarChart2 size={32} /></div>
-            <h3 className="text-xl font-black text-slate-800">Feedback Survey</h3>
-            <p className="text-sm text-slate-500 font-medium">Collect student opinions and feedback anonymously.</p>
-          </button>
         </div>
         <button onClick={onCancel} className="mt-12 px-8 py-3 text-slate-400 font-black hover:text-slate-600 transition-colors">Cancel</button>
       </div>
