@@ -2848,6 +2848,9 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   const [assignClassValue, setAssignClassValue] = useState('');
   const [selectedForEmail, setSelectedForEmail] = useState([]);
   const [localReportPatch, setLocalReportPatch] = useState({}); // id -> {title?, assigned_classes?}
+  const [quizWeights, setQuizWeights] = useState({}); // { classId: { quizTitle: weight% } }
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [draftWeights, setDraftWeights] = useState({});
 
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
   const getEffectiveResponses = (r) => r.responses || []; // now synced directly by parent state
@@ -3154,14 +3157,15 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles, attendanceOnly = false) => {
     try {
       const wb = XLSX.utils.book_new();
+      const weights = quizWeights[cls.id] || cls.quiz_weights || {};
 
       // Separate out quizzes from attendance
       const quizTitles = attendanceOnly ? [] : Array.from(new Set(assignedReps.filter(r => r.type !== 'attendance').map(r => r.title)));
 
       const headers = ['Student ID', 'Student Name'];
-      if (!attendanceOnly) headers.push('Average Quiz Score (%)');
+      if (!attendanceOnly) headers.push('Weighted Score (%)');
       if (hasAttendance) headers.push('Overall Attendance (%)');
-      if (!attendanceOnly) headers.push(...quizTitles);
+      if (!attendanceOnly) headers.push(...quizTitles.map(t => Object.keys(weights).length > 0 ? `${t} (${weights[t] ?? 0}%)` : t));
       if (hasAttendance) headers.push(...attendanceTitles);
 
       const rows = [headers];
@@ -3279,13 +3283,29 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             }
           });
 
-          // Calculate Averages
-          let totalScore = 0;
-          let attemptCount = 0;
-          Object.values(scores).forEach(highestScore => {
-            totalScore += highestScore;
-            attemptCount++;
-          });
+          // Calculate weighted or simple average
+          const currentWeights = quizWeights[gradebookClass.id] || gradebookClass.quiz_weights || {};
+          const hasWeights = Object.keys(currentWeights).length > 0;
+          let average = 0;
+          if (hasWeights) {
+            // Weighted sum: each quiz score × (its weight / 100)
+            let weightedSum = 0;
+            uniqueQuizTitles.forEach(title => {
+              const w = currentWeights[title] ?? 0;
+              const score = scores[title] ?? 0;
+              weightedSum += (score * w) / 100;
+            });
+            average = Math.round(weightedSum);
+          } else {
+            // Fallback: simple unweighted average for backward compatibility
+            let totalScore = 0;
+            let attemptCount = 0;
+            Object.values(scores).forEach(highestScore => {
+              totalScore += highestScore;
+              attemptCount++;
+            });
+            average = attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0;
+          }
 
           let attendancePoints = 0;
           Object.values(attendanceRecords).forEach(rec => {
@@ -3299,7 +3319,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
           return { 
             ...stu, 
             scores, 
-            average: attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0,
+            average,
             attendanceRecords,
             attendanceTotal
           };
@@ -3310,6 +3330,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   if (reports.length === 0 && classes.length === 0) return <div className="text-center p-32 bg-white rounded-[3rem] text-slate-300 font-black uppercase tracking-widest border border-dashed">No Analytics Yet</div>;
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-4xl mx-auto overflow-x-auto whitespace-nowrap custom-scroll print:hidden">
         <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
@@ -3503,9 +3524,21 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
               </select>
             </div>
             {gradebookClass && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    const uniqueTitles = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
+                    const current = quizWeights[gradebookClass.id] || gradebookClass.quiz_weights || {};
+                    const draft = {};
+                    uniqueTitles.forEach(t => { draft[t] = current[t] ?? 0; });
+                    setDraftWeights(draft);
+                    setShowWeightModal(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-blue-100 transition-transform active:scale-95"
+                >
+                  <BarChart2 size={18} /> Set Weights
+                </button>
                 <button onClick={() => {
-                   const qs = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
                    exportGradebook(gradebookClass, assignedReports, gradeMatrix, false, []);
                 }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
                   <Download size={18} /> Export Gradebook
@@ -3524,12 +3557,17 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
                     <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average Score</th>
                     
-                    {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
-                      <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
-                        <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
-                        <div className="text-slate-300 font-medium text-[8px] mt-1">Quiz Best Score</div>
-                      </th>
-                    ))}
+                    {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => {
+                      const w = (quizWeights[gradebookClass?.id] || gradebookClass?.quiz_weights || {})[title];
+                      return (
+                        <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
+                          <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
+                          <div className="text-slate-300 font-medium text-[8px] mt-1">
+                            {w !== undefined ? `Weight: ${w}%` : 'No Weight Set'}
+                          </div>
+                        </th>
+                      );
+                    })}
 
                     {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No quizzes recorded yet.</th>}
                   </tr>
@@ -3677,8 +3715,87 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
         </div>
       ) : null}
     </div>
+
+      {/* Quiz Weights Modal */}
+      {showWeightModal && gradebookClass && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
+                <BarChart2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-800">Set Quiz Weights</h3>
+                <p className="text-xs font-bold text-slate-400">{gradebookClass.name} — Total must equal exactly 100%</p>
+              </div>
+            </div>
+
+            {Object.keys(draftWeights).length === 0 ? (
+              <p className="text-slate-400 font-bold text-center py-8 italic">No quizzes found for this class yet.</p>
+            ) : (
+              <div className="space-y-3 mb-6">
+                {Object.keys(draftWeights).map(title => (
+                  <div key={title} className="flex items-center gap-4 bg-slate-50 rounded-2xl p-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-slate-700 text-sm truncate" title={title}>{title}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={draftWeights[title]}
+                        onChange={e => {
+                          const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                          setDraftWeights(prev => ({ ...prev, [title]: val }));
+                        }}
+                        className="w-20 text-center bg-white border-2 border-slate-200 rounded-xl font-black text-slate-700 p-2 focus:outline-none focus:border-blue-500 transition-all"
+                      />
+                      <span className="text-slate-500 font-black text-sm">%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {Object.keys(draftWeights).length > 0 && (() => {
+              const total = Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0);
+              const isValid = total === 100;
+              const diff = 100 - total;
+              return (
+                <div className={`flex items-center justify-between p-4 rounded-2xl mb-6 border-2 ${isValid ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                  <span className={`font-black text-sm uppercase tracking-widest ${isValid ? 'text-green-700' : 'text-orange-600'}`}>
+                    {isValid ? '✓ Total is 100%' : `Total: ${total}% (${diff > 0 ? `+${diff}` : diff} needed)`}
+                  </span>
+                  <span className={`text-2xl font-black ${isValid ? 'text-green-600' : 'text-orange-500'}`}>{total}%</span>
+                </div>
+              );
+            })()}
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
+                Cancel
+              </button>
+              <button
+                disabled={Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0) !== 100}
+                onClick={async () => {
+                  const { error } = await supabase.from('classes').update({ quiz_weights: draftWeights }).eq('id', gradebookClass.id);
+                  if (error) { alert('Error saving weights: ' + error.message); return; }
+                  setQuizWeights(prev => ({ ...prev, [gradebookClass.id]: { ...draftWeights } }));
+                  setShowWeightModal(false);
+                }}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
+              >
+                Save Weights
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
+
 
 
 // ==========================================
