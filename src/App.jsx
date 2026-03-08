@@ -3287,7 +3287,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     <th className="p-4 border-b border-slate-200">Session Name</th>
                     <th className="p-4 border-b border-slate-200">Date/Time</th>
                     <th className="p-4 border-b border-slate-200 text-center">Students</th>
-                    <th className="p-4 border-b border-slate-200 text-center">% Correct</th>
+
                     <th className="p-4 border-b border-slate-200 text-right pr-6">Actions</th>
                   </tr>
                 </thead>
@@ -3391,26 +3391,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {getEffectiveResponses(r).length}
                       </td>
-                      <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
-                        {(() => {
-                           if (r.type === 'attendance') return '';
-                           const resps = getEffectiveResponses(r);
-                           if (resps.length === 0) return '-';
-                           const totalScore = resps.reduce((acc, rp) => {
-                             let correct = 0;
-                             const qs = r.questions || [];
-                             qs.forEach((q, qi) => {
-                               const ans = rp.answers?.[qi];
-                               if (ans !== undefined) {
-                                 const ok = q.type === 'sa' ? (q.correct && String(ans).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(ans) === String(q.correct));
-                                 if (ok) correct++;
-                               }
-                             });
-                             return acc + Math.round((correct / (qs.length || 1)) * 100);
-                           }, 0);
-                           return Math.round(totalScore / resps.length) + '%';
-                        })()}
-                      </td>
+
                       <td className="p-3 text-right align-middle pr-6 space-x-2">
                         <button onClick={() => toggleHidden(r.id)} className="px-3 py-2 inline-flex bg-slate-50 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg font-black text-xs transition-all items-center gap-2" title="Hide Session">
                           <EyeOff size={14} />
