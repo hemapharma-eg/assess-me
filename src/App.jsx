@@ -45,20 +45,7 @@ export default function App() {
 
 function MainApp() {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(() => localStorage.getItem('ClassLabX_Role') || null);
-  const [initialRoom, setInitialRoom] = useState('');
-  const [authError, setAuthError] = useState(null);
-  const [loadingContext, setLoadingContext] = useState(true);
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
-
-  // Sync role to localStorage whenever it changes
-  useEffect(() => {
-    if (role) {
-      localStorage.setItem('ClassLabX_Role', role);
-    } else {
-      localStorage.removeItem('ClassLabX_Role');
-    }
-  }, [role]);
+  const [role, setRole] = useState(null);
 
   useEffect(() => {
     // Check URL params for QR scanning
@@ -74,7 +61,10 @@ function MainApp() {
     // Init Supabase session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) setAuthError(error.message);
-      else if (session) setUser(session.user);
+      else if (session) {
+        setUser(session.user);
+        setRole(prev => prev || 'teacher'); // Auto-derive if role unset
+      }
       setLoadingContext(false);
     });
 
@@ -83,6 +73,8 @@ function MainApp() {
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
         setRole('teacher');
+      } else if (event === 'SIGNED_OUT') {
+        setRole(null); // Clear role cleanly on logout
       }
     });
 
