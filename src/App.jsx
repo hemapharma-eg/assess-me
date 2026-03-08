@@ -2849,8 +2849,11 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   const [selectedForEmail, setSelectedForEmail] = useState([]);
   const [localReportPatch, setLocalReportPatch] = useState({}); // id -> {title?, assigned_classes?}
   const [quizWeights, setQuizWeights] = useState({}); // { classId: { quizTitle: weight% } }
+  const [gradebookSettings, setGradebookSettings] = useState({}); // { classId: { mode, topN } }
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [draftWeights, setDraftWeights] = useState({});
+  const [draftMode, setDraftMode] = useState('simple'); // 'simple' | 'weighted' | 'top_n'
+  const [draftTopN, setDraftTopN] = useState(3);
 
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
   const getEffectiveResponses = (r) => r.responses || []; // now synced directly by parent state
@@ -3283,11 +3286,14 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             }
           });
 
-          // Calculate weighted or simple average
+          // Calculate average based on gradebook mode
+          const settings = gradebookSettings[gradebookClass.id] || {};
+          const currentMode = settings.mode || gradebookClass.gradebook_mode || 'simple';
+          const currentTopN = settings.topN ?? gradebookClass.top_n_count ?? 0;
           const currentWeights = quizWeights[gradebookClass.id] || gradebookClass.quiz_weights || {};
-          const hasWeights = Object.keys(currentWeights).length > 0;
           let average = 0;
-          if (hasWeights) {
+
+          if (currentMode === 'weighted' && Object.keys(currentWeights).length > 0) {
             // Weighted sum: each quiz score × (its weight / 100)
             let weightedSum = 0;
             uniqueQuizTitles.forEach(title => {
@@ -3296,15 +3302,15 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
               weightedSum += (score * w) / 100;
             });
             average = Math.round(weightedSum);
+          } else if (currentMode === 'top_n' && currentTopN > 0) {
+            // Top-N: take the N highest best-scores and average them equally
+            const allScores = Object.values(scores).sort((a, b) => b - a);
+            const topSlice = allScores.slice(0, currentTopN);
+            average = topSlice.length > 0 ? Math.round(topSlice.reduce((s, v) => s + v, 0) / topSlice.length) : 0;
           } else {
-            // Fallback: simple unweighted average for backward compatibility
-            let totalScore = 0;
-            let attemptCount = 0;
-            Object.values(scores).forEach(highestScore => {
-              totalScore += highestScore;
-              attemptCount++;
-            });
-            average = attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0;
+            // Simple: unweighted average of all best-scores
+            const vals = Object.values(scores);
+            average = vals.length > 0 ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 0;
           }
 
           let attendancePoints = 0;
@@ -3532,6 +3538,12 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     const draft = {};
                     uniqueTitles.forEach(t => { draft[t] = current[t] ?? 0; });
                     setDraftWeights(draft);
+                    // init mode
+                    const settings = gradebookSettings[gradebookClass.id] || {};
+                    const mode = settings.mode || gradebookClass.gradebook_mode || 'simple';
+                    const topN = settings.topN ?? gradebookClass.top_n_count ?? Math.min(3, uniqueTitles.length);
+                    setDraftMode(mode);
+                    setDraftTopN(topN || 3);
                     setShowWeightModal(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-blue-100 transition-transform active:scale-95"
@@ -3555,15 +3567,22 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                   <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
                     <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
                     <th className="p-4 border-b border-slate-200 w-32">ID</th>
-                    <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">Average Score</th>
+                    {(() => {
+                      const s = gradebookSettings[gradebookClass?.id] || {};
+                      const m = s.mode || gradebookClass?.gradebook_mode || 'simple';
+                      const n = s.topN ?? gradebookClass?.top_n_count ?? 0;
+                      const label = m === 'top_n' ? `Top ${n} Score` : m === 'weighted' ? 'Weighted Score' : 'Average Score';
+                      return <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">{label}</th>;
+                    })()}
                     
                     {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => {
+                      const activeMode = (gradebookSettings[gradebookClass?.id] || {}).mode || gradebookClass?.gradebook_mode || 'simple';
                       const w = (quizWeights[gradebookClass?.id] || gradebookClass?.quiz_weights || {})[title];
                       return (
                         <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
                           <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
                           <div className="text-slate-300 font-medium text-[8px] mt-1">
-                            {w !== undefined ? `Weight: ${w}%` : 'No Weight Set'}
+                            {activeMode === 'weighted' && w !== undefined ? `Weight: ${w}%` : 'Best Score'}
                           </div>
                         </th>
                       );
@@ -3720,73 +3739,139 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
       {showWeightModal && gradebookClass && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
                 <BarChart2 size={24} />
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-800">Set Quiz Weights</h3>
-                <p className="text-xs font-bold text-slate-400">{gradebookClass.name} — Total must equal exactly 100%</p>
+                <h3 className="text-xl font-black text-slate-800">Gradebook Scoring Mode</h3>
+                <p className="text-xs font-bold text-slate-400">{gradebookClass.name}</p>
               </div>
             </div>
 
-            {Object.keys(draftWeights).length === 0 ? (
-              <p className="text-slate-400 font-bold text-center py-8 italic">No quizzes found for this class yet.</p>
-            ) : (
-              <div className="space-y-3 mb-6">
-                {Object.keys(draftWeights).map(title => (
-                  <div key={title} className="flex items-center gap-4 bg-slate-50 rounded-2xl p-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-black text-slate-700 text-sm truncate" title={title}>{title}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={draftWeights[title]}
-                        onChange={e => {
-                          const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                          setDraftWeights(prev => ({ ...prev, [title]: val }));
-                        }}
-                        className="w-20 text-center bg-white border-2 border-slate-200 rounded-xl font-black text-slate-700 p-2 focus:outline-none focus:border-blue-500 transition-all"
-                      />
-                      <span className="text-slate-500 font-black text-sm">%</span>
-                    </div>
-                  </div>
-                ))}
+            {/* Mode Selector */}
+            <div className="flex bg-slate-100 rounded-2xl p-1 mb-6 gap-1">
+              {[
+                { key: 'simple', label: 'Simple Average' },
+                { key: 'weighted', label: 'Custom Weights' },
+                { key: 'top_n', label: 'Top N Scores' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => setDraftMode(opt.key)}
+                  className={`flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
+                    draftMode === opt.key
+                      ? 'bg-white text-blue-600 shadow-md'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Mode descriptions */}
+            {draftMode === 'simple' && (
+              <div className="bg-slate-50 rounded-2xl p-4 mb-6 text-sm font-bold text-slate-500">
+                All quiz best-scores for each student are averaged equally. No configuration needed.
               </div>
             )}
 
-            {Object.keys(draftWeights).length > 0 && (() => {
-              const total = Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0);
-              const isValid = total === 100;
-              const diff = 100 - total;
-              return (
-                <div className={`flex items-center justify-between p-4 rounded-2xl mb-6 border-2 ${isValid ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
-                  <span className={`font-black text-sm uppercase tracking-widest ${isValid ? 'text-green-700' : 'text-orange-600'}`}>
-                    {isValid ? '✓ Total is 100%' : `Total: ${total}% (${diff > 0 ? `+${diff}` : diff} needed)`}
-                  </span>
-                  <span className={`text-2xl font-black ${isValid ? 'text-green-600' : 'text-orange-500'}`}>{total}%</span>
-                </div>
-              );
-            })()}
+            {/* Custom Weights Mode */}
+            {draftMode === 'weighted' && (
+              <>
+                {Object.keys(draftWeights).length === 0 ? (
+                  <p className="text-slate-400 font-bold text-center py-8 italic">No quizzes found for this class yet.</p>
+                ) : (
+                  <div className="space-y-3 mb-4">
+                    {Object.keys(draftWeights).map(title => (
+                      <div key={title} className="flex items-center gap-4 bg-slate-50 rounded-2xl p-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-slate-700 text-sm truncate" title={title}>{title}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <input
+                            type="number" min="0" max="100"
+                            value={draftWeights[title]}
+                            onChange={e => {
+                              const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                              setDraftWeights(prev => ({ ...prev, [title]: val }));
+                            }}
+                            className="w-20 text-center bg-white border-2 border-slate-200 rounded-xl font-black text-slate-700 p-2 focus:outline-none focus:border-blue-500 transition-all"
+                          />
+                          <span className="text-slate-500 font-black text-sm">%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {Object.keys(draftWeights).length > 0 && (() => {
+                  const total = Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0);
+                  const isValid = total === 100;
+                  const diff = 100 - total;
+                  return (
+                    <div className={`flex items-center justify-between p-4 rounded-2xl mb-6 border-2 ${isValid ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                      <span className={`font-black text-sm uppercase tracking-widest ${isValid ? 'text-green-700' : 'text-orange-600'}`}>
+                        {isValid ? '✓ Total is 100%' : `Total: ${total}% (${diff > 0 ? `+${diff}` : diff} needed)`}
+                      </span>
+                      <span className={`text-2xl font-black ${isValid ? 'text-green-600' : 'text-orange-500'}`}>{total}%</span>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
 
+            {/* Top N Mode */}
+            {draftMode === 'top_n' && (
+              <div className="mb-6">
+                <p className="text-sm font-bold text-slate-500 mb-4">
+                  Only each student's <strong className="text-blue-600">N highest quiz scores</strong> will be averaged equally. 
+                  Set N below (must be between 1 and {Object.keys(draftWeights).length || '?'} quizzes).
+                </p>
+                <div className="flex items-center gap-4 bg-slate-50 rounded-2xl p-5">
+                  <label className="font-black text-slate-700 text-sm uppercase tracking-widest flex-1">Consider Top</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={Object.keys(draftWeights).length || 100}
+                    value={draftTopN}
+                    onChange={e => setDraftTopN(Math.max(1, Math.min(Object.keys(draftWeights).length || 100, Number(e.target.value) || 1)))}
+                    className="w-24 text-center bg-white border-2 border-slate-200 rounded-xl font-black text-slate-700 p-3 text-xl focus:outline-none focus:border-blue-500 transition-all"
+                  />
+                  <label className="font-black text-slate-700 text-sm uppercase tracking-widest">Quizzes</label>
+                </div>
+                {draftTopN >= Object.keys(draftWeights).length && Object.keys(draftWeights).length > 0 && (
+                  <p className="text-orange-500 font-bold text-xs mt-3 ml-1">⚠ N equals or exceeds total quizzes — same as Simple Average.</p>
+                )}
+              </div>
+            )}
+
+            {/* Save / Cancel */}
             <div className="flex gap-3">
               <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
                 Cancel
               </button>
               <button
-                disabled={Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0) !== 100}
+                disabled={draftMode === 'weighted' && Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0) !== 100}
                 onClick={async () => {
-                  const { error } = await supabase.from('classes').update({ quiz_weights: draftWeights }).eq('id', gradebookClass.id);
-                  if (error) { alert('Error saving weights: ' + error.message); return; }
-                  setQuizWeights(prev => ({ ...prev, [gradebookClass.id]: { ...draftWeights } }));
+                  const updatePayload = {
+                    gradebook_mode: draftMode,
+                    top_n_count: draftMode === 'top_n' ? draftTopN : 0,
+                    quiz_weights: draftMode === 'weighted' ? draftWeights : {},
+                  };
+                  const { error } = await supabase.from('classes').update(updatePayload).eq('id', gradebookClass.id);
+                  if (error) { alert('Error saving: ' + error.message); return; }
+                  // Update local state for instant recalculation
+                  setGradebookSettings(prev => ({ ...prev, [gradebookClass.id]: { mode: draftMode, topN: draftTopN } }));
+                  if (draftMode === 'weighted') {
+                    setQuizWeights(prev => ({ ...prev, [gradebookClass.id]: { ...draftWeights } }));
+                  }
                   setShowWeightModal(false);
                 }}
                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
               >
-                Save Weights
+                Save Settings
               </button>
             </div>
           </div>
