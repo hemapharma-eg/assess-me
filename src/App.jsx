@@ -831,7 +831,7 @@ function TeacherPortal({ setRole, user }) {
     <div className="min-h-screen bg-slate-50 flex flex-col relative">
       {isProfileIncomplete && <ProfileCompletionOverlay profile={profile} setProfile={setProfile} user={user} />}
       {/* Top Header */}
-      <header className="bg-white border-b px-4 md:px-6 h-16 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+      <header className="bg-white border-b px-4 md:px-6 h-16 flex items-center justify-between sticky top-0 z-50 shadow-sm print:hidden">
         <div className="flex items-center gap-10">
           <h1 className="text-xl font-black text-blue-600 flex items-center gap-2 tracking-tighter">
             <Database size={20} /> ClassLabX <span className="text-[10px] bg-blue-100 px-2 py-0.5 rounded-full tracking-widest uppercase text-blue-800">Cloud Sync</span>
@@ -868,7 +868,7 @@ function TeacherPortal({ setRole, user }) {
       </header>
 
       {/* MOBILE Navigation */}
-      <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full">
+      <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full print:hidden">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
           {['quizzes', 'classes', 'launch', 'synchronous', 'asynchronous', 'reports'].map(tab => (
             <button
@@ -2627,10 +2627,61 @@ function FeedbackDashboard({ reports, classes }) {
 
   const uniqueTitles = [...new Set(feedbackReports.map(r => r.title))];
 
+  const exportToExcel = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Overview Stats
+      const overviewData = [
+        ['Feedback Dashboard Export'],
+        ['Date Generated', new Date().toLocaleString()],
+        [],
+        ['Metric', 'Satisfaction Score (%)', 'Average Rating / 5.0', 'Responses Count']
+      ];
+      
+      const labels = [
+        "Course Content & Clarity",
+        "Knowledge Enhancement",
+        "Instruction Quality",
+        "Materials & Support"
+      ];
+
+      labels.forEach((label, i) => {
+        overviewData.push([
+          label,
+          Math.round(questionStats[i].satisfaction),
+          questionStats[i].avg.toFixed(1),
+          questionStats[i].count
+        ]);
+      });
+
+      const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
+      XLSX.utils.book_append_sheet(wb, wsOverview, 'Overview');
+
+      // Sheet 2: Comments
+      const commentsData = [['Student Comments']];
+      if (comments.length === 0) {
+        commentsData.push(['No comments available for this filter.']);
+      } else {
+        comments.forEach(c => commentsData.push([c]));
+      }
+      
+      const wsComments = XLSX.utils.aoa_to_sheet(commentsData);
+      // Make the comments column wide enough
+      wsComments['!cols'] = [{wch: 100}];
+      XLSX.utils.book_append_sheet(wb, wsComments, 'Comments');
+
+      let filename = 'Feedback_Report';
+      if (classFilter) filename += `_Class-${classFilter}`;
+      if (sessionFilter) filename += `_${sessionFilter}`;
+      XLSX.writeFile(wb, `ClassLabX_${filename.replace(/\\s+/g, '_')}_${Date.now()}.xlsx`);
+    } catch (e) { alert('Error exporting to Excel: ' + e.message); }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Filters and Exports */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
         <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400">
           <option value="">All Classes</option>
           {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -2640,10 +2691,19 @@ function FeedbackDashboard({ reports, classes }) {
           {uniqueTitles.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400" />
+        
+        <div className="flex gap-2">
+          <button onClick={() => window.print()} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95">
+            <Download size={16} /> PDF
+          </button>
+          <button onClick={exportToExcel} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
+            <Download size={16} /> Excel
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:block print:space-y-8">
         <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
           <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3">
             <span className="p-2 bg-purple-50 text-purple-600 rounded-xl"><BarChart2 size={20} /></span>
@@ -2678,7 +2738,7 @@ function FeedbackDashboard({ reports, classes }) {
             <span className="p-2 bg-blue-50 text-blue-600 rounded-xl"><FileText size={20} /></span>
             Student Comments
           </h3>
-          <div className="flex-1 overflow-y-auto max-h-[400px] pr-4 custom-scroll space-y-4">
+          <div className="flex-1 overflow-y-auto max-h-[400px] print:max-h-none print:overflow-visible pr-4 custom-scroll space-y-4">
             {comments.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
                 <AlertCircle size={40} className="mb-4 opacity-20" />
@@ -3177,7 +3237,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-4xl mx-auto overflow-x-auto whitespace-nowrap custom-scroll">
+      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-4xl mx-auto overflow-x-auto whitespace-nowrap custom-scroll print:hidden">
         <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
         <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Class Gradebook</button>
         <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
@@ -4086,7 +4146,7 @@ function StudentPortal({ setRole, initialRoom }) {
   return (
     <div className={`min-h-screen bg-slate-50 flex flex-col ${session.quiz.type === 'video' ? 'lg:flex-row lg:h-screen lg:overflow-hidden' : ''}`}>
       {session.quiz.type !== 'video' && (
-        <header className="bg-white border-b p-6 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <header className="bg-white border-b p-6 flex justify-between items-center sticky top-0 z-10 shadow-sm print:hidden">
           <div className="text-[10px] font-black uppercase text-slate-300 tracking-widest">Item {idx + 1} / {total}</div>
           <div className="flex items-center gap-3">
             <div className="font-black text-slate-800 text-xl truncate px-6 italic tracking-tighter">{session.quiz.title}</div>
