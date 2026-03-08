@@ -2640,7 +2640,7 @@ function FeedbackDashboard({ reports, classes }) {
       ];
       
       const labels = [
-        "Course Content & Clarity",
+        "Session Content & Clarity",
         "Knowledge Enhancement",
         "Instruction Quality",
         "Materials & Support"
@@ -2721,7 +2721,7 @@ function FeedbackDashboard({ reports, classes }) {
           </h3>
           <div className="space-y-8">
             {[
-              "Course Content & Clarity",
+              "Session Content & Clarity",
               "Knowledge Enhancement",
               "Instruction Quality",
               "Materials & Support"
