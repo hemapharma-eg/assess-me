@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabase';
 import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
@@ -4197,7 +4197,7 @@ function StudentPortal({ setRole, initialRoom }) {
   }, [joined, session, sid]);
 
   // Save progress helper (used by submit, auto-save, and timer expiry)
-  const saveProgress = async (currentAnswers, currentIdx) => {
+  const saveProgress = useCallback(async (currentAnswers, currentIdx) => {
     const respId = `${room.toUpperCase()}_${sid || localId}`;
     try {
       await supabase.from('responses').upsert({
@@ -4209,8 +4209,10 @@ function StudentPortal({ setRole, initialRoom }) {
         current_idx: currentIdx,
         ts: Date.now()
       });
-    } catch (e) { console.error("Network Error", e); }
-  };
+    } catch { 
+      // Network ignore
+    }
+  }, [room, sid, localId, name]);
 
   const submit = async (qIdx, ans) => {
     const next = { ...answers, [qIdx]: ans };
@@ -4231,6 +4233,11 @@ function StudentPortal({ setRole, initialRoom }) {
   // === PER-QUESTION COUNTDOWN TIMER for async standard quizzes ===
   const total = session?.quiz?.questions?.length || 1;
   const questionTimerStartRef = useRef(null);
+  
+  // Use a ref for answers so the highly volatile `answers` state doesn't reset the timer interval every keystroke:
+  const answersRef = useRef(answers);
+  useEffect(() => { answersRef.current = answers; }, [answers]);
+
   useEffect(() => {
     if (!session || !session.timer_duration) {
       setQuestionTimeLeft(null);
@@ -4248,7 +4255,7 @@ function StudentPortal({ setRole, initialRoom }) {
       if (remaining <= 0) {
         clearInterval(interval);
         // Auto-save current answer and advance
-        saveProgress(answers, idx + 1).then(() => {
+        saveProgress(answersRef.current, idx + 1).then(() => {
           if (idx + 1 >= total) {
             setIdx(total); // trigger finished screen
           } else {
@@ -4258,7 +4265,7 @@ function StudentPortal({ setRole, initialRoom }) {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [session?.timer_duration, idx, total]);
+  }, [session, idx, total, saveProgress]);
 
   // === AUTO-SAVE on tab switch / browser hide ===
   useEffect(() => {
@@ -4278,7 +4285,7 @@ function StudentPortal({ setRole, initialRoom }) {
     setIdError('');
 
     const code = room.toUpperCase();
-    const { data: roomData, error } = await supabase.from('rooms').select('*').eq('id', code).single();
+    const { data: roomData } = await supabase.from('rooms').select('*').eq('id', code).single();
 
     if (!roomData) {
       setIdError("Room not found.");
@@ -4349,7 +4356,9 @@ function StudentPortal({ setRole, initialRoom }) {
            setCheckingId(false);
            return;
         }
-      } catch(e) {}
+      } catch {
+        // Validation skipped due to missing token
+      }
 
       // 2. Anti-Fraud Device Lock
       // Generate a simple fingerprint (userAgent + language + screen resolution + a localStorage persistent id)
@@ -4415,7 +4424,7 @@ function StudentPortal({ setRole, initialRoom }) {
       stuQuery = stuQuery.in('class_id', assigned);
     }
 
-    const { data: stuData, error: stuErr } = await stuQuery;
+    const { data: stuData } = await stuQuery;
 
     if (!stuData || stuData.length === 0) {
       setIdError(assigned && assigned.length > 0 ? "ID not found in assigned classes." : "Student ID not found in database.");
@@ -4963,7 +4972,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
           }
           setPreview(parsedStudents.filter(s => s.student_id));
         }
-      } catch (err) {
+      } catch {
         setError("Failed to parse Excel file. Make sure it has ID and Name columns.");
       }
     };
