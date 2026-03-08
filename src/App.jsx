@@ -4306,47 +4306,67 @@ function StudentPortal({ setRole, initialRoom }) {
             const watchedPct = videoDuration > 0 ? Math.round((maxPlayed / videoDuration) * 100) : 0;
             const canSubmit = allAnswered && (session.prevent_skipping ? videoCompleted : watchedPct >= 50);
             return (
-            <div className="mt-10 flex items-center gap-3">
-              <button
-                onClick={handlePrev}
-                disabled={idx <= 0}
-                className="px-6 py-4 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 rounded-2xl font-black transition-all flex items-center gap-2"
-              >
-                <ArrowLeft size={18} /> Prev
-              </button>
-              <div className="flex-1"></div>
-              {allAnswered ? (
-                <button
-                  onClick={handleNext}
-                  disabled={!canSubmit}
-                  className="px-8 py-4 bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black text-lg shadow-xl shadow-green-100 transition-all active:scale-95 flex items-center gap-2"
-                  title={!canSubmit ? (session.prevent_skipping ? 'Finish watching the video first' : `Watch at least 50% of the video (${watchedPct}% watched)`) : ''}
-                >
-                  Finish & Submit {!canSubmit && <span className="text-xs font-bold opacity-70">({session.prevent_skipping ? 'finish video' : `${watchedPct}%/50%`})</span>} <CheckCircle size={18} />
-                </button>
-              ) : (
-                <button
-                  onClick={handleNext}
-                  disabled={idx >= total - 1}
-                  className="px-6 py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl font-black transition-all flex items-center gap-2"
-                >
-                  Next <ArrowRight size={18} />
-                </button>
-              )}
-            </div>
+              <div className="mt-10 space-y-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handlePrev}
+                    disabled={idx <= 0}
+                    className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 rounded-2xl font-black transition-all flex items-center justify-center gap-2"
+                  >
+                    <ArrowLeft size={18} /> Prev
+                  </button>
+                  <button
+                    onClick={handleNext}
+                    disabled={idx >= total - 1}
+                    className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    Next <ArrowRight size={18} />
+                  </button>
+                </div>
+                
+                {idx === total - 1 && (
+                  <button
+                    onClick={() => setIdx(total)} // Set idx equal to total to trigger finish screen
+                    disabled={!canSubmit}
+                    className="w-full py-5 bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black text-lg shadow-xl shadow-green-100 transition-all active:scale-95 flex items-center justify-center gap-2"
+                    title={!canSubmit ? (session.prevent_skipping ? 'Finish watching the video first' : `Watch at least 50% of the video (${watchedPct}% watched)`) : ''}
+                  >
+                    Finish & Submit {!canSubmit && <span className="text-xs font-bold opacity-70">({session.prevent_skipping ? 'finish video' : `${watchedPct}%/50%`})</span>} <CheckCircle size={18} />
+                  </button>
+                )}
+              </div>
             );
           })()}
 
-          {/* Non-video quiz Next button */}
+          {/* Non-video quiz Navigation */}
           {(session.type === 'student_paced' || session.type === 'async_quiz' || session.type === 'async_video') && session.quiz.type !== 'video' && (
-            <div className="mt-12">
-              <button
-                onClick={handleNext}
-                disabled={answers[idx] === undefined || (q?.type === 'sa' && !answers[idx])}
-                className="w-full py-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
-              >
-                Next <ArrowRight size={20} />
-              </button>
+            <div className="mt-12 space-y-4">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handlePrev}
+                  disabled={idx <= 0}
+                  className="w-1/3 py-5 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <ArrowLeft size={20} /> Prev
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={idx >= total - 1}
+                  className="flex-1 py-5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+                >
+                  Next <ArrowRight size={20} />
+                </button>
+              </div>
+
+              {idx === total - 1 && (
+                <button
+                  onClick={() => setIdx(total)} // Map to the "finished" state
+                  disabled={Object.keys(answers).length < total} // Simple validation for completion
+                  className="w-full py-5 bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black text-xl shadow-xl shadow-green-100 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest mt-4"
+                >
+                  Finish & Submit <CheckCircle size={20} />
+                </button>
+              )}
             </div>
           )}
         </div>
