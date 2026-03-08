@@ -737,8 +737,7 @@ function TeacherPortal({ setRole, user }) {
               : (quiz.sessionName || 'Attendance'),
             questions: [],
             assigned_classes: quiz.assigned_classes || [],
-            old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null,
-            old_responses: quiz.attendanceMode === 'relaunch' ? (quiz.selectedOldAttendance?.responses || []) : []
+            old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null
           }
         : { ...quiz, current_question_idx: 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
@@ -775,8 +774,9 @@ function TeacherPortal({ setRole, user }) {
     const oldReportId = session.quiz?.old_report_id;
 
     if (isRelaunch && oldReportId) {
-      // RELAUNCH: merge new check-ins into the existing report
-      const oldResponses = session.quiz?.old_responses || [];
+      // RELAUNCH: fetch the old report from local state to get existing responses
+      const oldReport = reports.find(r => r.id === oldReportId) || asyncReports.find(r => r.id === oldReportId);
+      const oldResponses = oldReport?.responses || [];
 
       // Build a map of previous responses keyed by student_id
       const mergedMap = {};
