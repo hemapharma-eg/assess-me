@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component {
           <div className="bg-white p-8 rounded-2xl shadow-xl max-w-2xl w-full border-l-8 border-red-500">
             <h1 className="text-2xl font-black text-slate-800 mb-4 flex items-center gap-2"><AlertCircle className="text-red-500" /> Render Error</h1>
             <p className="text-slate-600 mb-4 font-medium">Please refresh the page. Details:</p>
-            <pre className="bg-slate-900 text-red-400 p-4 rounded-xl overflow-x-auto text-sm font-mono whitespace-pre-wrap">{this.state.error.message}</pre>
+            <pre className="bg-slate-900 text-red-400 p-4 rounded-xl overflow-x-auto text-sm font-mono whitespace-pre-wrap">{String(this.state.error?.message || this.state.error || "Unknown error")}</pre>
           </div>
         </div>
       );
@@ -224,7 +224,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                 <input
                   type="email"
                   name="email"
-                  autocomplete="username"
+                  autoComplete="username"
                   placeholder="Teacher Email"
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                   value={email}
@@ -238,7 +238,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                 <input
                   type="password"
                   name="password"
-                  autocomplete={authMode === 'signup' || authMode === 'recovery' ? "new-password" : "current-password"}
+                  autoComplete={authMode === 'signup' || authMode === 'recovery' ? "new-password" : "current-password"}
                   placeholder={authMode === 'recovery' ? "Enter New Password" : "Password"}
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                   value={password}
@@ -253,7 +253,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                   <input
                     type="text"
                     name="name"
-                    autocomplete="name"
+                    autoComplete="name"
                     placeholder="Full Name"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                     value={fullName}
@@ -265,7 +265,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                   <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Country</label>
                   <select
                     name="country"
-                    autocomplete="country-name"
+                    autoComplete="country-name"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
                     value={selectedCountry}
                     onChange={e => setSelectedCountry(e.target.value)}
@@ -292,7 +292,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                   <input
                     type="text"
                     name="job_title"
-                    autocomplete="organization-title"
+                    autoComplete="organization-title"
                     placeholder="Job Title"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                     value={jobTitle}
@@ -304,7 +304,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
                   <input
                     type="text"
                     name="organization"
-                    autocomplete="organization"
+                    autoComplete="organization"
                     placeholder="School / University"
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                     value={schoolUniversity}
@@ -451,7 +451,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <input
               type="text"
               name="name"
-              autocomplete="name"
+              autoComplete="name"
               placeholder="Your Full Name"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
               value={fullName}
@@ -464,7 +464,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <label className="text-[10px] font-black uppercase text-slate-400 mb-1 ml-4 block">Country</label>
             <select
               name="country"
-              autocomplete="country-name"
+              autoComplete="country-name"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
               value={selectedCountry}
               onChange={e => setSelectedCountry(e.target.value)}
@@ -493,7 +493,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <input
               type="text"
               name="job_title"
-              autocomplete="organization-title"
+              autoComplete="organization-title"
               placeholder="e.g. Science Teacher"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
               value={jobTitle}
@@ -507,7 +507,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
             <input
               type="text"
               name="organization"
-              autocomplete="organization"
+              autoComplete="organization"
               placeholder="Institution Name"
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
               value={schoolUniversity}
@@ -533,10 +533,11 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
 //               TEACHER PORTAL
 // ==========================================
 function TeacherPortal({ setRole, user }) {
-  if (!user) {
-    setRole(null);
-    return null;
-  }
+  useEffect(() => {
+    if (!user) setRole(null);
+  }, [user, setRole]);
+
+  if (!user) return null;
 
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ClassLabX_TeacherTab') || 'quizzes');
   const [quizzes, setQuizzes] = useState([]);
@@ -1349,7 +1350,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   );
 
   const start = async () => {
-    let launchedQuiz;
+    let launchedQuiz = null;
 
     if (category === 'attendance') {
       if (profile?.subscription === 'free') {
@@ -1383,7 +1384,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
     const q = quizzes.find(x => x.id === selected);
     if (q) {
-      let launchedQuiz = JSON.parse(JSON.stringify(q));
+      launchedQuiz = JSON.parse(JSON.stringify(q));
 
       if (shuffleQuestions) {
         launchedQuiz.questions = [...launchedQuiz.questions].sort(() => Math.random() - 0.5);
@@ -2890,8 +2891,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
 
   const deleteReport = async (id, roomId, isAsync) => {
     if (!window.confirm("Delete this session from history?")) return;
-    const isAsyncRep = asyncReports.some(ar => ar.id === id);
-    if (isAsyncRep) {
+    if (isAsync) {
        await supabase.from('rooms').delete().eq('id', id);
        // State update happens via parent prop sync if we use the update callbacks, but for now we rely on re-fetch or manual delete prop
     } else {
