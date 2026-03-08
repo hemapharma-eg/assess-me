@@ -4,7 +4,7 @@ import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, AlertTriangle,
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, PlayCircle as PlayCircleIcon, Check
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
@@ -1009,8 +1009,21 @@ function ScheduledTab({ user, classes }) {
   };
 
   const saveEdit = async (room) => {
-    const startIso = new Date(editStart).toISOString();
-    const endIso = new Date(editEnd).toISOString();
+    if (!editStart || !editEnd) {
+      alert("Start and end time are required.");
+      return;
+    }
+    
+    const startObj = new Date(editStart);
+    const endObj = new Date(editEnd);
+    
+    if (endObj <= startObj) {
+      alert("End time must be after start time.");
+      return;
+    }
+
+    const startIso = startObj.toISOString();
+    const endIso = endObj.toISOString();
 
     const { error } = await supabase
       .from('rooms')
@@ -1129,9 +1142,9 @@ function ScheduledTab({ user, classes }) {
               onChange={e => setDateFilter(e.target.value)}
             />
 
-            {(searchQuery || classFilter || dateFilter || statusFilter !== 'running' || typeFilter !== 'all') && (
+            {(searchQuery || classFilter || dateFilter || statusFilter !== 'all' || typeFilter !== 'all') && (
               <button 
-                onClick={() => { setSearchQuery(''); setClassFilter(''); setDateFilter(''); setStatusFilter('running'); setTypeFilter('all'); }}
+                onClick={() => { setSearchQuery(''); setClassFilter(''); setDateFilter(''); setStatusFilter('all'); setTypeFilter('all'); }}
                 className="text-xs font-black text-red-500 hover:text-red-700 transition-colors uppercase tracking-widest"
               >
                 Clear
