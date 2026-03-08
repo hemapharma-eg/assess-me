@@ -2680,6 +2680,16 @@ function FeedbackDashboard({ reports, classes }) {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      
+      {/* Print-only Dynamic Header */}
+      <div className="hidden print:block text-center py-4 border-b-2 border-slate-100 mb-8">
+        <h1 className="text-3xl font-black text-slate-800 mb-2">Feedback Report</h1>
+        <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+          Class: {classFilter ? classes.find(c => c.id === classFilter)?.name : 'All Classes'}  •  
+          Session: {sessionFilter || 'All Sessions'}
+        </p>
+      </div>
+
       {/* Filters and Exports */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
         <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400">
@@ -2721,10 +2731,10 @@ function FeedbackDashboard({ reports, classes }) {
                   <span className="text-sm font-black text-slate-600">{label}</span>
                   <span className="text-xl font-black text-purple-600">{Math.round(questionStats[i].satisfaction)}%</span>
                 </div>
-                <div className="h-4 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-1">
+                <div className="h-4 bg-slate-50 print:bg-slate-200 rounded-full overflow-hidden border border-slate-100 p-1 print:border-slate-300" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                   <div 
-                    className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-1000 ease-out shadow-sm"
-                    style={{ width: `${questionStats[i].satisfaction}%` }}
+                    className="h-full bg-gradient-to-r from-purple-400 to-purple-600 print:bg-purple-600 rounded-full transition-all duration-1000 ease-out shadow-sm"
+                    style={{ width: `${questionStats[i].satisfaction}%`, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
                   ></div>
                 </div>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{questionStats[i].count} Responses • Avg: {questionStats[i].avg.toFixed(1)}/5.0</p>
