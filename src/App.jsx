@@ -3037,6 +3037,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
     });
 
     return (
+      <>
       <div className="space-y-6">
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-8 border-b bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -3190,10 +3191,72 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
           </div>
         </div>
       </div>
+
+      {/* SA Answer Reader & Override Popup — must live inside the activeReport return */}
+      {saAnswerPopup && (() => {
+        const { reportId, studentId, qIdx, answer, isOk } = saAnswerPopup;
+        const rep = (allReports || reports).find(r => r.id === reportId);
+        const question = rep?.questions?.[qIdx];
+        const modelAnswer = question?.correct || '';
+        const handleToggle = async (newIsOk) => {
+          const overrideKey = `${studentId}___${qIdx}`;
+          const prevForReport = saOverrides[reportId] || rep?.score_overrides || {};
+          const newForReport = { ...prevForReport, [overrideKey]: newIsOk };
+          setSaOverrides(prev => ({ ...prev, [reportId]: newForReport }));
+          setSaAnswerPopup(null);
+          await supabase.from('reports').update({ score_overrides: newForReport }).eq('id', reportId);
+        };
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden">
+              <div className="bg-slate-50 p-6 border-b flex items-start gap-4">
+                <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-black text-sm ${isOk ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {isOk ? '✓' : '✗'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Q{qIdx + 1} — Short Answer</p>
+                  <p className="font-black text-slate-800 text-sm leading-snug">{question?.question || ''}</p>
+                </div>
+                <button onClick={() => setSaAnswerPopup(null)} className="shrink-0 text-slate-400 hover:text-slate-700 font-black text-xl leading-none">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                {modelAnswer && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Model Answer</p>
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm font-bold text-green-800">{modelAnswer}</div>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Student's Answer</p>
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-sm font-bold text-slate-800 min-h-[80px] max-h-[220px] overflow-y-auto leading-relaxed whitespace-pre-wrap break-words">
+                    {answer || <span className="text-slate-400 italic font-normal">No answer provided</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Mark:</span>
+                  <span className={`text-xs font-black px-3 py-1 rounded-lg ${isOk ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {isOk ? '✓ Correct' : '✗ Incorrect'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-3 p-6 pt-0">
+                <button onClick={() => handleToggle(false)} className={`flex-1 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${!isOk ? 'bg-red-500 text-white shadow-lg shadow-red-100' : 'bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
+                  ✗ Mark Incorrect
+                </button>
+                <button onClick={() => handleToggle(true)} className={`flex-1 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${isOk ? 'bg-green-500 text-white shadow-lg shadow-green-100' : 'bg-slate-100 text-slate-500 hover:bg-green-50 hover:text-green-600'}`}>
+                  ✓ Mark Correct
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      </>
     );
   }
 
   const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles, attendanceOnly = false) => {
+
     try {
       const wb = XLSX.utils.book_new();
       const weights = quizWeights[cls.id] || cls.quiz_weights || {};
