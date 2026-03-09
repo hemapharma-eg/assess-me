@@ -2817,6 +2817,11 @@ function FeedbackDashboard({ reports, classes }) {
   const [sessionFilter, setSessionFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
 
+  const handleClassFilterChange = (val) => {
+    setClassFilter(val);
+    setSessionFilter(''); // reset cascading session when class changes
+  };
+
   const filtered = feedbackReports.filter(r => {
     if (classFilter && !r.assigned_classes?.includes(classFilter)) return false;
     if (sessionFilter && r.title !== sessionFilter) return false;
@@ -2834,7 +2839,9 @@ function FeedbackDashboard({ reports, classes }) {
 
   const comments = allResponses.map(resp => resp.answers[4]).filter(val => val && val.trim());
 
-  const uniqueTitles = [...new Set(feedbackReports.map(r => r.title))];
+  // Cascading: session titles based on class filter
+  const classFilteredReports = classFilter ? feedbackReports.filter(r => r.assigned_classes?.includes(classFilter)) : feedbackReports;
+  const uniqueTitles = [...new Set(classFilteredReports.map(r => r.title))];
 
   const exportToExcel = () => {
     try {
@@ -2881,9 +2888,12 @@ function FeedbackDashboard({ reports, classes }) {
       XLSX.utils.book_append_sheet(wb, wsComments, 'Comments');
 
       let filename = 'Feedback_Report';
-      if (classFilter) filename += `_Class-${classFilter}`;
+      if (classFilter) {
+        const cName = classes.find(c => c.id === classFilter)?.name || classFilter;
+        filename += `_${cName}`;
+      }
       if (sessionFilter) filename += `_${sessionFilter}`;
-      XLSX.writeFile(wb, `ClassLabX_${filename.replace(/\\s+/g, '_')}_${Date.now()}.xlsx`);
+      XLSX.writeFile(wb, `ClassLabX_${filename.replace(/\s+/g, '_')}_${Date.now()}.xlsx`);
     } catch (e) { alert('Error exporting to Excel: ' + e.message); }
   };
 
@@ -2901,7 +2911,7 @@ function FeedbackDashboard({ reports, classes }) {
 
       {/* Filters and Exports */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
-        <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400">
+        <select value={classFilter} onChange={e => handleClassFilterChange(e.target.value)} className="bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-purple-400">
           <option value="">All Classes</option>
           {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
@@ -2957,7 +2967,7 @@ function FeedbackDashboard({ reports, classes }) {
             <span className="p-2 bg-blue-50 text-blue-600 rounded-xl"><FileText size={20} /></span>
             Student Comments
           </h3>
-          <div className="flex-1 overflow-y-auto max-h-[400px] print:max-h-none print:overflow-visible pr-4 custom-scroll space-y-4">
+          <div className="flex-1 overflow-y-auto max-h-[400px] print:max-h-none print:overflow-visible pr-4 custom-scroll space-y-4 print:space-y-2">
             {comments.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
                 <AlertCircle size={40} className="mb-4 opacity-20" />
@@ -5628,10 +5638,9 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
           )}
         </div>
       )}
-      {effectiveSubTab === 'report' && (() => {
-        const feedbackReports = reports.filter(r => r.type === 'feedback' && !r.hidden);
-        return <ReportsTab reports={feedbackReports} allReports={feedbackReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />;
-      })()}
+      {effectiveSubTab === 'report' && (
+        <FeedbackDashboard reports={reports} classes={classes} />
+      )}
     </div>
   );
 }
