@@ -62,40 +62,49 @@ function MainApp() {
       }
     } catch (e) { }
 
-    // --- AGGRESSIVE IFRAME OAUTH CALLBACK HANDLER ---
-    // In iframes, Supabase auto-detection often fails due to third-party cookie blocking.
-    // We must manually parse the hash, forcefully set the session, save it, and reload to apply.
+    // --- CROSS-ORIGIN IFRAME OAUTH CALLBACK HANDLER ---
+    // Flow: iframe (assess-me.vercel.app) breaks out of WordPress iframe → Google → 
+    // redirects back to assess-me.vercel.app (standalone) → save session → redirect to WordPress
+    // → WordPress iframe reloads assess-me.vercel.app → getSession() finds saved session → logged in!
     const hashStr = window.location.hash.substring(1);
+    const isInIframe = window.self !== window.top;
+    
     if (hashStr && hashStr.includes('access_token=')) {
-        setLoadingContext(true); // Keep loading screen up during this critical phase
+        setLoadingContext(true);
         const hashParams = new URLSearchParams(hashStr);
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
-        const providerToken = hashParams.get('provider_token');
 
         if (accessToken) {
-            // 1. Force Supabase to explicitly know about this session immediately
+            // Force Supabase to save this session to localStorage
             supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken || ''
             }).then(({ data, error }) => {
                 if (!error && data?.session) {
-                    // 2. We successfully forced the session. 
-                    // To ensure it persists across iframes, we must completely clear the hash
-                    // so we don't accidentally re-trigger this logic on subsequent reloads.
+                    // Session is now saved to localStorage on assess-me.vercel.app domain.
+                    // If we are NOT in an iframe (i.e., we were redirected here standalone after Google auth),
+                    // redirect back to the WordPress page so the iframe reloads with the saved session.
+                    if (!isInIframe) {
+                        // Check if there's a stored WordPress URL to go back to
+                        const wpUrl = localStorage.getItem('classlabx_wp_url');
+                        if (wpUrl) {
+                            localStorage.removeItem('classlabx_wp_url');
+                            window.location.href = wpUrl;
+                            return;
+                        }
+                    }
+                    // If we ARE in an iframe somehow, or no wpUrl, just render normally
                     window.history.replaceState(null, '', window.location.pathname + window.location.search);
-                    
-                    // 3. Immediately set state to render the app
                     setUser(data.session.user);
                     setRole('teacher');
                     setLoadingContext(false);
                 } else {
-                    // If forcing it failed, fall back
-                    setAuthError(error?.message || "Failed to parse iframe session.");
+                    setAuthError(error?.message || 'Failed to set session.');
                     setLoadingContext(false);
                 }
             });
-            return; // Stop the rest of the useEffect so we don't override this delicate process
+            return; // Stop the rest of useEffect
         }
     }
     // --- END OAUTH HANDLER ---
@@ -233,11 +242,24 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
   const handleGoogleLogin = async () => {
     setLoading(true);
     
+    // Remember the WordPress parent URL so we can redirect back after Google auth
+    const isInIframe = window.self !== window.top;
+    if (isInIframe) {
+        try {
+            // Try to read the parent URL (may fail due to cross-origin)
+            localStorage.setItem('classlabx_wp_url', document.referrer || 'https://toolabx.com/classlabx/');
+        } catch(e) {
+            localStorage.setItem('classlabx_wp_url', 'https://toolabx.com/classlabx/');
+        }
+    }
+    
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.href, // Redirect exactly back here
-        skipBrowserRedirect: true, // We will manually handle the redirect
+        // Redirect back to the APP's own origin (not the WordPress iframe)
+        // so the app can process the token and save the session
+        redirectTo: window.location.origin,
+        skipBrowserRedirect: true,
       },
     });
 
@@ -245,12 +267,14 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
       alert("Google Login Error: " + error.message);
       setLoading(false);
     } else if (data?.url) {
-      // Force the top-level window (WordPress parent) to redirect to Google
-      // This escapes the iframe restrictions
-      try {
-          window.top.location.href = data.url;
-      } catch (e) {
-          // Fallback if cross-origin blocks window.top access, though it usually allows location changes
+      // Break out of the iframe entirely
+      if (isInIframe) {
+          try {
+              window.top.location.href = data.url;
+          } catch (e) {
+              window.location.href = data.url;
+          }
+      } else {
           window.location.href = data.url;
       }
     }
