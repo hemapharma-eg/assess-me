@@ -5133,6 +5133,20 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
     XLSX.utils.book_append_sheet(wb, ws, 'Grades');
     XLSX.writeFile(wb, `ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.xlsx`);
   };
+
+  const openWeightModal = () => {
+    setDraftMode(gradebookSettings[selectedClassId]?.mode || 'simple');
+    setDraftTopN(gradebookSettings[selectedClassId]?.topN || 3);
+    setDraftWeights(quizWeights[selectedClassId] || {});
+    setShowWeightModal(true);
+  };
+
+  const saveWeights = () => {
+    setGradebookSettings(prev => ({ ...prev, [selectedClassId]: { mode: draftMode, topN: draftTopN } }));
+    setQuizWeights(prev => ({ ...prev, [selectedClassId]: draftWeights }));
+    setShowWeightModal(false);
+  };
+
   const SubNav = () => (
     <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
       {[
@@ -5198,9 +5212,14 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
                </select>
              </div>
              {selectedClassId && (
-               <button onClick={exportGradebook} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all">
-                 <Download size={16} /> Export Grades (Excel)
-               </button>
+               <div className="flex gap-2">
+                 <button onClick={openWeightModal} className="px-5 py-3 bg-white border-2 border-slate-200 hover:border-purple-400 hover:text-purple-600 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2">
+                   <Settings size={16} /> Mode Config
+                 </button>
+                 <button onClick={exportGradebook} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all">
+                   <Download size={16} /> Export Grades (Excel)
+                 </button>
+               </div>
              )}
           </div>
 
@@ -5247,6 +5266,89 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
           )}
         </div>
       )}
+
+      {/* Gradebook Settings Modal */}
+      {showWeightModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+                <span className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Settings size={20} /></span>
+                Gradebook Mode
+              </h3>
+              <button onClick={() => setShowWeightModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Calculation Mode</label>
+                <select
+                  value={draftMode}
+                  onChange={e => setDraftMode(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-purple-400 transition-all"
+                >
+                  <option value="simple">Simple Average</option>
+                  <option value="weighted">Custom Weights</option>
+                  <option value="top_n">Best 'N' Scores</option>
+                </select>
+              </div>
+
+              {draftMode === 'top_n' && (
+                <div className="animate-in slide-in-from-top-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Number of Best Scores to Keep</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={uniqueQuizTitles.length || 1}
+                    value={draftTopN}
+                    onChange={e => setDraftTopN(parseInt(e.target.value) || 1)}
+                    className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-purple-400 transition-all"
+                  />
+                </div>
+              )}
+
+              {draftMode === 'weighted' && (
+                <div className="space-y-3 animate-in slide-in-from-top-2 max-h-64 overflow-y-auto pr-2 custom-scroll">
+                  {uniqueQuizTitles.length === 0 ? (
+                    <div className="text-sm font-bold text-slate-400 italic">No quizzes available to weight.</div>
+                  ) : (
+                     uniqueQuizTitles.map(t => (
+                      <div key={t} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <span className="text-sm font-bold text-slate-700 truncate mr-4" title={t}>{t}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={draftWeights[t] || 0}
+                            onChange={e => setDraftWeights(prev => ({ ...prev, [t]: parseInt(e.target.value) || 0 }))}
+                            className="w-20 p-2 text-center bg-white border-2 border-slate-200 rounded-lg font-bold text-slate-700 focus:outline-none focus:border-purple-400 transition-all"
+                          />
+                          <span className="text-sm font-black text-slate-400">%</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {uniqueQuizTitles.length > 0 && (
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-100 mt-2 px-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Weight:</span>
+                      <span className={`text-sm font-black ${Object.values(draftWeights).reduce((a,b)=>a+b,0) === 100 ? 'text-green-500' : 'text-red-500'}`}>
+                        {Object.values(draftWeights).reduce((a,b)=>a+b,0)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 text-sm font-black text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+              <button onClick={saveWeights} className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black text-sm shadow-xl shadow-purple-100 transition-all">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
