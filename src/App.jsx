@@ -62,8 +62,12 @@ function MainApp() {
       }
     } catch (e) { }
 
-    // We check if we are the popup window returning from Google OAuth
-    const isOAuthRedirect = window.location.hash.includes('access_token=');
+    // Check if we just returned from an OAuth redirect
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    if (accessToken) {
+       // We successfully authenticated via redirect, Supabase will pick this up automatically below
+    }
 
     // Init Supabase session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
@@ -71,30 +75,9 @@ function MainApp() {
       else if (session) {
         setUser(session.user);
         setRole(prev => prev || 'teacher'); // Auto-derive if role unset
-        
-        // If we are the popup, signal the main window and close
-        if (isOAuthRedirect) {
-            localStorage.setItem('classlabx_auth_sync', Date.now().toString());
-            // Try to close the popup window. If popup blocker prevents script close, user can close manually.
-            window.close();
-        }
       }
       setLoadingContext(false);
     });
-
-    // Listen for sync events from the popup
-    const handleStorageChange = (e) => {
-        if (e.key === 'classlabx_auth_sync') {
-            supabase.auth.getSession().then(({ data: { session } }) => {
-                if (session) {
-                    setUser(session.user);
-                    setRole(prev => prev || 'teacher');
-                    setLoadingContext(false);
-                }
-            });
-        }
-    };
-    window.addEventListener('storage', handleStorageChange);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
@@ -108,7 +91,6 @@ function MainApp() {
 
     return () => {
         subscription.unsubscribe();
-        window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
@@ -219,30 +201,27 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
-        skipBrowserRedirect: true, // Prevent Supabase from redirecting the main window
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
+        redirectTo: window.location.href, // Redirect exactly back here
+        skipBrowserRedirect: true, // We will manually handle the redirect
       },
     });
-    
+
     if (error) {
       alert("Google Login Error: " + error.message);
       setLoading(false);
     } else if (data?.url) {
-      // Open the Google OAuth URL in a popup window
-      const width = 500;
-      const height = 600;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      window.open(data.url, 'Google Login', `width=${width},height=${height},left=${left},top=${top}`);
-      
-      // We don't need to unset loading here, the auth state change listener will handle it when they finish
+      // Force the top-level window (WordPress parent) to redirect to Google
+      // This escapes the iframe restrictions
+      try {
+          window.top.location.href = data.url;
+      } catch (e) {
+          // Fallback if cross-origin blocks window.top access, though it usually allows location changes
+          window.location.href = data.url;
+      }
     }
   };
 
