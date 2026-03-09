@@ -63,7 +63,7 @@ function MainApp() {
     } catch (e) { }
 
     // Check if we just returned from an OAuth redirect
-    const hashParams = new URLParams(window.location.hash.substring(1));
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     const refreshToken = hashParams.get('refresh_token');
     
