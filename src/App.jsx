@@ -2494,13 +2494,10 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {responses.map(r => (
-                <tr key={r.student_name} className="hover:bg-slate-50 transition-colors">
+              {responses.map((r, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
                   <td className="p-6">
-                    <div className="font-black text-slate-800 text-lg leading-none whitespace-nowrap">{r.student_name}</div>
-                    <div className="text-[10px] font-black text-blue-500 uppercase flex items-center gap-1 mt-1 tracking-wider">
-                      <UserCheck size={12} /> {r.student_id}
-                    </div>
+                    <div className="font-black text-slate-800 text-lg leading-none whitespace-nowrap">Student {i + 1}</div>
                   </td>
                   <td className="p-6">
                     <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -2609,7 +2606,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
                     <div key={i} className={`p-5 rounded-2xl border-2 font-bold text-slate-700 flex justify-between items-center ${ok ? 'border-green-200 bg-green-50' : 'border-slate-100 bg-slate-50'}`}>
                       <div>
                         {ans}
-                        <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">{r.student_name}</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Student {i + 1}</div>
                       </div>
                       {ok && <CheckCircle className="text-green-500" size={20} />}
                     </div>
