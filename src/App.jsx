@@ -898,7 +898,6 @@ function TeacherPortal({ setRole, user }) {
         localStorage.setItem('ClassLabX_RoomCode', newCode);
         setResponses([]); // clear prior
         setSession(data); // immediately populate so Results tab renders
-        setActiveTab('synchronous');
         return newCode;
       }
     }
@@ -2991,6 +2990,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
   // Helper: map async types to the student_paced filter bucket
   const matchesTypeFilter = (type) => {
     if (type === 'async_quiz' || type === 'async_video') return typeFilter['student_paced'];
+    if (isAttendanceHistory && type === 'attendance') return true;
     return typeFilter[type];
   };
   const [renamingReport, setRenamingReport] = useState(null);
@@ -3503,7 +3503,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                   {(() => {
                     const grouped = {};
                     reports
-                      .filter(r => r.type !== 'feedback' && r.type !== 'attendance')
+                      .filter(r => r.type !== 'feedback' && (isAttendanceHistory || r.type !== 'attendance'))
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => matchesTypeFilter(r.type))
                       .filter(r => {
@@ -3597,7 +3597,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                   })()}
                   {(() => {
                     const hasVisible = reports
-                      .filter(r => r.type !== 'feedback' && r.type !== 'attendance')
+                      .filter(r => r.type !== 'feedback' && (isAttendanceHistory ? true : r.type !== 'attendance'))
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => matchesTypeFilter(r.type))
                       .filter(r => {
@@ -5451,11 +5451,17 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
                            const Icon = status === 'present' ? CheckCircle : status === 'late' ? Clock : XCircle;
                            
                            return (
-                             <td key={t} className="p-3 text-center min-w-[100px]">
+                             <td key={t} className="p-3 text-center min-w-[110px]">
                                <div className="flex justify-center">
-                                 <button onClick={() => handleToggleStatus(t, rm.student_id, status)} title="Click to change status" className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${displayColor}`}>
-                                   <Icon size={16} />
-                                 </button>
+                                 <select 
+                                   value={status} 
+                                   onChange={(e) => updateReportStatus(rec?.reportId || attendanceReports.find(r => r.title === t)?.id, rm.student_id, e.target.value)} 
+                                   className={`font-black text-[10px] uppercase tracking-widest px-2 py-1.5 rounded-lg transition-colors cursor-pointer border-2 border-transparent focus:border-blue-400 outline-none w-full max-w-[90px] ${displayColor}`}
+                                 >
+                                    <option value="present">Present</option>
+                                    <option value="late">Late</option>
+                                    <option value="absent">Absent</option>
+                                 </select>
                                </div>
                              </td>
                            )
