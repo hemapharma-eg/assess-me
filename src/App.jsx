@@ -2424,7 +2424,9 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
             <div className="absolute inset-0 bg-blue-200 blur-3xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 mb-2">Join {session.type === 'attendance' ? 'Attendance' : 'Class'}</h3>
+            <h3 className="text-3xl font-black text-slate-800 mb-2">
+              {session.type === 'feedback' ? 'Fill in the Survey' : `Join ${session.type === 'attendance' ? 'Attendance' : 'Class'}`}
+            </h3>
             <p className="text-slate-500 mb-4 font-medium max-w-sm mx-auto">
               Scan the code to join.
               {session.type === 'attendance' && " This QR refreshes continuously for security to prevent proxy scanning."}
@@ -2490,7 +2492,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
               <tr>
                 <th className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-widest whitespace-nowrap">Participant</th>
                 <th className="p-6 font-black text-slate-400 text-[10px] uppercase tracking-widest min-w-[150px]">Score/Progress</th>
-                {session.quiz.questions.map((_, i) => <th key={i} className="p-6 text-center font-black text-slate-400 text-[10px] uppercase">Q{i + 1}</th>)}
+                {session.type !== 'feedback' && session.quiz.questions.map((_, i) => <th key={i} className="p-6 text-center font-black text-slate-400 text-[10px] uppercase">Q{i + 1}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -2504,7 +2506,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
                       <div className="h-full bg-blue-600 transition-all duration-700 ease-out" style={{ width: `${(Object.keys(r.answers || {}).length / session.quiz.questions.length) * 100}%` }}></div>
                     </div>
                   </td>
-                  {session.quiz.questions.map((q, idx) => {
+                  {session.type !== 'feedback' && session.quiz.questions.map((q, idx) => {
                     const ans = r.answers?.[idx];
                     const ok = ans !== undefined && (q.type === 'sa' ? (q.correct && String(ans).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(ans) === String(q.correct)));
                     return (
