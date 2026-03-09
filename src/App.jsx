@@ -830,7 +830,8 @@ function PollsTab({ polls, setPolls, user }) {
 }
 
 function PollResultsTab({ session, responses, onEnd, roomCode }) {
-  const [activePoll, setActivePoll] = useState(session.quiz);
+  const qIdx = session.quiz.current_question_idx || 0;
+  const activePoll = session.quiz.questions ? session.quiz.questions[qIdx] : session.quiz;
   const [showQR, setShowQR] = useState(true);
 
   const joinUrl = `${window.location.href.split('?')[0]}?room=${roomCode}`;
@@ -841,32 +842,39 @@ function PollResultsTab({ session, responses, onEnd, roomCode }) {
       const counts = {};
       activePoll.options.forEach(o => counts[o] = 0);
       responses.forEach(r => {
-        if (r.answers && r.answers.vote) {
-          counts[r.answers.vote] = (counts[r.answers.vote] || 0) + 1;
+        const resp = r.answers?.[qIdx];
+        if (resp) {
+          counts[resp] = (counts[resp] || 0) + 1;
         }
       });
+
       return Object.entries(counts).map(([label, count]) => ({ label, count }));
     } else if (activePoll.type === 'word_cloud') {
        // Logic for word cloud data extraction
        const words = {};
        responses.forEach(r => {
-         if (r.answers && r.answers.vote) {
-           const w = String(r.answers.vote).toLowerCase().trim();
+         const resp = r.answers?.[qIdx];
+         if (resp) {
+           const w = String(resp).toLowerCase().trim();
            if (w) words[w] = (words[w] || 0) + 1;
          }
        });
+
        return Object.entries(words).map(([text, value]) => ({ text, value }));
     } else if (activePoll.type === 'rating') {
        const counts = { '1':0, '2':0, '3':0, '4':0, '5':0 };
        responses.forEach(r => {
-         if (r.answers && r.answers.vote) {
-           counts[r.answers.vote] = (counts[r.answers.vote] || 0) + 1;
+         const resp = r.answers?.[qIdx];
+         if (resp) {
+           counts[resp] = (counts[resp] || 0) + 1;
          }
        });
+
        return Object.entries(counts).map(([label, count]) => ({ label, count }));
     }
     return [];
-  }, [activePoll, responses]);
+  }, [activePoll, responses, qIdx]);
+
 
   const maxCount = Math.max(...chartData.map(d => d.count || 0), 1);
 
@@ -876,10 +884,34 @@ function PollResultsTab({ session, responses, onEnd, roomCode }) {
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">{activePoll.title}</h2>
           <p className="text-slate-400 font-bold text-xs uppercase tracking-widest flex items-center gap-2 mt-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Poll • {responses.length} Submissions
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> {session.quiz.questions ? `Poll ${qIdx + 1} of ${session.quiz.questions.length}` : 'Live Poll'} • {responses.length} Submissions
           </p>
         </div>
         <div className="flex gap-4">
+          {session.quiz.questions && session.quiz.questions.length > 1 && (
+            <div className="flex gap-2">
+              <button 
+                disabled={qIdx === 0}
+                onClick={async () => {
+                  const newQuiz = { ...session.quiz, current_question_idx: qIdx - 1 };
+                  await supabase.from('rooms').update({ quiz: newQuiz }).eq('id', roomCode);
+                }}
+                className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded-xl transition-all"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <button 
+                disabled={qIdx >= session.quiz.questions.length - 1}
+                onClick={async () => {
+                  const newQuiz = { ...session.quiz, current_question_idx: qIdx + 1 };
+                  await supabase.from('rooms').update({ quiz: newQuiz }).eq('id', roomCode);
+                }}
+                className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded-xl transition-all"
+              >
+                <ArrowRight size={20} />
+              </button>
+            </div>
+          )}
           <button onClick={() => setShowQR(!showQR)} className="bg-slate-50 hover:bg-slate-100 px-6 py-3 rounded-xl text-xs font-black flex items-center gap-2 transition-all text-slate-600">
             <QrCode size={18} /> {showQR ? 'Hide Join Info' : 'Show Join Info'}
           </button>
@@ -888,6 +920,8 @@ function PollResultsTab({ session, responses, onEnd, roomCode }) {
           </button>
         </div>
       </div>
+
+
 
       {showQR && (
         <div className="p-10 mb-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100 flex flex-col md:flex-row items-center justify-center gap-12 text-center md:text-left animate-in slide-in-from-top duration-300">
@@ -998,7 +1032,7 @@ function TeacherPortal({ setRole, user }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true);
-      const [resProfile, resQuizzes, resReports, resClass, resAsyncRooms] = await Promise.all([
+      const [resProfile, resQuizzes, resReports, resClass, resAsyncRooms, resPolls] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('quizzes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('reports').select('*').eq('user_id', user.id).order('ts', { ascending: false }),
@@ -1917,7 +1951,8 @@ function ScheduledTab({ user, classes }) {
 }
 
 function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile, defaultCategory = null }) {
-  const [selected, setSelected] = useState('');
+  const [selectedItems, setSelectedItems] = useState([]); // Array for multi-select
+
   const [category, setCategory] = useState(defaultCategory); // 'sync', 'async', 'attendance', 'feedback', 'poll'
   const [type, setType] = useState(defaultCategory === 'poll' ? 'poll' : null); 
   const [assignedClasses, setAssignedClasses] = useState([]);
@@ -2022,24 +2057,43 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       return;
     }
 
-    const q = quizzes.find(x => x.id === selected);
-    if (q) {
-      launchedQuiz = JSON.parse(JSON.stringify(q));
+    const selList = (category === 'poll' ? selectedItems : [selectedItems[0]]);
+    const items = quizzes.filter(x => selList.includes(x.id));
+    
+    if (items.length > 0) {
+      if (category === 'poll') {
+        // Multi-Poll Packaging
+        launchedQuiz = {
+          title: items.length === 1 ? items[0].title : `Poll Session (${items.length} Questions)`,
+          type: 'poll',
+          questions: items.map(p => ({
+            id: p.id,
+            title: p.title,
+            type: p.type,
+            options: p.options || []
+          })),
+          current_question_idx: 0,
+          show_results: false
+        };
+      } else {
+        // Standard Quiz Packaging
+        launchedQuiz = JSON.parse(JSON.stringify(items[0]));
 
-      if (shuffleQuestions) {
-        launchedQuiz.questions = [...launchedQuiz.questions].sort(() => Math.random() - 0.5);
-      }
+        if (shuffleQuestions) {
+          launchedQuiz.questions = [...launchedQuiz.questions].sort(() => Math.random() - 0.5);
+        }
 
-      if (shuffleChoices) {
-        launchedQuiz.questions.forEach(question => {
-          if (question.type === 'mc' && question.options) {
-            const originalOptions = [...question.options];
-            const originalCorrectValue = originalOptions[question.correct];
+        if (shuffleChoices) {
+          launchedQuiz.questions.forEach(question => {
+            if (question.type === 'mc' && question.options) {
+              const originalOptions = [...question.options];
+              const originalCorrectValue = originalOptions[question.correct];
 
-            question.options = [...originalOptions].sort(() => Math.random() - 0.5);
-            question.correct = question.options.findIndex(opt => opt === originalCorrectValue);
-          }
-        });
+              question.options = [...originalOptions].sort(() => Math.random() - 0.5);
+              question.correct = question.options.findIndex(opt => opt === originalCorrectValue);
+            }
+          });
+        }
       }
 
       if (category === 'async') {
@@ -2091,22 +2145,43 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         Choose a {type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
       </h2>
       <div className="space-y-3 mb-10 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
-        {filteredQuizzes.map(q => (
-          <button
-            key={q.id} onClick={() => setSelected(q.id)}
-            className={`w-full p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${selected === q.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
-          >
-            {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : (q.type === 'multiple_choice' || category === 'poll' ? <BarChart2 size={20} className="text-blue-500 shrink-0" /> : (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />))}
-            <div>
-              <div className="font-black text-slate-800">{q.title}</div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                {category === 'poll' ? q.type.replace('_', ' ') : `${(q.questions || []).length} ${q.type === 'survey' ? 'Items' : 'Questions'}`}
+        {filteredQuizzes.map(q => {
+          const isSelected = selectedItems.includes(q.id);
+          return (
+            <button
+              key={q.id} 
+              onClick={() => {
+                if (category === 'poll') {
+                  setSelectedItems(prev => isSelected ? prev.filter(id => id !== q.id) : [...prev, q.id]);
+                } else {
+                  setSelectedItems([q.id]);
+                }
+              }}
+              className={`w-full p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-4 ${isSelected ? 'border-blue-600 bg-blue-50/50 shadow-sm' : 'border-slate-100 hover:border-slate-200'}`}
+            >
+              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-200 bg-white'}`}>
+                {isSelected && <Check size={14} className="text-white" />}
               </div>
-            </div>
-          </button>
-        ))}
+              {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : (q.type === 'multiple_choice' || category === 'poll' ? <BarChart2 size={20} className="text-blue-500 shrink-0" /> : (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />))}
+              <div>
+                <div className="font-black text-slate-800 text-sm">{q.title}</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                  {category === 'poll' ? q.type?.replace('_', ' ') : `${(q.questions || []).length} ${q.type === 'survey' ? 'Items' : 'Questions'}`}
+                </div>
+              </div>
+            </button>
+          );
+        })}
         {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No {category === 'poll' ? 'polls' : 'matching quizzes'} found.</p>}
       </div>
+
+      {category === 'poll' && selectedItems.length > 0 && (
+        <div className="mb-8 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
+          <span className="text-xs font-black text-blue-600 uppercase tracking-widest">{selectedItems.length} selected</span>
+          <button onClick={() => setSelectedItems([])} className="text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-widest">Clear All</button>
+        </div>
+      )}
+
 
       <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
       <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
@@ -3293,14 +3368,19 @@ function FeedbackSurvey({ session, answers, submit, onFinish }) {
   );
 }
 
-function PollInteraction({ session, answers, submit, onFinish }) {
-  const [localVote, setLocalVote] = useState(answers?.vote || '');
-  const poll = session.quiz;
+function PollInteraction({ session, answers, submit, onFinish, idx, total, onNext, onPrev }) {
+  const poll = session.quiz.questions ? session.quiz.questions[idx] : session.quiz;
+  const [localVote, setLocalVote] = useState(answers?.[idx] || '');
+  
+  useEffect(() => {
+    setLocalVote(answers?.[idx] || '');
+  }, [idx, answers]);
 
   const handleVote = (val) => {
     setLocalVote(val);
-    submit('vote', val);
+    submit(idx, val);
   };
+
 
   return (
     <div className="max-w-2xl mx-auto py-10 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -3356,15 +3436,39 @@ function PollInteraction({ session, answers, submit, onFinish }) {
         </div>
       </div>
 
-      <button
-        onClick={onFinish}
-        className="w-full py-6 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
-      >
-        Done <CheckCircle size={24} />
-      </button>
+      <div className="flex flex-col sm:flex-row gap-4 mt-8">
+        {total > 1 && (
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button
+              onClick={onPrev}
+              disabled={idx === 0}
+              className="flex-1 px-6 py-5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-3xl font-black transition-all flex items-center justify-center gap-2"
+            >
+              <ArrowLeft size={20} /> Prev
+            </button>
+            <button
+              onClick={onNext}
+              disabled={idx >= total - 1}
+              className="flex-1 px-6 py-5 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-600 rounded-3xl font-black transition-all flex items-center justify-center gap-2"
+            >
+              Next <ArrowRight size={20} />
+            </button>
+          </div>
+        )}
+
+        {(idx === total - 1 || total <= 1) && (
+          <button
+            onClick={onFinish}
+            className="flex-1 py-6 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+          >
+            Submit <CheckCircle size={24} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
+
 
 function FeedbackDashboard({ reports, classes }) {
   const feedbackReports = reports.filter(r => r.type === 'feedback');
@@ -4427,10 +4531,10 @@ function StudentPortal({ setRole, initialRoom }) {
 
   // Auto-sync Student idx with Teacher in Teacher-Paced mode
   useEffect(() => {
-    if (session && session.type === 'teacher_paced' && session.quiz?.current_question_idx !== undefined) {
+    if ((session?.type === 'teacher_paced' || session?.type === 'poll') && session?.quiz?.current_question_idx !== undefined) {
       setIdx(session.quiz.current_question_idx);
     }
-  }, [session]);
+  }, [session?.quiz?.current_question_idx, session?.type]);
 
   // === PER-QUESTION COUNTDOWN TIMER for async standard quizzes ===
   const total = session?.quiz?.questions?.length || 1;
@@ -4819,7 +4923,7 @@ function StudentPortal({ setRole, initialRoom }) {
   }
 
   if (session.type === 'poll') {
-    return <PollInteraction session={session} answers={answers} submit={submit} onFinish={() => setIdx(total)} />;
+    return <PollInteraction session={session} answers={answers} submit={submit} onFinish={() => setIdx(total)} idx={idx} total={total} onNext={handleNext} onPrev={handlePrev} />;
   }
 
   return (
