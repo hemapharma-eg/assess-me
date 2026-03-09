@@ -740,7 +740,7 @@ function PollsTab({ polls, setPolls, user }) {
           <div key={p.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group hover:shadow-xl hover:shadow-blue-50/50 transition-all border-b-4 border-b-blue-600/10">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
-                {p.type === 'multiple_choice' ? <CheckCircle size={24} /> : p.type === 'word_cloud' ? <Activity size={24} /> : <BarChart2 size={24} />}
+                {p.type === 'multiple_choice' ? <BarChart2 size={24} /> : p.type === 'word_cloud' ? <Cloud size={24} /> : <Star size={24} />}
               </div>
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={() => openEdit(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit2 size={18} /></button>
@@ -2142,7 +2142,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   if (type && category !== 'attendance') return (
     <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100">
       <h2 className="text-2xl font-black mb-6 text-slate-800">
-        Choose a {type === 'async_video' ? 'Video Quiz' : 'Standard Quiz'}
+        Choose {category === 'poll' ? 'Poll(s)' : (type === 'async_video' ? 'a Video Quiz' : 'a Standard Quiz')}
       </h2>
       <div className="space-y-3 mb-10 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
         {filteredQuizzes.map(q => {
@@ -2162,7 +2162,15 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
               <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-200 bg-white'}`}>
                 {isSelected && <Check size={14} className="text-white" />}
               </div>
-              {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : (q.type === 'multiple_choice' || category === 'poll' ? <BarChart2 size={20} className="text-blue-500 shrink-0" /> : (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />))}
+              {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : 
+               category === 'poll' ? (
+                 q.type === 'word_cloud' ? <Cloud size={20} className="text-blue-500 shrink-0" /> :
+                 q.type === 'rating' ? <Star size={20} className="text-blue-500 shrink-0" /> :
+                 <BarChart2 size={20} className="text-blue-500 shrink-0" />
+               ) :
+               (q.type === 'multiple_choice' ? <BarChart2 size={20} className="text-blue-500 shrink-0" /> : 
+               (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : 
+               <FileText size={20} className="text-blue-500 shrink-0" />))}
               <div>
                 <div className="font-black text-slate-800 text-sm">{q.title}</div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
@@ -2183,83 +2191,91 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       )}
 
 
-      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
-      <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
-        {classes.length === 0 ? (
-          <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Please create a class first.</p>
-        ) : (
-          classes.map(c => (
-            <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-              <input
-                type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
-                checked={assignedClasses.includes(c.id)}
-                onChange={() => toggleClass(c.id)}
-              />
-              <div>
-                <div className="font-bold text-slate-700 text-sm">{c.name}</div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
+      {category !== 'poll' && (
+        <>
+          <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
+          <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
+            {classes.length === 0 ? (
+              <p className="text-slate-400 italic text-center text-sm py-4">No classes created yet. Please create a class first.</p>
+            ) : (
+              classes.map(c => (
+                <label key={c.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox" className="w-5 h-5 accent-blue-600 rounded"
+                    checked={assignedClasses.includes(c.id)}
+                    onChange={() => toggleClass(c.id)}
+                  />
+                  <div>
+                    <div className="font-bold text-slate-700 text-sm">{c.name}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{(c.students || []).length} Students</div>
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {category !== 'poll' && (
+        <>
+          <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Quiz Settings</h2>
+          <div className="space-y-2 mb-10">
+            {category === 'async' && (
+              <div className="space-y-4 mb-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">Start Time (Local: {Intl.DateTimeFormat().resolvedOptions().timeZone})</label>
+                  <input type="datetime-local" className="w-full p-2 rounded-xl text-sm font-bold border border-orange-200" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">End Time (Local: {Intl.DateTimeFormat().resolvedOptions().timeZone})</label>
+                  <input type="datetime-local" className="w-full p-2 rounded-xl text-sm font-bold border border-orange-200" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                </div>
               </div>
-            </label>
-          ))
-        )}
-      </div>
+            )}
 
-      <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Quiz Settings</h2>
-      <div className="space-y-2 mb-10">
-        {category === 'async' && (
-          <div className="space-y-4 mb-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
-            <div>
-              <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">Start Time (Local: {Intl.DateTimeFormat().resolvedOptions().timeZone})</label>
-              <input type="datetime-local" className="w-full p-2 rounded-xl text-sm font-bold border border-orange-200" value={startTime} onChange={e => setStartTime(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-black uppercase text-orange-600 mb-1 block">End Time (Local: {Intl.DateTimeFormat().resolvedOptions().timeZone})</label>
-              <input type="datetime-local" className="w-full p-2 rounded-xl text-sm font-bold border border-orange-200" value={endTime} onChange={e => setEndTime(e.target.value)} />
-            </div>
+            {category === 'async' && type === 'async_quiz' && (
+              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                <label className="text-[10px] font-black uppercase text-blue-600 mb-1 block">Time per Question (seconds) — Optional</label>
+                <input
+                  type="number"
+                  min="5"
+                  placeholder="e.g. 30, 60, 90 — leave empty for no timer"
+                  className="w-full p-2 rounded-xl text-sm font-bold border border-blue-200"
+                  value={timerDuration}
+                  onChange={e => setTimerDuration(e.target.value)}
+                />
+                <p className="text-[9px] font-bold text-blue-400 mt-1">Each question gets this many seconds. When time runs out the quiz auto-advances to the next question.</p>
+              </div>
+            )}
+
+            {type === 'async_video' && (
+              <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors bg-purple-50">
+                <input type="checkbox" className="w-5 h-5 accent-purple-600 rounded" checked={preventSkipping} onChange={e => setPreventSkipping(e.target.checked)} />
+                <span className="font-bold text-purple-900 text-sm flex items-center gap-2"><Video size={16} /> Prevent Skipping Video</span>
+              </label>
+            )}
+
+            {type !== 'async_video' && (
+              <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} />
+                <span className="font-bold text-slate-700 text-sm">Shuffle Questions</span>
+              </label>
+            )}
+            {true && (
+              <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
+                <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
+              </label>
+            )}
           </div>
-        )}
-
-        {category === 'async' && type === 'async_quiz' && (
-          <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-            <label className="text-[10px] font-black uppercase text-blue-600 mb-1 block">Time per Question (seconds) — Optional</label>
-            <input
-              type="number"
-              min="5"
-              placeholder="e.g. 30, 60, 90 — leave empty for no timer"
-              className="w-full p-2 rounded-xl text-sm font-bold border border-blue-200"
-              value={timerDuration}
-              onChange={e => setTimerDuration(e.target.value)}
-            />
-            <p className="text-[9px] font-bold text-blue-400 mt-1">Each question gets this many seconds. When time runs out the quiz auto-advances to the next question.</p>
-          </div>
-        )}
-
-        {type === 'async_video' && (
-          <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors bg-purple-50">
-            <input type="checkbox" className="w-5 h-5 accent-purple-600 rounded" checked={preventSkipping} onChange={e => setPreventSkipping(e.target.checked)} />
-            <span className="font-bold text-purple-900 text-sm flex items-center gap-2"><Video size={16} /> Prevent Skipping Video</span>
-          </label>
-        )}
-
-        {type !== 'async_video' && (
-          <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} />
-            <span className="font-bold text-slate-700 text-sm">Shuffle Questions</span>
-          </label>
-        )}
-        {true && (
-          <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
-            <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
-          </label>
-        )}
-      </div>
+        </>
+      )}
 
       <div className="flex gap-3">
         <button onClick={() => { setType(null); setCategory(null); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
-          disabled={selectedItems.length === 0 || assignedClasses.length === 0 || (category === 'async' && (!startTime || !endTime))}
+          disabled={selectedItems.length === 0 || (category !== 'poll' && assignedClasses.length === 0) || (category === 'async' && (!startTime || !endTime))}
           className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
         >
           {category === 'async' ? 'Schedule' : 'Launch'}
