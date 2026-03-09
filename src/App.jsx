@@ -2895,7 +2895,7 @@ function FeedbackDashboard({ reports, classes }) {
   );
 }
 
-function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
+function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttendanceHistory }) {
   const [view, setView] = useState('history'); 
   const [openReport, setOpenReport] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
@@ -3382,7 +3382,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
           <div className="flex flex-col md:flex-row gap-4 mb-4">
             <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
             <div className="flex flex-wrap gap-2 items-center">
-              {[
+              {!isAttendanceHistory && [
                 { id: 'teacher_paced', label: 'Sync', icon: <BarChart2 size={14} />, color: 'purple' },
                 { id: 'student_paced', label: 'Async', icon: <BarChart2 size={14} />, color: 'blue' }
               ].map(f => (
@@ -5231,6 +5231,13 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
     }
   }
 
+  const handleToggleStatus = (reportTitle, studentId, currentStatus) => {
+    const rep = attendanceReports.find(r => r.title === reportTitle);
+    if (!rep) return;
+    const nextStatus = currentStatus === 'present' ? 'absent' : currentStatus === 'absent' ? 'late' : 'present';
+    updateReportStatus(rep.id, studentId, nextStatus);
+  };
+
   const exportAttendanceReport = () => {
     if (!reportClass) return;
     const wb = XLSX.utils.book_new();
@@ -5296,7 +5303,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       )}
       {subTab === 'history' && (() => {
         const attendanceReports = reports.filter(r => r.type === 'attendance' && !r.hidden);
-        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} />;
+        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} isAttendanceHistory={true} />;
       })()}
       {subTab === 'report' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
@@ -5355,15 +5362,15 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
                            const rec = rm.attendanceRecords[t];
                            const isPresent = rec?.present;
                            const status = isPresent ? rec.status : 'absent';
-                           const displayColor = status === 'present' ? 'text-green-500 bg-green-50' : status === 'late' ? 'text-orange-500 bg-orange-50' : 'text-red-400 bg-red-50';
+                           const displayColor = status === 'present' ? 'text-green-500 bg-green-50 hover:bg-green-100' : status === 'late' ? 'text-orange-500 bg-orange-50 hover:bg-orange-100' : 'text-red-400 bg-red-50 hover:bg-red-100';
                            const Icon = status === 'present' ? CheckCircle : status === 'late' ? Clock : XCircle;
                            
                            return (
                              <td key={t} className="p-3 text-center min-w-[100px]">
                                <div className="flex justify-center">
-                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${displayColor}`}>
+                                 <button onClick={() => handleToggleStatus(t, rm.student_id, status)} title="Click to change status" className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${displayColor}`}>
                                    <Icon size={16} />
-                                 </div>
+                                 </button>
                                </div>
                              </td>
                            )
