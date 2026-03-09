@@ -1853,7 +1853,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
   if (category === null) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 max-w-4xl mx-auto">
         <button
           onClick={() => setCategory('sync')}
           className="bg-blue-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
@@ -1869,22 +1869,6 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           <div className="p-3 bg-white/10 rounded-2xl"><Clock size={40} /></div>
           <span className="text-2xl font-black">Asynchronous</span>
           <span className="text-xs font-medium opacity-80 leading-relaxed">Schedule quizzes for students to complete on their own time.</span>
-        </button>
-        <button
-          onClick={() => setCategory('attendance')}
-          className="bg-green-500 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
-        >
-          <div className="p-3 bg-white/10 rounded-2xl"><UserCheck size={40} /></div>
-          <span className="text-2xl font-black">Attendance</span>
-          <span className="text-xs font-medium opacity-80 leading-relaxed">Instantly capture secure, device-verified student check-ins.</span>
-        </button>
-        <button
-          onClick={() => setCategory('feedback')}
-          className="bg-purple-600 text-white p-10 rounded-[2.5rem] shadow-xl flex flex-col items-center gap-4 transition-transform hover:scale-[1.03] active:scale-95 text-center"
-        >
-          <div className="p-3 bg-white/10 rounded-2xl"><BarChart2 size={40} /></div>
-          <span className="text-2xl font-black">Feedback Survey</span>
-          <span className="text-xs font-medium opacity-80 leading-relaxed">Collect anonymous session satisfaction feedback with graphical analytics.</span>
         </button>
       </div>
     );
