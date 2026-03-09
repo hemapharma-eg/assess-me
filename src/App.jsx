@@ -633,6 +633,7 @@ function TeacherPortal({ setRole, user }) {
 
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [pendingTab, setPendingTab] = useState(null);
+  const [podiumData, setPodiumData] = useState(null); // { top3: [{name, score, id}] }
 
   // Global override state for Short Answer grading
   const [saOverrides, setSaOverrides] = useState({}); // { reportId: { "studentId___qIdx": true|false } }
@@ -954,6 +955,33 @@ function TeacherPortal({ setRole, user }) {
       await supabase.from('rooms').delete().eq('id', roomCode);
     } catch (e) { console.error("Cleanup error", e); }
 
+    // Show podium for quiz types (not attendance/feedback)
+    const isQuizType = session.type === 'teacher_paced' || session.type === 'student_paced';
+    if (isQuizType && responses.length > 0 && session.quiz?.questions?.length > 0) {
+      const questions = session.quiz.questions;
+      const scored = responses.map(r => {
+        let correct = 0;
+        questions.forEach((q, qi) => {
+          const ans = r.answers?.[qi];
+          if (ans === undefined || ans === null) return;
+          if (q.type === 'mc') { if (Number(ans) === q.correct) correct++; }
+          else if (q.type === 'tf') { if (String(ans).toLowerCase() === String(q.correct).toLowerCase()) correct++; }
+          else if (q.type === 'sa') {
+            const overrideKey = `${r.student_id}___${qi}`;
+            const override = saOverrides[roomCode]?.[overrideKey];
+            if (override === true) correct++;
+            else if (override !== false && String(ans).trim().toLowerCase() === String(q.correct).trim().toLowerCase()) correct++;
+          }
+        });
+        const pct = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
+        return { name: r.student_name || r.student_id || 'Anonymous', score: pct, id: r.student_id };
+      }).sort((a, b) => b.score - a.score);
+      const top3 = scored.slice(0, 3);
+      if (top3.length > 0) {
+        setPodiumData({ top3, title: session.quiz.title });
+      }
+    }
+
     setSession(null);
     setRoomCode('');
     localStorage.removeItem('ClassLabX_RoomCode');
@@ -1072,9 +1100,9 @@ function TeacherPortal({ setRole, user }) {
               <button 
                 onClick={async () => {
                    setShowCloseWarning(false);
-                   await onEnd(); // trigger close
-                   if (pendingTab) { // Fix 1 & 4: Removed obsolete 'reports' tab check
-                      setActiveTab(pendingTab);
+                   await onEnd();
+                   if (pendingTab) {
+                       setActiveTab(pendingTab);
                    }
                    setPendingTab(null);
                 }} 
@@ -1102,6 +1130,68 @@ function TeacherPortal({ setRole, user }) {
                 Cancel (Stay Here)
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🏆 Top 3 Podium Overlay */}
+      {podiumData && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPodiumData(null)}>
+          <div className="max-w-lg w-full text-center" onClick={e => e.stopPropagation()}>
+            <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+              <div className="text-6xl mb-4">🏆</div>
+              <h2 className="text-4xl font-black text-white tracking-tight mb-2">Top Performers</h2>
+              <p className="text-slate-400 font-bold text-sm">{podiumData.title}</p>
+            </div>
+
+            <div className="flex items-end justify-center gap-4 mb-10">
+              {/* 2nd Place - Silver */}
+              {podiumData.top3[1] && (
+                <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-700" style={{animationDelay:'400ms',animationFillMode:'both'}}>
+                  <div className="text-5xl mb-3">🥈</div>
+                  <div className="bg-gradient-to-t from-slate-400 to-slate-300 rounded-t-2xl w-28 flex flex-col items-center justify-end pb-4 pt-6 shadow-2xl" style={{height:'140px'}}>
+                    <span className="text-xl font-black text-white drop-shadow-lg">2nd</span>
+                  </div>
+                  <div className="bg-white rounded-b-2xl w-28 p-3 shadow-xl border border-slate-100">
+                    <p className="font-black text-slate-800 text-sm truncate" title={podiumData.top3[1].name}>{podiumData.top3[1].name}</p>
+                    <p className="font-black text-slate-400 text-xs">{podiumData.top3[1].score}%</p>
+                  </div>
+                </div>
+              )}
+              {/* 1st Place - Gold */}
+              {podiumData.top3[0] && (
+                <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-700" style={{animationDelay:'200ms',animationFillMode:'both'}}>
+                  <div className="text-6xl mb-3 animate-bounce" style={{animationDuration:'2s'}}>🥇</div>
+                  <div className="bg-gradient-to-t from-yellow-500 to-amber-400 rounded-t-2xl w-32 flex flex-col items-center justify-end pb-4 pt-8 shadow-2xl ring-4 ring-yellow-300/30" style={{height:'180px'}}>
+                    <span className="text-2xl font-black text-white drop-shadow-lg">1st</span>
+                  </div>
+                  <div className="bg-white rounded-b-2xl w-32 p-3 shadow-xl border-2 border-yellow-200">
+                    <p className="font-black text-slate-800 text-sm truncate" title={podiumData.top3[0].name}>{podiumData.top3[0].name}</p>
+                    <p className="font-black text-yellow-600 text-xs">{podiumData.top3[0].score}%</p>
+                  </div>
+                </div>
+              )}
+              {/* 3rd Place - Bronze */}
+              {podiumData.top3[2] && (
+                <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-700" style={{animationDelay:'600ms',animationFillMode:'both'}}>
+                  <div className="text-5xl mb-3">🥉</div>
+                  <div className="bg-gradient-to-t from-orange-700 to-orange-500 rounded-t-2xl w-28 flex flex-col items-center justify-end pb-4 pt-6 shadow-2xl" style={{height:'110px'}}>
+                    <span className="text-xl font-black text-white drop-shadow-lg">3rd</span>
+                  </div>
+                  <div className="bg-white rounded-b-2xl w-28 p-3 shadow-xl border border-slate-100">
+                    <p className="font-black text-slate-800 text-sm truncate" title={podiumData.top3[2].name}>{podiumData.top3[2].name}</p>
+                    <p className="font-black text-slate-400 text-xs">{podiumData.top3[2].score}%</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setPodiumData(null)}
+              className="px-10 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all border border-white/20 backdrop-blur-sm animate-in fade-in duration-1000" style={{animationDelay:'1200ms',animationFillMode:'both'}}
+            >
+              Continue
+            </button>
           </div>
         </div>
       )}
@@ -2203,8 +2293,11 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
     const ws = XLSX.utils.aoa_to_sheet([
       ['Type', 'Question', 'Option_1', 'Option_2', 'Option_3', 'Option_4', 'Correct_Answer'],
       ['mc', 'What is 2 + 2?', '1', '2', '3', '4', '4'],
+      ['mc', 'Which planet is closest to the Sun?', 'Venus', 'Mercury', 'Earth', 'Mars', 'Mercury'],
       ['tf', 'The sky is blue.', '', '', '', '', 'True'],
-      ['sa', 'What color is the sun?', '', '', '', '', 'Yellow']
+      ['tf', 'Water boils at 50°C.', '', '', '', '', 'False'],
+      ['sa', 'What color is the sun?', '', '', '', '', 'Yellow'],
+      ['sa', 'Name the largest ocean.', '', '', '', '', 'Pacific']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Quiz_Template");
@@ -3492,8 +3585,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
               ))}
             </div>
           </div>
-          <div className="flex justify-between items-center px-2">
-             <div className="text-slate-400 font-bold text-xs uppercase tracking-widest">{reports.filter(r => !hiddenSessions.includes(r.id)).length} Visible Sessions</div>
+          <div className="flex justify-end items-center px-2">
              <button onClick={() => setHiddenSessions([])} className="text-[10px] uppercase font-black tracking-widest text-slate-400 hover:text-blue-500 underline underline-offset-4">Reset Hidden</button>
           </div>
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
