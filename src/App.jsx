@@ -3430,7 +3430,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
       const uniqueAttendanceTitles = Array.from(new Set(attendanceReports.map(r => r.title)));
 
       gradeMatrix = (gradebookClass.students || []).map(stu => {
-        const scores = {}; // Keys: Quiz Title, Values: HIGHEST score
+        const scores = {}; // Keys: Quiz Title, Values: HIGHEST score (or the manually overridden score)
+        const scoreManualFlags = {}; // Keys: Quiz Title, Values: Boolean (true if this score came from an attempt with manual overrides)
         const attendanceRecords = {}; // Keys: Attendance Title, Values: Boolean (Present/Absent)
 
         // Check if there are other students in this class with the exact same ID
@@ -3462,11 +3463,28 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     : (String(rawAns) === String(q.correct));
                 }
                 
+                
                 if (isOk) correctCount++;
               }
             });
             const score = Math.round((correctCount / rep.questions.length) * 100);
-            if (scores[rep.title] === undefined || score > scores[rep.title]) {
+            
+            // Check if this specific student's attempt has any manual overrides
+            const hasManualOverrideForStudent = Object.keys(overrides).some(key => key.startsWith(`${stuResp.student_id}___`));
+            
+            // Prioritize manually overridden attempts over auto-graded ones, even if the score is lower.
+            // If both are manual or both are auto, keep the highest score.
+            const isCurrentBestManual = scoreManualFlags[rep.title] || false;
+            
+            if (scores[rep.title] === undefined) {
+              scores[rep.title] = score;
+              scoreManualFlags[rep.title] = hasManualOverrideForStudent;
+            } else if (hasManualOverrideForStudent && !isCurrentBestManual) {
+              // This is a manual override replacing an auto-grade
+              scores[rep.title] = score;
+              scoreManualFlags[rep.title] = true;
+            } else if (hasManualOverrideForStudent === isCurrentBestManual && score > scores[rep.title]) {
+              // Both are same type (both manual or both auto), so keep the higher score
               scores[rep.title] = score;
             }
           }
