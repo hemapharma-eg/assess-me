@@ -4,7 +4,7 @@ import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, AlertTriangle,
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check, Settings
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check, Settings, Send, Cloud, Star
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReactPlayer from 'react-player';
@@ -3423,16 +3423,21 @@ function PollInteraction({ session, answers, submit, onFinish, idx, total, onNex
           )}
 
           {poll.type === 'word_cloud' && (
-            <div className="space-y-4">
-              <input
+            <div className="space-y-6">
+              <textarea
                 autoFocus
-                className="w-full bg-slate-50 border-4 border-slate-100 rounded-[2.5rem] p-8 text-center text-3xl font-black text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-                placeholder="Type your word..."
+                className="w-full bg-slate-50 border-4 border-slate-100 rounded-[2rem] p-8 text-center text-2xl font-black text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition-all min-h-[160px] resize-none"
+                placeholder="Type your words here..."
                 value={localVote}
                 onChange={(e) => setLocalVote(e.target.value)}
-                onBlur={() => handleVote(localVote)}
               />
-              <p className="text-center text-slate-400 font-bold text-xs">Enter a word to add it to the cloud!</p>
+              <button
+                onClick={() => handleVote(localVote)}
+                className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-3xl font-black text-lg shadow-xl shadow-blue-100 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Send size={20} /> Send to Cloud
+              </button>
+              <p className="text-center text-slate-400 font-bold text-xs uppercase tracking-widest">You can send multiple updates!</p>
             </div>
           )}
 
