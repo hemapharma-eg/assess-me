@@ -192,19 +192,30 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
+        skipBrowserRedirect: true, // Prevent Supabase from redirecting the main window
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
         },
       },
     });
+    
     if (error) {
       alert("Google Login Error: " + error.message);
       setLoading(false);
+    } else if (data?.url) {
+      // Open the Google OAuth URL in a popup window
+      const width = 500;
+      const height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      window.open(data.url, 'Google Login', `width=${width},height=${height},left=${left},top=${top}`);
+      
+      // We don't need to unset loading here, the auth state change listener will handle it when they finish
     }
   };
 
