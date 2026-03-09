@@ -631,9 +631,11 @@ function TeacherPortal({ setRole, user }) {
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('ClassLabX_RoomCode') || '');
   const [asyncReports, setAsyncReports] = useState([]);
 
-  // Active Room Navigation Warning State
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [pendingTab, setPendingTab] = useState(null);
+
+  // Global override state for Short Answer grading
+  const [saOverrides, setSaOverrides] = useState({}); // { reportId: { "studentId___qIdx": true|false } }
 
   // Fetch Quizzes and Reports
   useEffect(() => {
@@ -663,11 +665,33 @@ function TeacherPortal({ setRole, user }) {
           type: room.type, // 'async_video' or 'async_quiz'
           ts: room.start_time ? new Date(room.start_time).getTime() : room.ts,
           responses: (asyncResponses || []).filter(r => r.room_code === room.id),
+          score_overrides: room.score_overrides || {},
           questions: room.quiz?.questions || [],
           assigned_classes: room.quiz?.assigned_classes || []
         }));
         setAsyncReports(pseudoReports);
       }
+
+      // Pre-populate saOverrides state from DB
+      const loadedOverrides = {};
+      
+      if (resReports.data) {
+        resReports.data.forEach(r => {
+          if (r.score_overrides && Object.keys(r.score_overrides).length > 0) {
+            loadedOverrides[r.id] = r.score_overrides;
+          }
+        });
+      }
+      
+      if (resAsyncRooms.data) {
+        resAsyncRooms.data.forEach(r => {
+          if (r.score_overrides && Object.keys(r.score_overrides).length > 0) {
+            loadedOverrides[r.id] = r.score_overrides;
+          }
+        });
+      }
+      
+      setSaOverrides(loadedOverrides);
 
       setLoadingData(false);
     };
@@ -747,6 +771,46 @@ function TeacherPortal({ setRole, user }) {
          await supabase.from('reports').update({ responses: updatedReportsMap[rid] }).eq('id', rid);
       }
     }
+  };
+
+  const handleToggleSaOverride = async (reportId, studentId, qIdx, newIsOk) => {
+    // 1. Find the target report to get title/classes for matching
+    const allReps = [...reports, ...asyncReports];
+    const targetReport = allReps.find(r => r.id === reportId);
+    if (!targetReport) return;
+
+    const targetTitle = targetReport.title;
+    const targetClasses = (targetReport.assigned_classes || []).sort().join(',');
+
+    // 2. Identify ALL reports that should be updated
+    const matchingReports = allReps.filter(r => {
+       if (r.type !== targetReport.type) return false;
+       const rTitle = r.title;
+       const rClasses = (r.assigned_classes || []).sort().join(',');
+       return rTitle === targetTitle && rClasses === targetClasses;
+    });
+
+    const overrideKey = `${studentId}___${qIdx}`;
+
+    // 3. Update Local State & DB for each matching report
+    const newOverrides = {};
+    for (const rep of matchingReports) {
+      const prevForReport = saOverrides[rep.id] || rep.score_overrides || {};
+      const newForReport = { ...prevForReport, [overrideKey]: newIsOk };
+      newOverrides[rep.id] = newForReport;
+
+      // DB Update
+      const isAsync = asyncReports.some(r => r.id === rep.id);
+      if (isAsync) {
+         // Async rooms keep score_overrides directly on the room object
+         await supabase.from('rooms').update({ score_overrides: newForReport }).eq('id', rep.id);
+      } else {
+         // Live reports keep score_overrides on the report object
+         await supabase.from('reports').update({ score_overrides: newForReport }).eq('id', rep.id);
+      }
+    }
+
+    setSaOverrides(prev => ({ ...prev, ...newOverrides }));
   };
 
   // Listen to Active Room & Responses on Realtime Postgres Changes
@@ -970,7 +1034,26 @@ function TeacherPortal({ setRole, user }) {
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
-        {activeTab === 'quizzes' && <QuizzesTabMain quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} />}
+        {activeTab === 'quizzes' && (
+          <QuizzesTabMain
+            quizzes={quizzes}
+            setQuizzes={setQuizzes}
+            user={user}
+            profile={profile}
+            classes={classes}
+            reports={reports}
+            asyncReports={asyncReports}
+            onLaunch={onLaunch}
+            session={session}
+            responses={responses}
+            roomCode={roomCode}
+            onEnd={onEnd}
+            updateReportStatus={updateReportStatus}
+            saOverrides={saOverrides}
+            setSaOverrides={setSaOverrides}
+            handleToggleSaOverride={handleToggleSaOverride}
+          />
+        )}
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} />}
         {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} />}
       </main>
@@ -2895,7 +2978,7 @@ function FeedbackDashboard({ reports, classes }) {
   );
 }
 
-function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttendanceHistory }) {
+function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttendanceHistory, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const [view, setView] = useState('history'); 
   const [openReport, setOpenReport] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
@@ -2922,7 +3005,6 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
   const [draftWeights, setDraftWeights] = useState({});
   const [draftMode, setDraftMode] = useState('simple'); // 'simple' | 'weighted' | 'top_n'
   const [draftTopN, setDraftTopN] = useState(3);
-  const [saOverrides, setSaOverrides] = useState({}); // { reportId: { "studentId___qIdx": true|false } }
   const [saAnswerPopup, setSaAnswerPopup] = useState(null); // { reportId, studentId, qIdx, answer, isOk }
 
   const getEffectiveField = (r, field) => localReportPatch[r.id]?.[field] ?? r[field];
@@ -3268,19 +3350,23 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
         </div>
       </div>
 
-      {/* SA Answer Reader & Override Popup — must live inside the activeReport return */}
       {saAnswerPopup && (() => {
         const { reportId, studentId, qIdx, answer, isOk } = saAnswerPopup;
         const rep = (allReports || reports).find(r => r.id === reportId);
         const question = rep?.questions?.[qIdx];
         const modelAnswer = question?.correct || '';
         const handleToggle = async (newIsOk) => {
-          const overrideKey = `${studentId}___${qIdx}`;
-          const prevForReport = saOverrides[reportId] || rep?.score_overrides || {};
-          const newForReport = { ...prevForReport, [overrideKey]: newIsOk };
-          setSaOverrides(prev => ({ ...prev, [reportId]: newForReport }));
           setSaAnswerPopup(null);
-          await supabase.from('reports').update({ score_overrides: newForReport }).eq('id', reportId);
+          if (handleToggleSaOverride) {
+             await handleToggleSaOverride(reportId, studentId, qIdx, newIsOk);
+          } else {
+             // Fallback just in case
+             const overrideKey = `${studentId}___${qIdx}`;
+             const prevForReport = saOverrides[reportId] || rep?.score_overrides || {};
+             const newForReport = { ...prevForReport, [overrideKey]: newIsOk };
+             setSaOverrides(prev => ({ ...prev, [reportId]: newForReport }));
+             await supabase.from('reports').update({ score_overrides: newForReport }).eq('id', reportId);
+          }
         };
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
@@ -4904,7 +4990,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 //          NEW FEATURE TAB CONTAINERS
 // ==========================================
 
-function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus }) {
+function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const isLiveQuizUrl = new URLSearchParams(window.location.search).get('room');
   const defaultTab = session || isLiveQuizUrl ? 'live' : 'manage';
   const [subTab, setSubTab] = useState(defaultTab);
@@ -4917,7 +5003,6 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   const [draftTopN, setDraftTopN] = useState(3);
   const [quizWeights, setQuizWeights] = useState({});
   const [gradebookSettings, setGradebookSettings] = useState({});
-  const [saOverrides, setSaOverrides] = useState({});
 
   useEffect(() => {
     if (session && session.quiz.type !== 'feedback') setSubTab('live');
@@ -5096,7 +5181,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
         const quizReports = [...reports, ...asyncReports]
           .filter(r => r.type !== 'attendance' && r.type !== 'feedback')
           .filter(r => !r.hidden);
-        return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} />;
+        return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
       })()}
       {subTab === 'gradebook' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
@@ -5166,7 +5251,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   );
 }
 
-function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus }) {
+function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
   const defaultTab = session?.type === 'attendance' ? 'live' : 'launch';
   const [subTab, setSubTab] = useState(defaultTab);
   
@@ -5303,7 +5388,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       )}
       {subTab === 'history' && (() => {
         const attendanceReports = reports.filter(r => r.type === 'attendance' && !r.hidden);
-        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} isAttendanceHistory={true} />;
+        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} isAttendanceHistory={true} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />;
       })()}
       {subTab === 'report' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
@@ -5387,7 +5472,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   );
 }
 
-function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus }) {
+function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
   const defaultTab = session?.type === 'feedback' ? 'live' : 'launch';
   const [subTab, setSubTab] = useState(defaultTab);
   
@@ -5443,7 +5528,7 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
       )}
       {subTab === 'report' && (() => {
         const feedbackReports = reports.filter(r => r.type === 'feedback' && !r.hidden);
-        return <ReportsTab reports={feedbackReports} allReports={feedbackReports} classes={classes} updateReportStatus={updateReportStatus} />;
+        return <ReportsTab reports={feedbackReports} allReports={feedbackReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />;
       })()}
     </div>
   );
