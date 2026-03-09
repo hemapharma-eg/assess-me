@@ -1907,7 +1907,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       <div className="flex gap-3">
         <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
-          onClick={() => {
+          onClick={async () => {
             const feedbackQuiz = {
               title: sessionName || 'Feedback Session',
               assigned_classes: assignedClasses,
@@ -1919,7 +1919,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
                 { id: 5, text: "Additional Comments & Suggestions (Optional).", type: "text" }
               ]
             };
-            onLaunch(feedbackQuiz, 'feedback');
+            await onLaunch(feedbackQuiz, 'feedback');
             setCategory(null);
             setSessionName('');
             setAssignedClasses([]);
@@ -5152,6 +5152,13 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   };
 
   const saveWeights = () => {
+    if (draftMode === 'weighted') {
+      const total = Object.values(draftWeights).reduce((a, b) => a + b, 0);
+      if (total !== 100) {
+        alert(`Total weight must equal exactly 100%. Current total is ${total}%.`);
+        return;
+      }
+    }
     setGradebookSettings(prev => ({ ...prev, [selectedClassId]: { mode: draftMode, topN: draftTopN } }));
     setQuizWeights(prev => ({ ...prev, [selectedClassId]: draftWeights }));
     setShowWeightModal(false);
@@ -5351,9 +5358,20 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
               )}
             </div>
 
-            <div className="mt-8 flex gap-3">
-              <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 text-sm font-black text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={saveWeights} className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black text-sm shadow-xl shadow-purple-100 transition-all">Save Changes</button>
+            <div className="mt-8 flex flex-col gap-3">
+              {draftMode === 'weighted' && Object.values(draftWeights).reduce((a,b)=>a+b,0) !== 100 && (
+                <p className="text-xs font-black text-red-500 text-center animate-pulse">
+                  ⚠ Total weight must equal exactly 100% to save. Currently: {Object.values(draftWeights).reduce((a,b)=>a+b,0)}%
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 text-sm font-black text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+                <button
+                  onClick={saveWeights}
+                  disabled={draftMode === 'weighted' && Object.values(draftWeights).reduce((a,b)=>a+b,0) !== 100}
+                  className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-black text-sm shadow-xl shadow-purple-100 transition-all"
+                >Save Changes</button>
+              </div>
             </div>
           </div>
         </div>
