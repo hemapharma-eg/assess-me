@@ -2259,7 +2259,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         <button onClick={() => { setType(null); setCategory(null); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
-          disabled={!selected || assignedClasses.length === 0 || (category === 'async' && (!startTime || !endTime))}
+          disabled={selectedItems.length === 0 || assignedClasses.length === 0 || (category === 'async' && (!startTime || !endTime))}
           className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
         >
           {category === 'async' ? 'Schedule' : 'Launch'}
