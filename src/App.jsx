@@ -4806,7 +4806,8 @@ function StudentPortal({ setRole, initialRoom }) {
     </div>
   );
 
-  const q = session.quiz.questions[idx];
+  // SAFETY: Polls and Feedback don't have questions array
+  const q = session?.quiz?.questions ? session.quiz.questions[idx] : null;
   // Calculate progress purely on answered questions
   const progress = (Object.keys(answers).length / total) * 100;
 
