@@ -7,6 +7,8 @@ import {
   UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check, Settings, Send, Cloud, Star
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import ReactPlayer from 'react-player';
 import QRCode from 'react-qr-code';
 
@@ -5832,6 +5834,41 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
     XLSX.writeFile(wb, `ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.xlsx`);
   };
 
+  const exportGradebookPDF = () => {
+    if (!gradebookClass) return;
+    const doc = new jsPDF('landscape');
+    const classSettings = gradebookSettings[selectedClassId] || { mode: 'simple' };
+    const classWeights = quizWeights[selectedClassId] || {};
+
+    const headers = ['Student ID', 'Name', 'Email', `Final Grade`];
+    uniqueQuizTitles.forEach(t => {
+       const w = classSettings.mode === 'weighted' ? `\n(Wt: ${classWeights[t]||0}%)` : '';
+       headers.push(`${t}${w}`);
+    });
+
+    const body = [];
+    gradeMatrix.forEach(gm => {
+      const row = [gm.student_id, gm.name, gm.email || '', `${gm.finalGrade}%`];
+      uniqueQuizTitles.forEach(t => row.push(gm.scores[t] !== undefined ? `${gm.scores[t]}%` : '---'));
+      body.push(row);
+    });
+
+    doc.autoTable({
+      head: [headers],
+      body: body,
+      startY: 20,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      theme: 'grid',
+      didDrawPage: (data) => {
+        doc.setFontSize(14);
+        doc.text(`Gradebook: ${gradebookClass.name} - ${classSettings.mode.toUpperCase()}`, data.settings.margin.left, 15);
+      }
+    });
+
+    doc.save(`ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.pdf`);
+  };
+
   const openWeightModal = () => {
     setDraftMode(gradebookSettings[selectedClassId]?.mode || 'simple');
     setDraftTopN(gradebookSettings[selectedClassId]?.topN || 3);
@@ -5921,8 +5958,11 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
                  <button onClick={openWeightModal} className="px-5 py-3 bg-white border-2 border-slate-200 hover:border-purple-400 hover:text-purple-600 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2">
                    <Settings size={16} /> Mode Config
                  </button>
-                 <button onClick={exportGradebook} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all">
-                   <Download size={16} /> Export Grades (Excel)
+                 <button onClick={exportGradebook} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 transition-all">
+                   <Download size={16} /> Excel
+                 </button>
+                 <button onClick={exportGradebookPDF} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all">
+                   <FileText size={16} /> PDF
                  </button>
                </div>
              )}
@@ -6160,6 +6200,39 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
     XLSX.writeFile(wb, `ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.xlsx`);
   };
 
+  const exportAttendancePDF = () => {
+    if (!reportClass) return;
+    const doc = new jsPDF('landscape');
+
+    const headers = ['Student ID', 'Name', 'Email', 'Overall %'];
+    uniqueAttendanceTitles.forEach(t => headers.push(t));
+
+    const body = [];
+    reportMatrix.forEach(rm => {
+      const row = [rm.student_id, rm.name, rm.email || '', `${rm.attendanceTotal}%`];
+      uniqueAttendanceTitles.forEach(t => {
+        const rec = rm.attendanceRecords[t];
+        row.push(rec && rec.present ? (rec.status.charAt(0).toUpperCase() + rec.status.slice(1)) : 'Absent');
+      });
+      body.push(row);
+    });
+
+    doc.autoTable({
+      head: [headers],
+      body: body,
+      startY: 20,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+      theme: 'grid',
+      didDrawPage: (data) => {
+        doc.setFontSize(14);
+        doc.text(`Attendance Report: ${reportClass.name}`, data.settings.margin.left, 15);
+      }
+    });
+
+    doc.save(`ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.pdf`);
+  };
+
   const SubNav = () => (
     <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
       {[
@@ -6220,9 +6293,14 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
               </select>
             </div>
             {selectedClassId && (
-              <button onClick={exportAttendanceReport} className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all">
-                <Download size={16} /> Export Attendance (Excel)
-              </button>
+              <div className="flex gap-2">
+                <button onClick={exportAttendanceReport} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 transition-all">
+                  <Download size={16} /> Excel
+                </button>
+                <button onClick={exportAttendancePDF} className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all">
+                  <FileText size={16} /> PDF
+                </button>
+              </div>
             )}
           </div>
           
