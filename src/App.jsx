@@ -3375,11 +3375,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
 
   return (
     <>
-    <div className="space-y-6">
-      {/* With feature tabs, the root ReportsTab just acts as Session History */}
-      <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-4xl mx-auto overflow-x-auto whitespace-nowrap custom-scroll print:hidden">
-        <button className="px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 bg-blue-600 text-white shadow-lg">Session History</button>
-      </div>
+    <div className="space-y-6 mt-4">
 
       {view === 'history' ? (
         <div className="space-y-6">
@@ -3388,8 +3384,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             <div className="flex flex-wrap gap-2 items-center">
               {[
                 { id: 'teacher_paced', label: 'Sync', icon: <BarChart2 size={14} />, color: 'purple' },
-                { id: 'student_paced', label: 'Async', icon: <BarChart2 size={14} />, color: 'blue' },
-                { id: 'attendance', label: 'Attendance', icon: <UserCheck size={14} />, color: 'green' }
+                { id: 'student_paced', label: 'Async', icon: <BarChart2 size={14} />, color: 'blue' }
               ].map(f => (
                 <button
                   key={f.id}
@@ -3422,7 +3417,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                   {(() => {
                     const grouped = {};
                     reports
-                      .filter(r => r.type !== 'feedback')
+                      .filter(r => r.type !== 'feedback' && r.type !== 'attendance')
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => matchesTypeFilter(r.type))
                       .filter(r => {
@@ -3516,6 +3511,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                   })()}
                   {(() => {
                     const hasVisible = reports
+                      .filter(r => r.type !== 'feedback' && r.type !== 'attendance')
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => matchesTypeFilter(r.type))
                       .filter(r => {
