@@ -3092,6 +3092,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
   const [typeFilter, setTypeFilter] = useState({ teacher_paced: true, student_paced: true, attendance: true });
   // Helper: map async types to the student_paced filter bucket
   const matchesTypeFilter = (type) => {
+    // Both 'async_quiz' and 'async_video' fall under 'student_paced' Sync/Async toggle
     if (type === 'async_quiz' || type === 'async_video') return typeFilter['student_paced'];
     if (isAttendanceHistory && type === 'attendance') return true;
     return typeFilter[type];
@@ -3604,7 +3605,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                 <tbody className="divide-y divide-slate-100">
                   {(() => {
                     const grouped = {};
-                    reports
+                    (allReports || reports)
                       .filter(r => r.type !== 'feedback' && (isAttendanceHistory || r.type !== 'attendance'))
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => matchesTypeFilter(r.type))
@@ -3698,7 +3699,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                     });
                   })()}
                   {(() => {
-                    const hasVisible = reports
+                    const hasVisible = (allReports || reports)
                       .filter(r => r.type !== 'feedback' && (isAttendanceHistory ? true : r.type !== 'attendance'))
                       .filter(r => !hiddenSessions.includes(r.id))
                       .filter(r => matchesTypeFilter(r.type))
