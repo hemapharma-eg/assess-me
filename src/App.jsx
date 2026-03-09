@@ -831,6 +831,10 @@ function PollsTab({ polls, setPolls, user }) {
 
 function PollResultsTab({ session, responses, onEnd, roomCode }) {
   const [activePoll, setActivePoll] = useState(session.quiz);
+  const [showQR, setShowQR] = useState(true);
+
+  const joinUrl = `${window.location.href.split('?')[0]}?room=${roomCode}`;
+
   
   const chartData = useMemo(() => {
     if (activePoll.type === 'multiple_choice') {
@@ -875,10 +879,41 @@ function PollResultsTab({ session, responses, onEnd, roomCode }) {
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Poll • {responses.length} Submissions
           </p>
         </div>
-        <button onClick={onEnd} className="px-6 py-3 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl font-black text-sm transition-all flex items-center gap-2">
-          <PauseCircle size={20} /> End Poll
-        </button>
+        <div className="flex gap-4">
+          <button onClick={() => setShowQR(!showQR)} className="bg-slate-50 hover:bg-slate-100 px-6 py-3 rounded-xl text-xs font-black flex items-center gap-2 transition-all text-slate-600">
+            <QrCode size={18} /> {showQR ? 'Hide Join Info' : 'Show Join Info'}
+          </button>
+          <button onClick={onEnd} className="px-6 py-3 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl font-black text-sm transition-all flex items-center gap-2">
+            <PauseCircle size={20} /> End Poll
+          </button>
+        </div>
       </div>
+
+      {showQR && (
+        <div className="p-10 mb-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100 flex flex-col md:flex-row items-center justify-center gap-12 text-center md:text-left animate-in slide-in-from-top duration-300">
+          <div className="bg-white p-4 rounded-2xl shadow-xl border-4 border-white">
+            <QRCode value={joinUrl} size={180} />
+          </div>
+          <div>
+            <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">Join the Poll!</h3>
+            <p className="text-slate-500 font-bold mb-6 max-w-sm">Scan the QR code or go to the URL below to participate in this live poll.</p>
+            <div className="flex flex-col gap-4">
+              <div className="bg-white px-6 py-3 rounded-xl border-2 border-blue-100 inline-block font-black text-2xl text-blue-600 tracking-[0.2em] shadow-sm text-center">
+                {roomCode}
+              </div>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(joinUrl);
+                  alert("Join link copied!");
+                }}
+                className="flex items-center justify-center gap-2 text-xs font-black text-slate-400 hover:text-blue-600 transition-colors"
+              >
+                <Copy size={14} /> Copy Join Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 grid place-items-center">
         {activePoll.type === 'multiple_choice' || activePoll.type === 'rating' ? (
