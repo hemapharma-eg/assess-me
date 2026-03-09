@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import ReactPlayer from 'react-player';
 import QRCode from 'react-qr-code';
 
@@ -5730,7 +5730,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       
       const allSourceReports = [...reports, ...asyncReports];
       quizReports = allSourceReports.filter(r => {
-        if (r.type === 'attendance' || r.type === 'feedback') return false;
+        if (r.type === 'attendance' || r.type === 'feedback' || r.type === 'poll') return false;
         const effectiveClasses = r.assigned_classes || [];
         if (effectiveClasses.includes(selectedClassId)) return true;
         if (effectiveClasses.length === 0) {
@@ -5853,20 +5853,25 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       body.push(row);
     });
 
-    doc.autoTable({
-      head: [headers],
-      body: body,
-      startY: 20,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
-      theme: 'grid',
-      didDrawPage: (data) => {
-        doc.setFontSize(14);
-        doc.text(`Gradebook: ${gradebookClass.name} - ${classSettings.mode.toUpperCase()}`, data.settings.margin.left, 15);
-      }
-    });
+    try {
+      autoTable(doc, {
+        head: [headers],
+        body: body,
+        startY: 20,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+        theme: 'grid',
+        didDrawPage: (data) => {
+          doc.setFontSize(14);
+          doc.text(`Gradebook: ${gradebookClass.name} - ${classSettings.mode.toUpperCase()}`, data.settings.margin.left, 15);
+        }
+      });
 
-    doc.save(`ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.pdf`);
+      doc.save(`ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate PDF: ' + e.message);
+    }
   };
 
   const openWeightModal = () => {
@@ -6217,20 +6222,25 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       body.push(row);
     });
 
-    doc.autoTable({
-      head: [headers],
-      body: body,
-      startY: 20,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
-      theme: 'grid',
-      didDrawPage: (data) => {
-        doc.setFontSize(14);
-        doc.text(`Attendance Report: ${reportClass.name}`, data.settings.margin.left, 15);
-      }
-    });
+    try {
+      autoTable(doc, {
+        head: [headers],
+        body: body,
+        startY: 20,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+        theme: 'grid',
+        didDrawPage: (data) => {
+          doc.setFontSize(14);
+          doc.text(`Attendance Report: ${reportClass.name}`, data.settings.margin.left, 15);
+        }
+      });
 
-    doc.save(`ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.pdf`);
+      doc.save(`ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate PDF: ' + e.message);
+    }
   };
 
   const SubNav = () => (
