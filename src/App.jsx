@@ -3278,7 +3278,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
   };
 
   // Detail view for a single report
-  const activeReport = openReport ? (allReports || reports).find(r => r.id === openReport.id) : null;
+  // Use the openReport directly if it was passed as a grouped object from the table
+  const activeReport = openReport || null;
 
   if (activeReport) {
     const scored = computeScores(activeReport);
@@ -3648,8 +3649,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                       return (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 text-center align-middle">
-                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                          {r.type === 'attendance' ? <UserCheck size={16} /> : <BarChart2 size={16} />}
+                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : r.type === 'async_video' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                          {r.type === 'attendance' ? <UserCheck size={16} /> : r.type === 'async_video' ? <Video size={16} /> : <BarChart2 size={16} />}
                         </div>
                       </td>
                       <td className="p-3 align-middle">
