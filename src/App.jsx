@@ -925,7 +925,7 @@ function TeacherPortal({ setRole, user }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Quizzes', 'Classes', 'Launch', 'Synchronous', 'Asynchronous', 'Reports'].map(t => (
+            {['Classes', 'Quizzes', 'Attendance', 'Feedback'].map(t => (
               <button
                 key={t} onClick={() => handleTabChange(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -957,7 +957,7 @@ function TeacherPortal({ setRole, user }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full print:hidden">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['quizzes', 'classes', 'launch', 'synchronous', 'asynchronous', 'reports'].map(tab => (
+          {['classes', 'quizzes', 'attendance', 'feedback'].map(tab => (
             <button
               key={tab} onClick={() => handleTabChange(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -969,16 +969,10 @@ function TeacherPortal({ setRole, user }) {
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-        {activeTab === 'quizzes' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} />}
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
-        {activeTab === 'launch' && <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setActiveTab} profile={profile} />}
-        {activeTab === 'synchronous' && <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />}
-        {activeTab === 'asynchronous' && <ScheduledTab user={user} classes={classes} />}
-        {activeTab === 'reports' && (() => {
-          const allReports = [...reports, ...asyncReports];
-          const visibleReports = allReports.filter(r => !r.hidden);
-          return <ReportsTab reports={visibleReports} allReports={allReports} classes={classes} updateReportStatus={updateReportStatus} />;
-        })()}
+        {activeTab === 'quizzes' && <QuizzesTabMain quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} />}
+        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} />}
+        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} />}
       </main>
 
       {/* Close Warning Modal */}
@@ -1364,9 +1358,9 @@ function ScheduledTab({ user, classes }) {
   );
 }
 
-function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile }) {
+function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile, defaultCategory = null }) {
   const [selected, setSelected] = useState('');
-  const [category, setCategory] = useState(null); // 'sync', 'async', 'attendance'
+  const [category, setCategory] = useState(defaultCategory); // 'sync', 'async', 'attendance', 'feedback'
   const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video', 'attendance'
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
@@ -2588,11 +2582,11 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
                     <div className="text-sm font-black text-slate-700">{d.count}</div>
                     <div className="text-[10px] font-bold text-slate-400">({Math.round(d.percent)}%)</div>
                     <div
-                      className={`w-full rounded-t-xl transition-all duration-1000 ease-out shadow-lg ${d.isCorrect ? 'bg-green-500 shadow-green-500/30' : 'bg-slate-300 shadow-slate-300/30'}`}
+                      className={`w-full rounded-t-xl transition-all duration-1000 ease-out shadow-lg ${session.type === 'feedback' ? 'bg-blue-500 shadow-blue-500/30' : (d.isCorrect ? 'bg-green-500 shadow-green-500/30' : 'bg-slate-300 shadow-slate-300/30')}`}
                       style={{ height: `${Math.max(d.percent, 4)}%` }}
                     ></div>
                     <div className="text-sm font-black text-slate-700 w-full text-center flex flex-col gap-1 items-center">
-                      <span className={`w-8 h-8 flex items-center justify-center rounded-lg text-white text-xs ${d.isCorrect ? 'bg-green-600' : 'bg-slate-700'}`}>{d.label}</span>
+                      <span className={`w-8 h-8 flex items-center justify-center rounded-lg text-white text-xs ${session.type === 'feedback' ? 'bg-blue-600' : (d.isCorrect ? 'bg-green-600' : 'bg-slate-700')}`}>{d.label}</span>
                     </div>
                   </div>
                 ))}
@@ -3393,172 +3387,14 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
   };
 
   // Gradebook Logic
-  let gradebookClass = null;
-  let assignedReports = [];
-  let gradeMatrix = [];
-
-  if ((view === 'gradebook' || view === 'attendance') && selectedClassId) {
-    gradebookClass = classes.find(c => c.id === selectedClassId);
-    if (gradebookClass) {
-      const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
-
-      assignedReports = (allReports || reports).filter(r => {
-        if (r.type === 'feedback') return false;
-        
-        // Apply any local repair patches (from the Assign-Class UI in Session History)
-        const effectiveClasses = localReportPatch[r.id]?.assigned_classes ?? (r.assigned_classes || []);
-
-        // Include if explicitly assigned (in DB or via local patch)
-        if (effectiveClasses.includes(selectedClassId)) return true;
-
-        // For reports with no assigned_classes (old format before the fix)
-        // IMPORTANT: Skip this fallback for attendance sessions to prevent cross-class leakage
-        // Attendance sessions always require explicit class assignment, so unassigned ones
-        // should NOT appear in any class's attendance report
-        if (effectiveClasses.length === 0 && r.type !== 'attendance') {
-          // Determine which class the session belongs to by checking students who responded
-          const responderIds = getEffectiveResponses(r).map(resp => String(resp.student_id).trim().toLowerCase());
-          if (responderIds.length === 0) return false; // can't determine class if nobody responded
-          
-          const classIds = classStudentIds.map(id => String(id).trim().toLowerCase());
-          return responderIds.some(id => classIds.includes(id));
-        }
-
-        return false;
-      });
-      // Separation of Quiz Reports and Attendance Reports
-      const quizReports = assignedReports.filter(r => r.type !== 'attendance');
-      const attendanceReports = assignedReports.filter(r => r.type === 'attendance');
-
-      // We want to group by Quiz/Attendance Title
-      const uniqueQuizTitles = Array.from(new Set(quizReports.map(r => r.title)));
-      const uniqueAttendanceTitles = Array.from(new Set(attendanceReports.map(r => r.title)));
-
-      gradeMatrix = (gradebookClass.students || []).map(stu => {
-        const scores = {}; // Keys: Quiz Title, Values: HIGHEST score
-        const attendanceRecords = {}; // Keys: Attendance Title, Values: Boolean (Present/Absent)
-
-        // Check if there are other students in this class with the exact same ID
-        const hasDuplicateId = (gradebookClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
-
-        // Process Quizzes
-        quizReports.forEach(rep => {
-          const stuResp = getEffectiveResponses(rep).find(res => {
-            const resId = String(res.student_id).trim();
-            const stuId = String(stu.student_id).trim();
-            if (resId !== stuId) return false;
-            if (hasDuplicateId) return res.student_name === stu.name;
-            return true;
-          });
-          const overrides = saOverrides[rep.id] || rep.score_overrides || {};
-          if (stuResp) {
-            let correctCount = 0;
-            rep.questions.forEach((q, qIdx) => {
-              const rawAns = stuResp.answers?.[qIdx];
-              if (rawAns !== undefined) {
-                let isOk = false;
-                const overrideKey = `${stuResp.student_id}___${qIdx}`;
-                
-                if (overrides[overrideKey] !== undefined) {
-                  isOk = overrides[overrideKey];
-                } else {
-                  isOk = q.type === 'sa' 
-                    ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) 
-                    : (String(rawAns) === String(q.correct));
-                }
-                
-                
-                if (isOk) correctCount++;
-              }
-            });
-            const score = Math.round((correctCount / rep.questions.length) * 100);
-            
-            if (scores[rep.title] === undefined || score > scores[rep.title]) {
-              scores[rep.title] = score;
-            }
-          }
-        });
-
-          // Process Attendance
-          attendanceReports.forEach(rep => {
-            const stuResp = getEffectiveResponses(rep).find(res => {
-              const resId = String(res.student_id).trim();
-              const stuId = String(stu.student_id).trim();
-              if (resId !== stuId) return false;
-              // Name matching check for duplicates happens on submission side for attendance, but just to be safe:
-              if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
-                return res.student_name === stu.name;
-              }
-              return true;
-            });
-            // Attendance status weight
-            if (stuResp) {
-               let weight = 1;
-               if (stuResp.status === 'late') weight = 0.5;
-               else if (stuResp.status === 'absent') weight = 0;
-               attendanceRecords[rep.title] = { reportId: rep.id, present: true, status: stuResp.status || 'present', weight };
-            } else {
-               attendanceRecords[rep.title] = { reportId: rep.id, present: false, status: 'absent', weight: 0 };
-            }
-          });
-
-          // Calculate average based on gradebook mode
-          const settings = gradebookSettings[gradebookClass.id] || {};
-          const currentMode = settings.mode || gradebookClass.gradebook_mode || 'simple';
-          const currentTopN = settings.topN ?? gradebookClass.top_n_count ?? 0;
-          const currentWeights = quizWeights[gradebookClass.id] || gradebookClass.quiz_weights || {};
-          let average = 0;
-
-          if (currentMode === 'weighted' && Object.keys(currentWeights).length > 0) {
-            // Weighted sum: each quiz score × (its weight / 100)
-            let weightedSum = 0;
-            uniqueQuizTitles.forEach(title => {
-              const w = currentWeights[title] ?? 0;
-              const score = scores[title] ?? 0;
-              weightedSum += (score * w) / 100;
-            });
-            average = Math.round(weightedSum);
-          } else if (currentMode === 'top_n' && currentTopN > 0) {
-            // Top-N: take the N highest best-scores and average them equally
-            const allScores = Object.values(scores).sort((a, b) => b - a);
-            const topSlice = allScores.slice(0, currentTopN);
-            average = topSlice.length > 0 ? Math.round(topSlice.reduce((s, v) => s + v, 0) / topSlice.length) : 0;
-          } else {
-            // Simple: unweighted average of all best-scores
-            const vals = Object.values(scores);
-            average = vals.length > 0 ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 0;
-          }
-
-          let attendancePoints = 0;
-          Object.values(attendanceRecords).forEach(rec => {
-            attendancePoints += rec.weight;
-          });
-
-          const attendanceTotal = uniqueAttendanceTitles.length > 0 
-            ? Math.round((attendancePoints / uniqueAttendanceTitles.length) * 100) 
-            : 0;
-
-          return { 
-            ...stu, 
-            scores, 
-            average,
-            attendanceRecords,
-            attendanceTotal
-          };
-      }).sort((a, b) => a.name.localeCompare(b.name));
-    }
-  }
-
   if (reports.length === 0 && classes.length === 0) return <div className="text-center p-32 bg-white rounded-[3rem] text-slate-300 font-black uppercase tracking-widest border border-dashed">No Analytics Yet</div>;
 
   return (
     <>
     <div className="space-y-6">
+      {/* With feature tabs, the root ReportsTab just acts as Session History */}
       <div className="flex bg-white rounded-2xl p-2 border border-slate-100 shadow-sm max-w-4xl mx-auto overflow-x-auto whitespace-nowrap custom-scroll print:hidden">
-        <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Session History</button>
-        <button onClick={() => setView('gradebook')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'gradebook' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Class Gradebook</button>
-        <button onClick={() => setView('attendance')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Attendance Report</button>
-        <button onClick={() => setView('feedback')} className={`px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>Feedback</button>
+        <button className="px-4 py-3 rounded-xl font-black text-xs transition-all uppercase tracking-widest flex-1 bg-blue-600 text-white shadow-lg">Session History</button>
       </div>
 
       {view === 'history' ? (
@@ -3716,368 +3552,8 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             </div>
           </div>
         </div>
-      ) : view === 'feedback' ? (
-        <FeedbackDashboard reports={allReports} classes={classes} />
-      ) : view === 'gradebook' ? (
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div className="flex-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Class</label>
-              <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
-                <option value="">-- Choose Class --</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            {gradebookClass && (
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    const uniqueTitles = Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title)));
-                    const current = quizWeights[gradebookClass.id] || gradebookClass.quiz_weights || {};
-                    const draft = {};
-                    uniqueTitles.forEach(t => { draft[t] = current[t] ?? 0; });
-                    setDraftWeights(draft);
-                    // init mode
-                    const settings = gradebookSettings[gradebookClass.id] || {};
-                    const mode = settings.mode || gradebookClass.gradebook_mode || 'simple';
-                    const topN = settings.topN ?? gradebookClass.top_n_count ?? Math.min(3, uniqueTitles.length);
-                    setDraftMode(mode);
-                    setDraftTopN(topN || 3);
-                    setShowWeightModal(true);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-blue-100 transition-transform active:scale-95"
-                >
-                  <BarChart2 size={18} /> Set Weights
-                </button>
-                <button onClick={() => {
-                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, false, []);
-                }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
-                  <Download size={18} /> Export Gradebook
-                </button>
-              </div>
-            )}
-          </div>
-          {!selectedClassId ? (
-            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">Select a class above to view the combined gradebook matrix.</div>
-          ) : gradebookClass ? (
-            <div className="overflow-x-auto custom-scroll border rounded-[2rem]">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
-                    <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
-                    <th className="p-4 border-b border-slate-200 w-32">ID</th>
-                    {(() => {
-                      const s = gradebookSettings[gradebookClass?.id] || {};
-                      const m = s.mode || gradebookClass?.gradebook_mode || 'simple';
-                      const n = s.topN ?? gradebookClass?.top_n_count ?? 0;
-                      const label = m === 'top_n' ? `Top ${n} Score` : m === 'weighted' ? 'Weighted Score' : 'Average Score';
-                      return <th className="p-4 border-b border-slate-200 text-center text-blue-600 w-24">{label}</th>;
-                    })()}
-                    
-                    {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => {
-                      const activeMode = (gradebookSettings[gradebookClass?.id] || {}).mode || gradebookClass?.gradebook_mode || 'simple';
-                      const w = (quizWeights[gradebookClass?.id] || gradebookClass?.quiz_weights || {})[title];
-                      return (
-                        <th key={`q-${title}`} className="p-4 border-b border-slate-200 min-w-[120px]">
-                          <div className="truncate w-full max-w-[150px]" title={title}>{title}</div>
-                          <div className="text-slate-300 font-medium text-[8px] mt-1">
-                            {activeMode === 'weighted' && w !== undefined ? `Weight: ${w}%` : 'Best Score'}
-                          </div>
-                        </th>
-                      );
-                    })}
-
-                    {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No quizzes recorded yet.</th>}
-                  </tr>
-                </thead>
-                <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                  {gradeMatrix.map((row, i) => (
-                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs bg-white" title={row.name}>
-                        <div className="flex items-center gap-2">
-                           {row.name}
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
-                      <td className={`p-4 text-center font-black ${row.average >= 80 ? 'text-green-500' : row.average >= 60 ? 'text-orange-500' : 'text-slate-400'}`}>{row.average > 0 ? `${row.average}%` : '-'}</td>
-                      
-                      {Array.from(new Set(assignedReports.filter(r => r.type !== 'attendance').map(r => r.title))).map(title => (
-                        <td key={`q-${title}`} className="p-4 text-slate-500 font-black">{row.scores[title] !== undefined ? `${row.scores[title]}%` : '-'}</td>
-                      ))}
-
-                      {assignedReports.filter(r => r.type !== 'attendance').length === 0 && <td className="p-4"></td>}
-                    </tr>
-                  ))}
-                  {gradeMatrix.length === 0 && (<tr><td colSpan={assignedReports.length + 3} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
-      ) : view === 'attendance' ? (
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mt-4">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div className="flex-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select a Class</label>
-              <select className="w-full max-w-md bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-blue-500 appearance-none" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
-                <option value="">-- Choose Class --</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            {gradebookClass && (
-              <div className="flex gap-2">
-                {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
-                  <a
-                    href={`mailto:?bcc=${gradeMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=⚠ Attendance Warning – Immediate Action Required&body=Dear Student,%0D%0A%0D%0AThis is an official notification from your course instructor.%0D%0A%0D%0AOur records show that your current attendance rate has dropped BELOW the required minimum of 75%.%0D%0A%0D%0APlease contact your instructor IMMEDIATELY to discuss your attendance record and any possible remediation.`}
-                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-red-100 transition-transform active:scale-95"
-                  >
-                    <AlertCircle size={18} /> Email At-Risk
-                  </a>
-                )}
-                <button onClick={() => {
-                   const as = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)));
-                   exportGradebook(gradebookClass, assignedReports, gradeMatrix, as.length > 0, as, true);
-                }} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-green-100 transition-transform active:scale-95">
-                  <Download size={18} /> Export Attendance
-                </button>
-              </div>
-            )}
-          </div>
-          {!selectedClassId ? (
-            <div className="text-center py-20 text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-[2rem]">Select a class above to view the attendance record.</div>
-          ) : gradebookClass ? (
-            <div className="overflow-x-auto custom-scroll border rounded-[2rem]">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 font-black whitespace-nowrap">
-                    <th className="p-4 border-b border-slate-200 sticky left-0 bg-slate-50 z-10 w-48">Student Name</th>
-                    <th className="p-4 border-b border-slate-200 w-32">ID</th>
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0 && (
-                      <th className="p-4 border-b border-slate-200 text-center text-green-600 w-28">Overall Attendance</th>
-                    )}
-                    {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)))
-                      .sort((a, b) => {
-                         const repA = assignedReports.find(r => r.title === a && r.type === 'attendance');
-                         const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
-                         return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
-                      })
-                      .map(title => {
-                       const rep = assignedReports.find(r => r.title === title && r.type === 'attendance');
-                       return (
-                         <th key={title} className="p-4 border-b border-slate-200 min-w-[120px] text-center">
-                           <div className="truncate w-full max-w-[150px] text-slate-700" title={title}>{title}</div>
-                           <div className="text-slate-400 font-black text-[8px] mt-1">{new Date(rep?.ts).toLocaleDateString('en-GB')} {new Date(rep?.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                         </th>
-                       )
-                    })}
-                    {assignedReports.filter(r => r.type === 'attendance').length === 0 && <th className="p-4 border-b border-slate-200">No attendance sessions recorded yet.</th>}
-                  </tr>
-                </thead>
-                <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                  {gradeMatrix.map((row, i) => {
-                    const hasAttendance = Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title))).length > 0;
-                    const isAtRisk = hasAttendance && row.attendanceTotal < 75;
-                    return (
-                    <tr key={i} className={`hover:bg-blue-50/30 transition-colors ${isAtRisk ? 'bg-red-50/20' : ''}`}>
-                      <td className={`p-4 sticky left-0 z-10 whitespace-nowrap truncate max-w-xs ${isAtRisk ? 'bg-red-50/40 text-red-700 font-black' : 'bg-white'}`} title={row.name}>
-                        <div className="flex items-center gap-2">
-                           {row.name}
-                           {isAtRisk && <span className="bg-red-500 text-white px-2 py-0.5 rounded-md text-[8px] uppercase tracking-widest font-black shrink-0 shadow-sm animate-pulse">At Risk</span>}
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-slate-400 text-xs">{row.student_id}</td>
-                      
-                      {hasAttendance && (
-                        <td className={`p-4 text-center font-black ${row.attendanceTotal >= 75 ? 'text-green-600' : 'text-red-500'}`}>
-                          {row.attendanceTotal}%
-                        </td>
-                      )}
-
-                      {Array.from(new Set(assignedReports.filter(r => r.type === 'attendance').map(r => r.title)))
-                         .sort((a, b) => {
-                           const repA = assignedReports.find(r => r.title === a && r.type === 'attendance');
-                           const repB = assignedReports.find(r => r.title === b && r.type === 'attendance');
-                           return new Date(repA?.ts).getTime() - new Date(repB?.ts).getTime();
-                         })
-                         .map(title => {
-                           const rec = row.attendanceRecords[title];
-                           const status = rec?.status || 'absent';
-                           const reportId = rec?.reportId;
-                           return (
-                             <td key={`a-${title}`} className={`p-4 font-black text-center ${
-                               status === 'present' ? 'text-green-500 bg-green-50/10' : 
-                               status === 'late' ? 'text-orange-500 bg-orange-50/10' : 
-                               'text-red-400 bg-red-50/30'
-                             }`}>
-                               <select
-                                 className="bg-transparent border-none text-center font-black cursor-pointer focus:outline-none"
-                                 value={status}
-                                 onChange={(e) => updateReportStatus(reportId, row.student_id, e.target.value)}
-                               >
-                                 <option value="present">Present</option>
-                                 <option value="late">Late</option>
-                                 <option value="absent">Absent</option>
-                               </select>
-                             </td>
-                           );
-                         })}
-
-                      {assignedReports.filter(r => r.type === 'attendance').length === 0 && <td className="p-4"></td>}
-                    </tr>
-                  )})}
-                  {gradeMatrix.length === 0 && (<tr><td colSpan={10} className="p-10 text-center text-slate-400 italic">No students in this class.</td></tr>)}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
       ) : null}
     </div>
-
-      {/* Quiz Weights Modal */}
-      {showWeightModal && gradebookClass && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
-                <BarChart2 size={24} />
-              </div>
-              <div>
-                <h3 className="text-xl font-black text-slate-800">Gradebook Scoring Mode</h3>
-                <p className="text-xs font-bold text-slate-400">{gradebookClass.name}</p>
-              </div>
-            </div>
-
-            {/* Mode Selector */}
-            <div className="flex bg-slate-100 rounded-2xl p-1 mb-6 gap-1">
-              {[
-                { key: 'simple', label: 'Simple Average' },
-                { key: 'weighted', label: 'Custom Weights' },
-                { key: 'top_n', label: 'Top N Scores' },
-              ].map(opt => (
-                <button
-                  key={opt.key}
-                  onClick={() => setDraftMode(opt.key)}
-                  className={`flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
-                    draftMode === opt.key
-                      ? 'bg-white text-blue-600 shadow-md'
-                      : 'text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Mode descriptions */}
-            {draftMode === 'simple' && (
-              <div className="bg-slate-50 rounded-2xl p-4 mb-6 text-sm font-bold text-slate-500">
-                All quiz best-scores for each student are averaged equally. No configuration needed.
-              </div>
-            )}
-
-            {/* Custom Weights Mode */}
-            {draftMode === 'weighted' && (
-              <>
-                {Object.keys(draftWeights).length === 0 ? (
-                  <p className="text-slate-400 font-bold text-center py-8 italic">No quizzes found for this class yet.</p>
-                ) : (
-                  <div className="space-y-3 mb-4">
-                    {Object.keys(draftWeights).map(title => (
-                      <div key={title} className="flex items-center gap-4 bg-slate-50 rounded-2xl p-4">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-black text-slate-700 text-sm truncate" title={title}>{title}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <input
-                            type="number" min="0" max="100"
-                            value={draftWeights[title]}
-                            onChange={e => {
-                              const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                              setDraftWeights(prev => ({ ...prev, [title]: val }));
-                            }}
-                            className="w-20 text-center bg-white border-2 border-slate-200 rounded-xl font-black text-slate-700 p-2 focus:outline-none focus:border-blue-500 transition-all"
-                          />
-                          <span className="text-slate-500 font-black text-sm">%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {Object.keys(draftWeights).length > 0 && (() => {
-                  const total = Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0);
-                  const isValid = total === 100;
-                  const diff = 100 - total;
-                  return (
-                    <div className={`flex items-center justify-between p-4 rounded-2xl mb-6 border-2 ${isValid ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
-                      <span className={`font-black text-sm uppercase tracking-widest ${isValid ? 'text-green-700' : 'text-orange-600'}`}>
-                        {isValid ? '✓ Total is 100%' : `Total: ${total}% (${diff > 0 ? `+${diff}` : diff} needed)`}
-                      </span>
-                      <span className={`text-2xl font-black ${isValid ? 'text-green-600' : 'text-orange-500'}`}>{total}%</span>
-                    </div>
-                  );
-                })()}
-              </>
-            )}
-
-            {/* Top N Mode */}
-            {draftMode === 'top_n' && (
-              <div className="mb-6">
-                <p className="text-sm font-bold text-slate-500 mb-4">
-                  Only each student's <strong className="text-blue-600">N highest quiz scores</strong> will be averaged equally. 
-                  Set N below (must be between 1 and {Object.keys(draftWeights).length || '?'} quizzes).
-                </p>
-                <div className="flex items-center gap-4 bg-slate-50 rounded-2xl p-5">
-                  <label className="font-black text-slate-700 text-sm uppercase tracking-widest flex-1">Consider Top</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max={Object.keys(draftWeights).length || 100}
-                    value={draftTopN}
-                    onChange={e => setDraftTopN(Math.max(1, Math.min(Object.keys(draftWeights).length || 100, Number(e.target.value) || 1)))}
-                    className="w-24 text-center bg-white border-2 border-slate-200 rounded-xl font-black text-slate-700 p-3 text-xl focus:outline-none focus:border-blue-500 transition-all"
-                  />
-                  <label className="font-black text-slate-700 text-sm uppercase tracking-widest">Quizzes</label>
-                </div>
-                {draftTopN >= Object.keys(draftWeights).length && Object.keys(draftWeights).length > 0 && (
-                  <p className="text-orange-500 font-bold text-xs mt-3 ml-1">⚠ N equals or exceeds total quizzes — same as Simple Average.</p>
-                )}
-              </div>
-            )}
-
-            {/* Save / Cancel */}
-            <div className="flex gap-3">
-              <button onClick={() => setShowWeightModal(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
-                Cancel
-              </button>
-              <button
-                disabled={draftMode === 'weighted' && Object.values(draftWeights).reduce((s, v) => s + (Number(v) || 0), 0) !== 100}
-                onClick={async () => {
-                  const updatePayload = {
-                    gradebook_mode: draftMode,
-                    top_n_count: draftMode === 'top_n' ? draftTopN : 0,
-                    quiz_weights: draftMode === 'weighted' ? draftWeights : {},
-                  };
-                  const { error } = await supabase.from('classes').update(updatePayload).eq('id', gradebookClass.id);
-                  if (error) { alert('Error saving: ' + error.message); return; }
-                  // Update local state for instant recalculation
-                  setGradebookSettings(prev => ({ ...prev, [gradebookClass.id]: { mode: draftMode, topN: draftTopN } }));
-                  if (draftMode === 'weighted') {
-                    setQuizWeights(prev => ({ ...prev, [gradebookClass.id]: { ...draftWeights } }));
-                  }
-                  setShowWeightModal(false);
-                }}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
-              >
-                Save Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SA Answer Reader & Override Popup */}
       {saAnswerPopup && (() => {
         const { reportId, studentId, qIdx, answer, isOk } = saAnswerPopup;
         const rep = (allReports || reports).find(r => r.id === reportId);
@@ -5440,6 +4916,548 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ==========================================
+//          NEW FEATURE TAB CONTAINERS
+// ==========================================
+
+function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus }) {
+  const isLiveQuizUrl = new URLSearchParams(window.location.search).get('room');
+  const defaultTab = session || isLiveQuizUrl ? 'live' : 'manage';
+  const [subTab, setSubTab] = useState(defaultTab);
+  
+  // Gradebook State
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [draftWeights, setDraftWeights] = useState({});
+  const [draftMode, setDraftMode] = useState('simple');
+  const [draftTopN, setDraftTopN] = useState(3);
+  const [quizWeights, setQuizWeights] = useState({});
+  const [gradebookSettings, setGradebookSettings] = useState({});
+  const [saOverrides, setSaOverrides] = useState({});
+
+  useEffect(() => {
+    if (session && session.quiz.type !== 'feedback') setSubTab('live');
+  }, [session]);
+
+  const handleSubTabChange = (t) => {
+    if (t !== 'live' && session) {
+      if (!window.confirm("A session is currently running! Are you sure you want to navigate away? The session will stay open.")) return;
+    }
+    setSubTab(t);
+  };
+
+  const getEffectiveResponses = (r) => r.responses || [];
+
+  // Gradebook Logic
+  let gradebookClass = null;
+  let quizReports = [];
+  let gradeMatrix = [];
+  let uniqueQuizTitles = [];
+
+  if (subTab === 'gradebook' && selectedClassId) {
+    gradebookClass = classes.find(c => c.id === selectedClassId);
+    if (gradebookClass) {
+      const classStudentIds = (gradebookClass.students || []).map(s => s.student_id);
+      
+      const allSourceReports = [...reports, ...asyncReports];
+      quizReports = allSourceReports.filter(r => {
+        if (r.type === 'attendance' || r.type === 'feedback') return false;
+        const effectiveClasses = r.assigned_classes || [];
+        if (effectiveClasses.includes(selectedClassId)) return true;
+        if (effectiveClasses.length === 0) {
+          const responderIds = getEffectiveResponses(r).map(resp => String(resp.student_id).trim().toLowerCase());
+          if (responderIds.length === 0) return false;
+          const stuIds = classStudentIds.map(id => String(id).trim().toLowerCase());
+          return responderIds.some(id => stuIds.includes(id));
+        }
+        return false;
+      });
+
+      uniqueQuizTitles = Array.from(new Set(quizReports.map(r => r.title)));
+
+      gradeMatrix = (gradebookClass.students || []).map(stu => {
+        const scores = {}; 
+        const hasDuplicateId = (gradebookClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
+
+        quizReports.forEach(rep => {
+          const stuResp = getEffectiveResponses(rep).find(res => {
+            const resId = String(res.student_id).trim();
+            const stuId = String(stu.student_id).trim();
+            if (resId !== stuId) return false;
+            if (hasDuplicateId) return res.student_name === stu.name;
+            return true;
+          });
+          const overrides = saOverrides[rep.id] || rep.score_overrides || {};
+          if (stuResp) {
+            let correctCount = 0;
+            rep.questions.forEach((q, qIdx) => {
+              const rawAns = stuResp.answers?.[qIdx];
+              if (rawAns !== undefined) {
+                let isOk = false;
+                const overrideKey = `${stuResp.student_id}___${qIdx}`;
+                if (overrides[overrideKey] !== undefined) {
+                  isOk = overrides[overrideKey];
+                } else {
+                  isOk = q.type === 'sa' 
+                    ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) 
+                    : (String(rawAns) === String(q.correct));
+                }
+                if (isOk) correctCount++;
+              }
+            });
+            const score = Math.round((correctCount / rep.questions.length) * 100);
+            if (scores[rep.title] === undefined || score > scores[rep.title]) {
+              scores[rep.title] = score;
+            }
+          }
+        });
+
+        const classSettings = gradebookSettings[selectedClassId] || { mode: 'simple', topN: 3 };
+        const classWeights = quizWeights[selectedClassId] || {};
+        let finalGrade = 0;
+
+        if (classSettings.mode === 'weighted') {
+           let totalWeightScore = 0;
+           uniqueQuizTitles.forEach(t => {
+             const weight = classWeights[t] || 0;
+             const sc = scores[t] || 0;
+             totalWeightScore += sc * (weight / 100);
+           });
+           finalGrade = Math.round(totalWeightScore);
+        } else if (classSettings.mode === 'top_n') {
+           const scList = Object.values(scores).sort((a,b) => b-a);
+           const topScores = scList.slice(0, classSettings.topN);
+           if (topScores.length > 0) {
+             finalGrade = Math.round(topScores.reduce((a,b) => a+b, 0) / topScores.length);
+           }
+        } else {
+           const scList = Object.values(scores);
+           if (scList.length > 0) finalGrade = Math.round(scList.reduce((a,b)=>a+b,0) / scList.length);
+        }
+
+        return { ...stu, scores, finalGrade };
+      });
+    }
+  }
+
+  const exportGradebook = () => {
+    if (!gradebookClass) return;
+    const wb = XLSX.utils.book_new();
+    const classSettings = gradebookSettings[selectedClassId] || { mode: 'simple' };
+    const classWeights = quizWeights[selectedClassId] || {};
+
+    const wsData = [];
+    const headers = ['Student ID', 'Name', 'Email', `Final Grade (${classSettings.mode.toUpperCase()})`];
+    uniqueQuizTitles.forEach(t => {
+       const w = classSettings.mode === 'weighted' ? ` (Wt: ${classWeights[t]||0}%)` : '';
+       headers.push(`${t}${w}`);
+    });
+    wsData.push(headers);
+
+    gradeMatrix.forEach(gm => {
+      const row = [gm.student_id, gm.name, gm.email || '', `${gm.finalGrade}%`];
+      uniqueQuizTitles.forEach(t => row.push(gm.scores[t] !== undefined ? `${gm.scores[t]}%` : '---'));
+      wsData.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Grades');
+    XLSX.writeFile(wb, `ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.xlsx`);
+  };
+  const SubNav = () => (
+    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
+      {[
+        { id: 'manage', label: 'Create/Edit' },
+        { id: 'launch', label: 'Launch' },
+        { id: 'live', label: 'Live Quiz' },
+        { id: 'async', label: 'Scheduled Quizzes' },
+        { id: 'history', label: 'Session History' },
+        { id: 'gradebook', label: 'Gradebook' }
+      ].map(t => (
+        <button
+          key={t.id} onClick={() => handleSubTabChange(t.id)}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+        >
+          {t.label} {t.id === 'live' && session && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-green-400 animate-pulse"></span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      <SubNav />
+      {subTab === 'manage' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} />}
+      {subTab === 'launch' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+           <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} />
+        </div>
+      )}
+      {subTab === 'live' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
+          {session ? (
+            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+          ) : (
+             <div className="m-auto text-center text-slate-400 p-10">
+               <Activity size={48} className="mx-auto mb-4 opacity-50" />
+               <h3 className="text-xl font-black mb-2">No Active Quiz</h3>
+               <p className="font-bold text-sm">Go to Launch to start a live synchronous session.</p>
+               <button onClick={() => setSubTab('launch')} className="mt-6 font-black text-sm text-blue-600 underline underline-offset-4">Launch a Quiz</button>
+             </div>
+          )}
+        </div>
+      )}
+      {subTab === 'async' && <ScheduledTab user={user} classes={classes} />}
+      {subTab === 'history' && (() => {
+        const quizReports = [...reports, ...asyncReports]
+          .filter(r => r.type !== 'attendance' && r.type !== 'feedback')
+          .filter(r => !r.hidden);
+        return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} />;
+      })()}
+      {subTab === 'gradebook' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
+          <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+             <div>
+               <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Class for Gradebook</label>
+               <select
+                 value={selectedClassId}
+                 onChange={e => setSelectedClassId(e.target.value)}
+                 className="p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-700 min-w-[250px] focus:outline-none focus:border-blue-400 transition-all"
+               >
+                 <option value="" disabled>Select a class...</option>
+                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+               </select>
+             </div>
+             {selectedClassId && (
+               <button onClick={exportGradebook} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all">
+                 <Download size={16} /> Export Grades (Excel)
+               </button>
+             )}
+          </div>
+
+          {!selectedClassId ? (
+             <div className="text-center p-12 text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-[2rem]">
+                Select a class above to view the gradebook matrix.
+             </div>
+          ) : !gradebookClass ? (
+             <div className="text-center p-12 text-red-400 font-bold">Class not found.</div>
+          ) : (
+             <div className="overflow-x-auto rounded-[2rem] border-2 border-slate-100 shadow-sm">
+                <table className="w-full text-left bg-white">
+                  <thead className="bg-slate-50 border-b-2 border-slate-100 sticky top-0 z-10">
+                    <tr>
+                      <th className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Student</th>
+                      <th className="p-4 font-black text-blue-600 text-[10px] uppercase tracking-widest bg-blue-50">Overall Grade</th>
+                      {uniqueQuizTitles.map((t, idx) => (
+                         <th key={idx} className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest whitespace-nowrap" title={t}>
+                           <div className="max-w-[150px] truncate">{t}</div>
+                         </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {gradeMatrix.map((gm, i) => (
+                      <tr key={gm.student_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10">
+                           <div className="font-bold text-slate-800 text-sm whitespace-nowrap">{gm.name}</div>
+                           <div className="text-[10px] text-slate-400 font-mono mt-0.5">{gm.student_id}</div>
+                        </td>
+                        <td className="p-4 bg-blue-50/30">
+                           <div className="font-black text-blue-600 text-lg">{gm.finalGrade}%</div>
+                        </td>
+                        {uniqueQuizTitles.map(t => (
+                           <td key={t} className="p-4 text-sm font-bold text-slate-600 text-center">
+                              {gm.scores[t] !== undefined ? `${gm.scores[t]}%` : <span className="opacity-30">-</span>}
+                           </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus }) {
+  const defaultTab = session?.type === 'attendance' ? 'live' : 'launch';
+  const [subTab, setSubTab] = useState(defaultTab);
+  
+  // Local state for Attendance Report
+  const [selectedClassId, setSelectedClassId] = useState('');
+
+  useEffect(() => {
+    if (session && session.type === 'attendance') setSubTab('live');
+  }, [session]);
+
+  const handleSubTabChange = (t) => {
+    if (t !== 'live' && session && session.type === 'attendance') {
+      if (!window.confirm("Attendance is currently active! Are you sure you want to navigate away?")) return;
+    }
+    setSubTab(t);
+  };
+
+  const getEffectiveResponses = (r) => r.responses || [];
+
+  // Attendance Report Logic
+  let reportClass = null;
+  let attendanceReports = [];
+  let reportMatrix = [];
+  let uniqueAttendanceTitles = [];
+
+  if (subTab === 'report' && selectedClassId) {
+    reportClass = classes.find(c => c.id === selectedClassId);
+    if (reportClass) {
+      attendanceReports = reports.filter(r => r.type === 'attendance' && (r.assigned_classes || []).includes(selectedClassId));
+      uniqueAttendanceTitles = Array.from(new Set(attendanceReports.map(r => r.title)));
+
+      reportMatrix = (reportClass.students || []).map(stu => {
+        const attendanceRecords = {};
+        const hasDuplicateId = (reportClass.students || []).filter(s => s.student_id === stu.student_id).length > 1;
+
+        attendanceReports.forEach(rep => {
+          const stuResp = getEffectiveResponses(rep).find(res => {
+            if (String(res.student_id).trim() !== String(stu.student_id).trim()) return false;
+            // Strict name match fallback for duplicate IDs
+            if (hasDuplicateId && res.student_name && res.student_name !== 'Anonymous') {
+              return res.student_name === stu.name;
+            }
+            return true;
+          });
+
+          if (stuResp) {
+             let weight = 1;
+             if (stuResp.status === 'late') weight = 0.5;
+             else if (stuResp.status === 'absent') weight = 0;
+             attendanceRecords[rep.title] = { reportId: rep.id, present: true, status: stuResp.status || 'present', weight };
+          } else {
+             attendanceRecords[rep.title] = { reportId: rep.id, present: false, status: 'absent', weight: 0 };
+          }
+        });
+
+        let attendancePoints = 0;
+        Object.values(attendanceRecords).forEach(rec => attendancePoints += rec.weight);
+        const attendanceTotal = uniqueAttendanceTitles.length > 0 ? Math.round((attendancePoints / uniqueAttendanceTitles.length) * 100) : 0;
+
+        return { ...stu, attendanceRecords, attendanceTotal };
+      }).sort((a, b) => a.name.localeCompare(b.name));
+    }
+  }
+
+  const exportAttendanceReport = () => {
+    if (!reportClass) return;
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+    const headers = ['Student ID', 'Name', 'Email', 'Overall Attendance %'];
+    uniqueAttendanceTitles.forEach(t => headers.push(t));
+    wsData.push(headers);
+
+    reportMatrix.forEach(rm => {
+      const row = [rm.student_id, rm.name, rm.email || '', `${rm.attendanceTotal}%`];
+      uniqueAttendanceTitles.forEach(t => {
+        const rec = rm.attendanceRecords[t];
+        row.push(rec && rec.present ? (rec.status.charAt(0).toUpperCase() + rec.status.slice(1)) : 'Absent');
+      });
+      wsData.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+    XLSX.writeFile(wb, `ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.xlsx`);
+  };
+
+  const SubNav = () => (
+    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
+      {[
+        { id: 'launch', label: 'Launch' },
+        { id: 'live', label: 'Live Attendance' },
+        { id: 'history', label: 'Session History' },
+        { id: 'report', label: 'Attendance Report' }
+      ].map(t => (
+        <button
+          key={t.id} onClick={() => handleSubTabChange(t.id)}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+        >
+          {t.label} {t.id === 'live' && session?.type === 'attendance' && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-white animate-pulse"></span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      <SubNav />
+      {subTab === 'launch' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+           {/* We will modify LaunchTab to take an initial category next */}
+           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="attendance" />
+        </div>
+      )}
+      {subTab === 'live' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
+          {session?.type === 'attendance' ? (
+            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+          ) : (
+             <div className="m-auto text-center text-slate-400 p-10">
+               <UserCheck size={48} className="mx-auto mb-4 opacity-50" />
+               <h3 className="text-xl font-black mb-2">No Active Attendance Session</h3>
+               <p className="font-bold text-sm">Go to Launch to start recording attendance.</p>
+               <button onClick={() => setSubTab('launch')} className="mt-6 font-black text-sm text-green-600 underline underline-offset-4">Launch Attendance</button>
+             </div>
+          )}
+        </div>
+      )}
+      {subTab === 'history' && (() => {
+        const attendanceReports = reports.filter(r => r.type === 'attendance' && !r.hidden);
+        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} />;
+      })()}
+      {subTab === 'report' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
+          <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Select Class for Attendance Report</label>
+              <select
+                value={selectedClassId}
+                onChange={e => setSelectedClassId(e.target.value)}
+                className="p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-700 min-w-[250px] focus:outline-none focus:border-blue-400 transition-all"
+              >
+                <option value="" disabled>Select a class...</option>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            {selectedClassId && (
+              <button onClick={exportAttendanceReport} className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all">
+                <Download size={16} /> Export Attendance (Excel)
+              </button>
+            )}
+          </div>
+          
+          {!selectedClassId ? (
+             <div className="text-center p-12 text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-[2rem]">
+                Select a class above to view the attendance report matrix.
+             </div>
+          ) : !reportClass ? (
+             <div className="text-center p-12 text-red-400 font-bold">Class not found.</div>
+          ) : (
+             <div className="overflow-x-auto rounded-[2rem] border-2 border-slate-100 shadow-sm mt-4">
+                <table className="w-full text-left bg-white">
+                  <thead className="bg-slate-50 border-b-2 border-slate-100 sticky top-0 z-10">
+                    <tr>
+                      <th className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Student</th>
+                      <th className="p-4 font-black text-green-600 text-[10px] uppercase tracking-widest bg-green-50">Overall %</th>
+                      {uniqueAttendanceTitles.map((t, idx) => (
+                         <th key={idx} className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest whitespace-nowrap" title={t}>
+                           <div className="max-w-[120px] truncate">{t}</div>
+                         </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {reportMatrix.map((rm, i) => (
+                      <tr key={rm.student_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 w-48">
+                           <div className="font-bold text-slate-800 text-xs whitespace-nowrap overflow-hidden text-ellipsis">{rm.name}</div>
+                           <div className="flex items-center justify-between mt-1">
+                             <div className="text-[9px] text-slate-400 font-mono w-16 truncate">{rm.student_id}</div>
+                           </div>
+                        </td>
+                        <td className="p-4 bg-green-50/30 w-24">
+                           <div className="font-black text-green-600 text-sm whitespace-nowrap">{rm.attendanceTotal}%</div>
+                        </td>
+                        {uniqueAttendanceTitles.map(t => {
+                           const rec = rm.attendanceRecords[t];
+                           const isPresent = rec?.present;
+                           const status = isPresent ? rec.status : 'absent';
+                           const displayColor = status === 'present' ? 'text-green-500 bg-green-50' : status === 'late' ? 'text-orange-500 bg-orange-50' : 'text-red-400 bg-red-50';
+                           const Icon = status === 'present' ? CheckCircle : status === 'late' ? Clock : XCircle;
+                           
+                           return (
+                             <td key={t} className="p-3 text-center min-w-[100px]">
+                               <div className="flex justify-center">
+                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${displayColor}`}>
+                                   <Icon size={16} />
+                                 </div>
+                               </div>
+                             </td>
+                           )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus }) {
+  const defaultTab = session?.type === 'feedback' ? 'live' : 'launch';
+  const [subTab, setSubTab] = useState(defaultTab);
+  
+  useEffect(() => {
+    if (session && session.type === 'feedback') setSubTab('live');
+  }, [session]);
+
+  const handleSubTabChange = (t) => {
+    if (t !== 'live' && session && session.type === 'feedback') {
+      if (!window.confirm("Feedback survey is currently active! Are you sure you want to navigate away?")) return;
+    }
+    setSubTab(t);
+  };
+
+  const SubNav = () => (
+    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
+      {[
+        { id: 'launch', label: 'Launch' },
+        { id: 'live', label: 'Live Feedback' },
+        { id: 'report', label: 'Feedback Report' }
+      ].map(t => (
+        <button
+          key={t.id} onClick={() => handleSubTabChange(t.id)}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+        >
+          {t.label} {t.id === 'live' && session?.type === 'feedback' && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-white animate-pulse"></span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      <SubNav />
+      {subTab === 'launch' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="feedback" />
+        </div>
+      )}
+      {subTab === 'live' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
+          {session?.type === 'feedback' ? (
+            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+          ) : (
+             <div className="m-auto text-center text-slate-400 p-10">
+               <BarChart2 size={48} className="mx-auto mb-4 opacity-50" />
+               <h3 className="text-xl font-black mb-2">No Active Feedback Survey</h3>
+               <p className="font-bold text-sm">Go to Launch to start an anonymous feedback session.</p>
+               <button onClick={() => setSubTab('launch')} className="mt-6 font-black text-sm text-purple-600 underline underline-offset-4">Launch Feedback</button>
+             </div>
+          )}
+        </div>
+      )}
+      {subTab === 'report' && (() => {
+        const feedbackReports = reports.filter(r => r.type === 'feedback' && !r.hidden);
+        return <ReportsTab reports={feedbackReports} allReports={feedbackReports} classes={classes} updateReportStatus={updateReportStatus} />;
+      })()}
     </div>
   );
 }
