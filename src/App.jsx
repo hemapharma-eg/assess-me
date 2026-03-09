@@ -2429,7 +2429,16 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
+        <button onClick={() => { 
+          if (defaultCategory === 'attendance') {
+            setAttendanceMode('new');
+            setSelectedOldAttendance(null);
+            setSessionName('');
+            setAssignedClasses([]);
+          } else {
+            setCategory(null);
+          }
+        }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
           disabled={(attendanceMode === 'new' && (!sessionName || assignedClasses.length === 0)) || (attendanceMode === 'relaunch' && !selectedOldAttendance)}
@@ -2490,7 +2499,14 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       </div>
 
       <div className="flex gap-3">
-        <button onClick={() => setCategory(null)} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
+        <button onClick={() => {
+          if (defaultCategory === 'feedback') {
+            setSessionName('');
+            setAssignedClasses([]);
+          } else {
+            setCategory(null);
+          }
+        }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={async () => {
             const feedbackQuiz = {
@@ -2505,9 +2521,14 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
               ]
             };
             await onLaunch(feedbackQuiz, 'feedback');
-            setCategory(null);
-            setSessionName('');
-            setAssignedClasses([]);
+            if (defaultCategory === 'feedback') {
+              setSessionName('');
+              setAssignedClasses([]);
+            } else {
+              setCategory(null);
+              setSessionName('');
+              setAssignedClasses([]);
+            }
           }}
           disabled={!sessionName || assignedClasses.length === 0}
           className="flex-1 py-4 font-black text-white bg-purple-600 rounded-2xl shadow-lg shadow-purple-100 disabled:opacity-50"
