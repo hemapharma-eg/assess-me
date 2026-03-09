@@ -3649,26 +3649,9 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                         </div>
                       </td>
                       <td className="p-3 align-middle">
-                        {renamingReport === r.id ? (
-                          <div className="flex gap-2 items-center">
-                            <input
-                              autoFocus
-                              className="flex-1 border-2 border-blue-300 rounded-lg px-2 py-1 text-sm font-bold text-slate-700 focus:outline-blue-500"
-                              value={renameValue}
-                              onChange={e => setRenameValue(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') handleRename(r); if (e.key === 'Escape') { setRenamingReport(null); setRenameValue(''); } }}
-                            />
-                            <button onClick={() => handleRename(r)} className="text-blue-600 font-black text-xs px-2 py-1 bg-blue-50 rounded-lg hover:bg-blue-100">Save</button>
-                            <button onClick={() => { setRenamingReport(null); setRenameValue(''); }} className="text-slate-400 font-black text-xs px-2 py-1 bg-slate-50 rounded-lg hover:bg-slate-100">✕</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="font-black text-slate-800 text-sm truncate max-w-[160px] sm:max-w-xs">{effectiveTitle}</div>
-                            <button onClick={() => { setRenamingReport(r.id); setRenameValue(effectiveTitle === 'Attendance Session' ? '' : effectiveTitle); }} className="text-slate-300 hover:text-blue-400 transition-colors shrink-0" title="Rename">
-                              <Pencil size={12} />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <div className="font-black text-slate-800 text-sm truncate max-w-[160px] sm:max-w-xs">{effectiveTitle}</div>
+                        </div>
                         {assignedClassName && (
                           <div className="text-[9px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{assignedClassName}</div>
                         )}
