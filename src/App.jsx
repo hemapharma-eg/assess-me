@@ -5863,7 +5863,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
         theme: 'grid',
         didDrawPage: (data) => {
           doc.setFontSize(14);
-          doc.text(`Gradebook: ${gradebookClass.name} - ${classSettings.mode.toUpperCase()}`, data.settings.margin.left, 15);
+          doc.text(`Gradebook: ${gradebookClass.name}`, data.settings.margin.left, 15);
         }
       });
 
