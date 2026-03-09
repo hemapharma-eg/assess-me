@@ -62,31 +62,8 @@ function MainApp() {
       }
     } catch (e) { }
 
-    // Check if we are inside the OAuth popup redirect
-    if (window.opener && window.location.hash.includes('access_token=')) {
-      window.opener.postMessage({ type: 'oauth_redirect', hash: window.location.hash }, window.location.origin);
-      window.close();
-      return;
-    }
-
-    // Listen for OAuth messages from the popup
-    const handleMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === 'oauth_redirect' && event.data?.hash) {
-        // Supabase handles the session automatically if we just set the hash manually
-        // But since we are in a SPA, we can parse it and manually set it if needed
-        // The easiest way is to let Supabase's client read it from the URL
-        window.history.replaceState(null, null, event.data.hash);
-        // Sometimes the client needs a nudge to read the new hash
-        supabase.auth.getSession().then(({ data: { session }, error }) => {
-            if (session) {
-                setUser(session.user);
-                setRole(prev => prev || 'teacher');
-            }
-        });
-      }
-    };
-    window.addEventListener('message', handleMessage);
+    // We check if we are the popup window returning from Google OAuth
+    const isOAuthRedirect = window.location.hash.includes('access_token=');
 
     // Init Supabase session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
@@ -94,9 +71,30 @@ function MainApp() {
       else if (session) {
         setUser(session.user);
         setRole(prev => prev || 'teacher'); // Auto-derive if role unset
+        
+        // If we are the popup, signal the main window and close
+        if (isOAuthRedirect) {
+            localStorage.setItem('classlabx_auth_sync', Date.now().toString());
+            // Try to close the popup window. If popup blocker prevents script close, user can close manually.
+            window.close();
+        }
       }
       setLoadingContext(false);
     });
+
+    // Listen for sync events from the popup
+    const handleStorageChange = (e) => {
+        if (e.key === 'classlabx_auth_sync') {
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    setUser(session.user);
+                    setRole(prev => prev || 'teacher');
+                    setLoadingContext(false);
+                }
+            });
+        }
+    };
+    window.addEventListener('storage', handleStorageChange);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
@@ -110,7 +108,7 @@ function MainApp() {
 
     return () => {
         subscription.unsubscribe();
-        window.removeEventListener('message', handleMessage);
+        window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
