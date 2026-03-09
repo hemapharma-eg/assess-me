@@ -63,10 +63,25 @@ function MainApp() {
     } catch (e) { }
 
     // Check if we just returned from an OAuth redirect
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const hashParams = new URLParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
-    if (accessToken) {
-       // We successfully authenticated via redirect, Supabase will pick this up automatically below
+    const refreshToken = hashParams.get('refresh_token');
+    
+    if (accessToken && refreshToken) {
+       // We successfully authenticated via redirect, but we might be in an iframe
+       // Force Supabase to explicitly set the session because third-party cookies 
+       // might be blocked, preventing the auto-detection.
+       supabase.auth.setSession({
+           access_token: accessToken,
+           refresh_token: refreshToken
+       }).then(({ data, error }) => {
+           if (!error && data.session) {
+               setUser(data.session.user);
+               setRole('teacher'); // default OAuth role
+               // Clean up the URL to prevent re-triggering and look nicer
+               window.history.replaceState(null, '', window.location.pathname + window.location.search);
+           }
+       });
     }
 
     // Init Supabase session
