@@ -957,7 +957,7 @@ function TeacherPortal({ setRole, user }) {
     setSession(null);
     setRoomCode('');
     localStorage.removeItem('ClassLabX_RoomCode');
-    setActiveTab('reports');
+    // Stay on the current category tab — don't navigate away
   };
 
   const handleTabChange = (newTab) => {
@@ -2402,6 +2402,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
 
 function ResultsTab({ session, responses, onEnd, roomCode }) {
   const [showQR, setShowQR] = useState(true);
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const [attendanceToken, setAttendanceToken] = useState(() => Date.now().toString());
 
   useEffect(() => {
@@ -2454,6 +2455,41 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
   };
 
   return (
+    <>
+    {/* Close Room Confirmation Modal */}
+    {showCloseModal && (
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6">
+            <AlertTriangle size={32} />
+          </div>
+          <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Close This Room?</h3>
+          <p className="text-slate-500 font-bold mb-8 leading-relaxed">
+            You have an active session with <span className="text-blue-600 bg-blue-50 px-1 rounded">{responses.length} participant(s)</span>. What would you like to do?
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={async () => { setShowCloseModal(false); await onEnd(); }}
+              className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-red-100"
+            >
+              Close Room & Save Results
+            </button>
+            <button
+              onClick={() => setShowCloseModal(false)}
+              className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-sm uppercase tracking-widest transition-colors"
+            >
+              Keep Room Open
+            </button>
+            <button
+              onClick={() => setShowCloseModal(false)}
+              className="w-full py-3 text-sm font-black text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border flex flex-col min-h-[70vh]">
       <div className="bg-slate-900 text-white p-8 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0 z-10">
         <div>
@@ -2466,7 +2502,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
           <button onClick={() => setShowQR(!showQR)} className="bg-slate-800 hover:bg-slate-700 px-6 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all">
             <QrCode size={18} /> Invite Students
           </button>
-          <button onClick={onEnd} className="bg-red-600 hover:bg-red-700 text-white px-8 py-2.5 rounded-full font-black text-xs shadow-xl shadow-red-900/20">Close Room</button>
+          <button onClick={() => setShowCloseModal(true)} className="bg-red-600 hover:bg-red-700 text-white px-8 py-2.5 rounded-full font-black text-xs shadow-xl shadow-red-900/20">Close Room</button>
         </div>
       </div>
 
@@ -2587,6 +2623,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -2720,7 +2757,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
 
         {qIdx >= total - 1 ? (
           <button
-            onClick={onEnd}
+            onClick={() => setShowCloseModal(true)}
             className="w-full sm:w-auto px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black transition-colors shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
           >
             End Quiz <XCircle size={20} />
