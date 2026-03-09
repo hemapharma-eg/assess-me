@@ -605,6 +605,326 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
 }
 
 // ==========================================
+//               POLLS FEATURE
+// ==========================================
+
+function PollsTabMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd }) {
+  const [subTab, setSubTab] = useState(session && session.type === 'poll' ? 'live' : 'manage');
+
+  useEffect(() => {
+    if (session && session.type === 'poll') setSubTab('live');
+  }, [session]);
+
+  const handleSubTabChange = (t) => {
+    if (t !== 'live' && session && session.type === 'poll') {
+      if (!window.confirm("A poll is currently running! Navigate away?")) return;
+    }
+    setSubTab(t);
+  };
+
+  const SubNav = () => (
+    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
+      {[
+        { id: 'manage', label: 'Create/Edit' },
+        { id: 'launch', label: 'Launch' },
+        { id: 'live', label: 'Live Poll' }
+      ].map(t => (
+        <button
+          key={t.id} onClick={() => handleSubTabChange(t.id)}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+        >
+          {t.label} {t.id === 'live' && session && session.type === 'poll' && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-green-400 animate-pulse"></span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      <SubNav />
+      {subTab === 'manage' && <PollsTab polls={polls} setPolls={setPolls} user={user} />}
+      {subTab === 'launch' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+           <LaunchTab quizzes={polls} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="poll" />
+        </div>
+      )}
+      {subTab === 'live' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
+          {session && session.type === 'poll' ? (
+            <PollResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+          ) : (
+             <div className="m-auto text-center text-slate-400 p-10">
+               <Activity size={48} className="mx-auto mb-4 opacity-50" />
+               <h3 className="text-xl font-black mb-2">No Active Poll</h3>
+               <p className="font-bold text-sm">Go to Launch to start a live poll.</p>
+               <button onClick={() => setSubTab('launch')} className="mt-6 font-black text-sm text-blue-600 underline underline-offset-4">Launch a Poll</button>
+             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PollsTab({ polls, setPolls, user }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editingPoll, setEditingPoll] = useState(null);
+  const [title, setTitle] = useState('');
+  const [type, setType] = useState('multiple_choice');
+  const [options, setOptions] = useState(['', '']);
+  const [loading, setLoading] = useState(false);
+
+  const openCreate = () => {
+    setEditingPoll(null);
+    setTitle('');
+    setType('multiple_choice');
+    setOptions(['', '']);
+    setShowModal(true);
+  };
+
+  const openEdit = (p) => {
+    setEditingPoll(p);
+    setTitle(p.title);
+    setType(p.type);
+    setOptions(p.options || ['', '']);
+    setShowModal(true);
+  };
+
+  const savePoll = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const data = {
+      user_id: user.id,
+      title,
+      type,
+      options: type === 'multiple_choice' ? options.filter(o => o.trim() !== '') : []
+    };
+
+    let res;
+    if (editingPoll) {
+      res = await supabase.from('polls').update(data).eq('id', editingPoll.id).select().single();
+    } else {
+      res = await supabase.from('polls').insert(data).select().single();
+    }
+
+    if (res.error) alert(res.error.message);
+    else {
+      if (editingPoll) setPolls(polls.map(p => p.id === res.data.id ? res.data : p));
+      else setPolls([res.data, ...polls]);
+      setShowModal(false);
+    }
+    setLoading(false);
+  };
+
+  const deletePoll = async (id) => {
+    if (!window.confirm("Delete this poll?")) return;
+    const { error } = await supabase.from('polls').delete().eq('id', id);
+    if (error) alert(error.message);
+    else setPolls(polls.filter(p => p.id !== id));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Polls Library</h2>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Interative Cloud Polls</p>
+        </div>
+        <button onClick={openCreate} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-100 flex items-center gap-2">
+          <Plus size={20} /> Create New Poll
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {polls.map(p => (
+          <div key={p.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group hover:shadow-xl hover:shadow-blue-50/50 transition-all border-b-4 border-b-blue-600/10">
+            <div className="flex justify-between items-start mb-4">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
+                {p.type === 'multiple_choice' ? <CheckCircle size={24} /> : p.type === 'word_cloud' ? <Activity size={24} /> : <BarChart2 size={24} />}
+              </div>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => openEdit(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit2 size={18} /></button>
+                <button onClick={() => deletePoll(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button>
+              </div>
+            </div>
+            <h3 className="text-xl font-black text-slate-800 mb-1 line-clamp-2">{p.title}</h3>
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+              {p.type.replace('_', ' ')} • Created {new Date(p.created_at).toLocaleDateString()}
+            </p>
+          </div>
+        ))}
+        {polls.length === 0 && (
+          <div className="col-span-full py-20 text-center text-slate-300 font-black uppercase tracking-widest text-sm border-2 border-dashed border-slate-100 rounded-[2.5rem]">
+            No polls created yet.
+          </div>
+        )}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl max-w-lg w-full border border-slate-100">
+            <h2 className="text-3xl font-black text-slate-800 mb-6 tracking-tight">{editingPoll ? 'Edit Poll' : 'New Poll'}</h2>
+            <form onSubmit={savePoll} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Poll Question</label>
+                <input
+                  autoFocus value={title} onChange={e => setTitle(e.target.value)} required
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                  placeholder="What's your question?"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Poll Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'multiple_choice', label: 'Choices', icon: CheckCircle },
+                    { id: 'word_cloud', label: 'Cloud', icon: Activity },
+                    { id: 'rating', label: 'Rating', icon: BarChart2 }
+                  ].map(t => (
+                    <button
+                      key={t.id} type="button" onClick={() => setType(t.id)}
+                      className={`p-3 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all ${type === t.id ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:bg-slate-50'}`}
+                    >
+                      <t.icon size={20} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {type === 'multiple_choice' && (
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Options</label>
+                  <div className="space-y-2">
+                    {options.map((opt, i) => (
+                      <div key={i} className="flex gap-2">
+                        <input
+                          value={opt} onChange={e => {
+                            const newOpts = [...options];
+                            newOpts[i] = e.target.value;
+                            setOptions(newOpts);
+                          }}
+                          className="flex-1 p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all text-sm"
+                          placeholder={`Option ${i+1}`}
+                        />
+                        {options.length > 2 && (
+                          <button type="button" onClick={() => setOptions(options.filter((_, idx)=>idx!==i))} className="p-2 text-slate-300 hover:text-red-500"><X size={18}/></button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setOptions([...options, ''])} className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">+ Add Option</button>
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-3 mt-8">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+                <button type="submit" disabled={loading} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50">
+                  {loading ? 'Saving...' : 'Save Poll'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PollResultsTab({ session, responses, onEnd, roomCode }) {
+  const [activePoll, setActivePoll] = useState(session.quiz);
+  
+  const chartData = useMemo(() => {
+    if (activePoll.type === 'multiple_choice') {
+      const counts = {};
+      activePoll.options.forEach(o => counts[o] = 0);
+      responses.forEach(r => {
+        if (r.answers && r.answers.vote) {
+          counts[r.answers.vote] = (counts[r.answers.vote] || 0) + 1;
+        }
+      });
+      return Object.entries(counts).map(([label, count]) => ({ label, count }));
+    } else if (activePoll.type === 'word_cloud') {
+       // Logic for word cloud data extraction
+       const words = {};
+       responses.forEach(r => {
+         if (r.answers && r.answers.vote) {
+           const w = String(r.answers.vote).toLowerCase().trim();
+           if (w) words[w] = (words[w] || 0) + 1;
+         }
+       });
+       return Object.entries(words).map(([text, value]) => ({ text, value }));
+    } else if (activePoll.type === 'rating') {
+       const counts = { '1':0, '2':0, '3':0, '4':0, '5':0 };
+       responses.forEach(r => {
+         if (r.answers && r.answers.vote) {
+           counts[r.answers.vote] = (counts[r.answers.vote] || 0) + 1;
+         }
+       });
+       return Object.entries(counts).map(([label, count]) => ({ label, count }));
+    }
+    return [];
+  }, [activePoll, responses]);
+
+  const maxCount = Math.max(...chartData.map(d => d.count || 0), 1);
+
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">{activePoll.title}</h2>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest flex items-center gap-2 mt-1">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Poll • {responses.length} Submissions
+          </p>
+        </div>
+        <button onClick={onEnd} className="px-6 py-3 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl font-black text-sm transition-all flex items-center gap-2">
+          <PauseCircle size={20} /> End Poll
+        </button>
+      </div>
+
+      <div className="flex-1 grid place-items-center">
+        {activePoll.type === 'multiple_choice' || activePoll.type === 'rating' ? (
+          <div className="w-full max-w-2xl space-y-4">
+            {chartData.map((d, i) => (
+              <div key={i} className="group">
+                <div className="flex justify-between mb-2">
+                  <span className="font-black text-slate-700 text-sm tracking-tight">{d.label}</span>
+                  <span className="font-black text-blue-600 text-sm">{d.count}</span>
+                </div>
+                <div className="h-4 bg-slate-50 border border-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-500 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.3)]"
+                    style={{ width: `${(d.count / maxCount) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-4 justify-center items-center max-w-3xl">
+            {chartData.length === 0 && <p className="text-slate-300 font-bold uppercase tracking-widest italic animate-pulse">Waiting for responses...</p>}
+            {chartData.map((d, i) => (
+              <span 
+                key={i} 
+                className="font-black text-blue-600 transition-all duration-300 animate-in fade-in zoom-in"
+                style={{ fontSize: `${Math.min(16 + d.value * 12, 60)}px`, opacity: Math.min(0.3 + d.value * 0.2, 1) }}
+              >
+                {d.text}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 pt-6 border-t border-slate-100 flex justify-center">
+         <div className="bg-slate-900 text-white px-8 py-3 rounded-2xl flex flex-col items-center">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Join at: toolabx.com/classlabx/</span>
+            <span className="text-2xl font-black tracking-[0.3em]">{roomCode}</span>
+         </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 //               TEACHER PORTAL
 // ==========================================
 function TeacherPortal({ setRole, user }) {
@@ -617,6 +937,7 @@ function TeacherPortal({ setRole, user }) {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ClassLabX_TeacherTab') || 'quizzes');
   const [quizzes, setQuizzes] = useState([]);
   const [reports, setReports] = useState([]);
+  const [polls, setPolls] = useState([]);
   const [classes, setClasses] = useState([]);
   const [session, setSession] = useState(null);
   const [responses, setResponses] = useState([]);
@@ -647,13 +968,15 @@ function TeacherPortal({ setRole, user }) {
         supabase.from('quizzes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('reports').select('*').eq('user_id', user.id).order('ts', { ascending: false }),
         supabase.from('classes').select(`*, students(*)`).eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('rooms').select('*').eq('user_id', user.id).eq('is_async', true) // Fetch async rooms
+        supabase.from('rooms').select('*').eq('user_id', user.id).eq('is_async', true), // Fetch async rooms
+        supabase.from('polls').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
       ]);
 
       if (resProfile.data) setProfile(resProfile.data);
       if (resQuizzes.data) setQuizzes(resQuizzes.data);
       if (resReports.data) setReports(resReports.data);
       if (resClass.data) setClasses(resClass.data);
+      if (resPolls.data) setPolls(resPolls.data);
 
       if (resAsyncRooms.data && resAsyncRooms.data.length > 0) {
         const asyncCodes = resAsyncRooms.data.map(r => r.id);
@@ -954,12 +1277,18 @@ function TeacherPortal({ setRole, user }) {
       setReports(prev => [newReport, ...prev]);
     }
 
+
     // Clear PUBLIC network buffer
     try {
       await supabase.from('rooms').delete().eq('id', roomCode);
     } catch (e) { console.error("Cleanup error", e); }
 
-    // Show podium for quiz types (not attendance/feedback)
+    // Update poll results in local state if it's a poll
+    if (session.type === 'poll') {
+       // Optional: fetch refreshed polls if needed
+    }
+
+    // Show podium for quiz types (not attendance/feedback/poll)
     const isQuizType = session.type === 'teacher_paced' || session.type === 'student_paced';
     if (isQuizType && responses.length > 0 && session.quiz?.questions?.length > 0) {
       const questions = session.quiz.questions;
@@ -1020,7 +1349,7 @@ function TeacherPortal({ setRole, user }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Classes', 'Quizzes', 'Attendance', 'Feedback'].map(t => (
+            {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback'].map(t => (
               <button
                 key={t} onClick={() => handleTabChange(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -1056,7 +1385,7 @@ function TeacherPortal({ setRole, user }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full print:hidden">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['classes', 'quizzes', 'attendance', 'feedback'].map(tab => (
+          {['classes', 'quizzes', 'polls', 'attendance', 'feedback'].map(tab => (
             <button
               key={tab} onClick={() => handleTabChange(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -1087,6 +1416,20 @@ function TeacherPortal({ setRole, user }) {
             saOverrides={saOverrides}
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
+          />
+        )}
+        {activeTab === 'polls' && (
+          <PollsTabMain
+            polls={polls}
+            setPolls={setPolls}
+            user={user}
+            profile={profile}
+            classes={classes}
+            onLaunch={onLaunch}
+            session={session}
+            responses={responses}
+            roomCode={roomCode}
+            onEnd={onEnd}
           />
         )}
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />}
@@ -1540,8 +1883,8 @@ function ScheduledTab({ user, classes }) {
 
 function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile, defaultCategory = null }) {
   const [selected, setSelected] = useState('');
-  const [category, setCategory] = useState(defaultCategory); // 'sync', 'async', 'attendance', 'feedback'
-  const [type, setType] = useState(null); // 'student_paced', 'teacher_paced', 'async_quiz', 'async_video', 'attendance'
+  const [category, setCategory] = useState(defaultCategory); // 'sync', 'async', 'attendance', 'feedback', 'poll'
+  const [type, setType] = useState(defaultCategory === 'poll' ? 'poll' : null); 
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
@@ -1701,6 +2044,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   };
 
   const filteredQuizzes = quizzes.filter(q => {
+    if (category === 'poll') return true;
     if (type === 'async_video') return q.type === 'video';
     if (type === 'async_quiz' || category === 'sync') return q.type === 'standard' || !q.type;
     return true; 
@@ -1717,14 +2061,16 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
             key={q.id} onClick={() => setSelected(q.id)}
             className={`w-full p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${selected === q.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
           >
-            {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />)}
+            {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : (q.type === 'multiple_choice' || category === 'poll' ? <BarChart2 size={20} className="text-blue-500 shrink-0" /> : (q.type === 'survey' ? <BarChart2 size={20} className="text-green-500 shrink-0" /> : <FileText size={20} className="text-blue-500 shrink-0" />))}
             <div>
               <div className="font-black text-slate-800">{q.title}</div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{(q.questions || []).length} {q.type === 'survey' ? 'Items' : 'Questions'}</div>
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                {category === 'poll' ? q.type.replace('_', ' ') : `${(q.questions || []).length} ${q.type === 'survey' ? 'Items' : 'Questions'}`}
+              </div>
             </div>
           </button>
         ))}
-        {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No matching quizzes found. Go to Quizzes to create one.</p>}
+        {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No {category === 'poll' ? 'polls' : 'matching quizzes'} found.</p>}
       </div>
 
       <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
@@ -2912,6 +3258,79 @@ function FeedbackSurvey({ session, answers, submit, onFinish }) {
   );
 }
 
+function PollInteraction({ session, answers, submit, onFinish }) {
+  const [localVote, setLocalVote] = useState(answers?.vote || '');
+  const poll = session.quiz;
+
+  const handleVote = (val) => {
+    setLocalVote(val);
+    submit('vote', val);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto py-10 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-white rounded-[3rem] shadow-2xl p-10 border border-slate-100 mb-8">
+        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
+          <Activity size={32} />
+        </div>
+        <h2 className="text-3xl font-black text-slate-800 mb-2 leading-tight">{poll.title}</h2>
+        <p className="text-slate-400 font-bold mb-10 uppercase tracking-widest text-[10px]">Live Interaction Poll</p>
+
+        <div className="space-y-4">
+          {poll.type === 'multiple_choice' && (
+            <div className="grid grid-cols-1 gap-3">
+              {poll.options.map((opt, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleVote(opt)}
+                  className={`p-6 rounded-[2rem] border-4 text-left font-black text-xl transition-all ${localVote === opt ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-xl shadow-blue-100' : 'border-slate-50 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-white'}`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {poll.type === 'word_cloud' && (
+            <div className="space-y-4">
+              <input
+                autoFocus
+                className="w-full bg-slate-50 border-4 border-slate-100 rounded-[2.5rem] p-8 text-center text-3xl font-black text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                placeholder="Type your word..."
+                value={localVote}
+                onChange={(e) => setLocalVote(e.target.value)}
+                onBlur={() => handleVote(localVote)}
+              />
+              <p className="text-center text-slate-400 font-bold text-xs">Enter a word to add it to the cloud!</p>
+            </div>
+          )}
+
+          {poll.type === 'rating' && (
+            <div className="flex flex-row-reverse justify-center gap-2 md:gap-4">
+              {[5, 4, 3, 2, 1].map(val => (
+                <button
+                  key={val}
+                  onClick={() => handleVote(String(val))}
+                  className={`flex-1 max-w-[80px] aspect-square rounded-[2rem] border-4 transition-all flex flex-col items-center justify-center gap-1 ${localVote === String(val) ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-xl shadow-blue-100 scale-110' : 'border-slate-50 bg-slate-50 text-slate-300 hover:border-blue-200 hover:bg-white'}`}
+                >
+                  <span className="text-3xl font-black">{val}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onFinish}
+        className="w-full py-6 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
+      >
+        Done <CheckCircle size={24} />
+      </button>
+    </div>
+  );
+}
+
 function FeedbackDashboard({ reports, classes }) {
   const feedbackReports = reports.filter(r => r.type === 'feedback');
   const [classFilter, setClassFilter] = useState('');
@@ -4041,9 +4460,9 @@ function StudentPortal({ setRole, initialRoom }) {
       return;
     }
 
-    if (roomData.type === 'feedback') {
+    if (roomData.type === 'feedback' || roomData.type === 'poll') {
       setSid(`anon_${localId}`);
-      setName('Anonymous Student');
+      setName(roomData.type === 'poll' ? 'Poll Student' : 'Anonymous Student');
       setTempSession(roomData);
       setJoined(true);
       setCheckingId(false);
@@ -4188,7 +4607,7 @@ function StudentPortal({ setRole, initialRoom }) {
   };
 
   const confirmJoin = async () => {
-    if (tempSession?.type === 'feedback') {
+    if (tempSession?.type === 'feedback' || tempSession?.type === 'poll') {
         setJoined(true);
         setNeedsConfirmation(false);
         return;
@@ -4274,9 +4693,9 @@ function StudentPortal({ setRole, initialRoom }) {
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
         <form onSubmit={attemptJoin} className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
           <div className="text-center mb-10">
-            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative ${roomType === 'feedback' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
-              {roomType === 'feedback' ? <BarChart2 size={40} /> : <Users size={40} />}
-              {roomType !== 'feedback' && <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />}
+            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative ${roomType === 'feedback' ? 'bg-purple-100 text-purple-600' : (roomType === 'poll' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600')}`}>
+              {roomType === 'feedback' ? <BarChart2 size={40} /> : (roomType === 'poll' ? <Activity size={40} /> : <Users size={40} />)}
+              {roomType !== 'feedback' && roomType !== 'poll' && <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />}
             </div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
             <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2 px-2 text-center break-words">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} className="shrink-0" /> {idError}</span> : "Enter details below"}</p>
@@ -4288,7 +4707,7 @@ function StudentPortal({ setRole, initialRoom }) {
                 placeholder="ROOM CODE" value={room} onChange={e => setRoom(e.target.value.toUpperCase())} required
               />
             </div>
-            {roomType !== 'feedback' && (
+            {roomType !== 'feedback' && roomType !== 'poll' && (
               <>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
@@ -4306,8 +4725,13 @@ function StudentPortal({ setRole, initialRoom }) {
                 This is an anonymous feedback session. No Student ID is required to join.
               </p>
             )}
-            <button type="submit" disabled={checkingId} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl mt-2 transition-transform active:scale-95 flex justify-center items-center text-white ${roomType === 'feedback' ? 'bg-purple-600 shadow-purple-100' : 'bg-orange-500 shadow-orange-100'}`}>
-              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : (roomType === 'feedback' ? 'JOIN ANONYMOUSLY' : 'ENTER ROOM')}
+            {roomType === 'poll' && (
+              <p className="text-[10px] font-bold text-blue-400 text-center px-4 leading-relaxed bg-blue-50 py-3 rounded-2xl border border-blue-100">
+                This is an anonymous live poll. No Student ID is required to join.
+              </p>
+            )}
+            <button type="submit" disabled={checkingId} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl mt-2 transition-transform active:scale-95 flex justify-center items-center text-white ${roomType === 'feedback' ? 'bg-purple-600 shadow-purple-100' : (roomType === 'poll' ? 'bg-blue-600 shadow-blue-100' : 'bg-orange-500 shadow-orange-100')}`}>
+              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : (roomType === 'feedback' ? 'JOIN ANONYMOUSLY' : (roomType === 'poll' ? 'JOIN POLL' : 'ENTER ROOM'))}
             </button>
           </div>
           <button type="button" onClick={clearStudentSession} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
@@ -4356,6 +4780,10 @@ function StudentPortal({ setRole, initialRoom }) {
 
   if (session.type === 'feedback') {
     return <FeedbackSurvey session={session} answers={answers} submit={submit} onFinish={() => setIdx(total)} />;
+  }
+
+  if (session.type === 'poll') {
+    return <PollInteraction session={session} answers={answers} submit={submit} onFinish={() => setIdx(total)} />;
   }
 
   return (
@@ -5293,7 +5721,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
           key={t.id} onClick={() => handleSubTabChange(t.id)}
           className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
         >
-          {t.label} {t.id === 'live' && session && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-green-400 animate-pulse"></span>}
+          {t.label} {t.id === 'live' && session && (session.type === 'teacher_paced' || session.type === 'student_paced') && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-green-400 animate-pulse"></span>}
         </button>
       ))}
     </div>
