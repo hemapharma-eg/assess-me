@@ -3376,7 +3376,10 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
         
         if (!attendanceOnly) quizTitles.forEach(title => { studentData.push(row.scores[title] !== undefined ? row.scores[title] : 'N/A'); });
         if (hasAttendance) {
-          attendanceTitles.forEach(title => { studentData.push(row.attendanceRecords[title] ? 'Present' : 'Absent'); });
+          attendanceTitles.forEach(title => { 
+            const status = row.attendanceRecords[title]?.status || 'absent';
+            studentData.push(status.charAt(0).toUpperCase() + status.slice(1));
+          });
         }
         
         rows.push(studentData);
