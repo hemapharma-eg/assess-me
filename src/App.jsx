@@ -214,7 +214,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
       });
       if (error) alert("Sign Up Error: " + error.message);
       else {
-        alert("Account created! You can now log in.");
+        alert("Account created! Please check your email and click the confirmation link before logging in.");
         setAuthMode('login');
       }
     } else if (authMode === 'forgot') {
@@ -644,10 +644,10 @@ function TeacherPortal({ setRole, user }) {
       setLoadingData(true);
       const [resProfile, resQuizzes, resReports, resClass, resAsyncRooms] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('quizzes').select('*').order('created_at', { ascending: false }),
-        supabase.from('reports').select('*').order('ts', { ascending: false }),
-        supabase.from('classes').select(`*, students(*)`).order('created_at', { ascending: false }),
-        supabase.from('rooms').select('*').eq('is_async', true) // Fetch async rooms
+        supabase.from('quizzes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('reports').select('*').eq('user_id', user.id).order('ts', { ascending: false }),
+        supabase.from('classes').select(`*, students(*)`).eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('rooms').select('*').eq('user_id', user.id).eq('is_async', true) // Fetch async rooms
       ]);
 
       if (resProfile.data) setProfile(resProfile.data);
@@ -1027,6 +1027,10 @@ function TeacherPortal({ setRole, user }) {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          <div className="hidden lg:flex flex-col items-end mr-1">
+            <span className="text-[10px] font-black text-slate-800 leading-none">{profile?.full_name}</span>
+            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">{user?.email}</span>
+          </div>
           {profile && (
             <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
               <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Plan:</span>
@@ -3649,7 +3653,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                       return (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 text-center align-middle">
-                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : r.type === 'async_video' ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                        <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center ${r.type === 'teacher_paced' ? 'bg-purple-100 text-purple-600' : r.type === 'attendance' ? 'bg-green-100 text-green-600' : (r.type === 'async_video' || r.type === 'async_quiz') ? 'bg-blue-50 text-blue-600' : 'bg-blue-50 text-blue-600'}`}>
                           {r.type === 'attendance' ? <UserCheck size={16} /> : r.type === 'async_video' ? <Video size={16} /> : <BarChart2 size={16} />}
                         </div>
                       </td>
