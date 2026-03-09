@@ -4158,13 +4158,9 @@ function StudentPortal({ setRole, initialRoom }) {
   });
 
   const [room, setRoom] = useState(initialRoom || cachedState?.room || '');
-  const [sid, setSid] = useState(() => {
-    const cachedSid = cachedState?.sid || '';
-    if (cachedSid === 'anonymous' || cachedSid.startsWith('anon_')) return '';
-    return cachedSid;
-  });
-  const [name, setName] = useState(cachedState?.name || ''); 
-  const [joined, setJoined] = useState((!initialRoom || initialRoom === cachedState?.room) ? (cachedState?.joined || false) : false);
+  const [sid, setSid] = useState(''); // Always ask for ID on rejoin
+  const [name, setName] = useState(''); // Always ask for name on rejoin
+  const [joined, setJoined] = useState(false); // Never auto-rejoin, always prompt for ID
 
   // Stable random ID for open rooms
   const [localId] = useState(() => Math.random().toString(36).substring(2, 9));
