@@ -961,8 +961,8 @@ function TeacherPortal({ setRole, user }) {
   };
 
   const handleTabChange = (newTab) => {
-    // If navigating away from an active sync room, warn them
-    if (activeTab === 'synchronous' && session && !session.is_async && newTab !== 'synchronous') {
+    // If navigating away from a tab with an active live room, warn them
+    if (session && !session.is_async && newTab !== activeTab) {
       setPendingTab(newTab);
       setShowCloseWarning(true);
     } else {
@@ -1002,7 +1002,7 @@ function TeacherPortal({ setRole, user }) {
           {profile && (
             <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
               <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Plan:</span>
-              <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{profile.subscription.replace('_', ' ')}</span>
+              <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{(profile.subscription || 'free').replace('_', ' ')}</span>
             </div>
           )}
           {roomCode && (
@@ -1073,7 +1073,7 @@ function TeacherPortal({ setRole, user }) {
                 onClick={async () => {
                    setShowCloseWarning(false);
                    await onEnd(); // trigger close
-                   if (pendingTab && pendingTab !== 'reports') {
+                   if (pendingTab) { // Fix 1 & 4: Removed obsolete 'reports' tab check
                       setActiveTab(pendingTab);
                    }
                    setPendingTab(null);
@@ -1466,7 +1466,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       </div>
       <h2 className="text-3xl font-black text-slate-800 mb-2">Room {session.quiz.title} is LIVE</h2>
       <p className="text-slate-400 font-medium mb-8">Room Code: {roomCode}</p>
-      <button onClick={() => setActiveTab('synchronous')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100">Go to Synchronous Tab</button>
+      <button onClick={() => setActiveTab('live')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100">Go to Live Tab</button>
     </div>
   );
 
