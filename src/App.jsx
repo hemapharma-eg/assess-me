@@ -260,6 +260,9 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
         // so the app can process the token and save the session
         redirectTo: window.location.origin,
         skipBrowserRedirect: true,
+        queryParams: {
+          prompt: 'select_account', // Always show the account picker
+        },
       },
     });
 
