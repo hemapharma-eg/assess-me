@@ -2402,7 +2402,6 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
 
 function ResultsTab({ session, responses, onEnd, roomCode }) {
   const [showQR, setShowQR] = useState(true);
-  const [showCloseModal, setShowCloseModal] = useState(false);
   const [attendanceToken, setAttendanceToken] = useState(() => Date.now().toString());
 
   useEffect(() => {
@@ -2455,41 +2454,6 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
   };
 
   return (
-    <>
-    {/* Close Room Confirmation Modal */}
-    {showCloseModal && (
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-        <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-            <AlertTriangle size={32} />
-          </div>
-          <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Close This Room?</h3>
-          <p className="text-slate-500 font-bold mb-8 leading-relaxed">
-            You have an active session with <span className="text-blue-600 bg-blue-50 px-1 rounded">{responses.length} participant(s)</span>. What would you like to do?
-          </p>
-          <div className="space-y-3">
-            <button
-              onClick={async () => { setShowCloseModal(false); await onEnd(); }}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
-            >
-              Close Room & Save Results
-            </button>
-            <button
-              onClick={() => setShowCloseModal(false)}
-              className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-sm uppercase tracking-widest transition-colors"
-            >
-              Keep Room Open
-            </button>
-            <button
-              onClick={() => setShowCloseModal(false)}
-              className="w-full py-3 text-sm font-black text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
     <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border flex flex-col min-h-[70vh]">
       <div className="bg-slate-900 text-white p-8 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0 z-10">
         <div>
@@ -2502,7 +2466,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
           <button onClick={() => setShowQR(!showQR)} className="bg-slate-800 hover:bg-slate-700 px-6 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all">
             <QrCode size={18} /> Invite Students
           </button>
-          <button onClick={() => setShowCloseModal(true)} className="bg-red-600 hover:bg-red-700 text-white px-8 py-2.5 rounded-full font-black text-xs shadow-xl shadow-red-900/20">Close Room</button>
+          <button onClick={onEnd} className="bg-red-600 hover:bg-red-700 text-white px-8 py-2.5 rounded-full font-black text-xs shadow-xl shadow-red-900/20">Close Room</button>
         </div>
       </div>
 
@@ -2623,7 +2587,6 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
         </div>
       )}
     </div>
-    </>
   );
 }
 
@@ -2757,7 +2720,7 @@ function TeacherPacedDashboard({ session, responses, onNext, onPrev, onToggleRes
 
         {qIdx >= total - 1 ? (
           <button
-            onClick={() => setShowCloseModal(true)}
+            onClick={onEnd}
             className="w-full sm:w-auto px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black transition-colors shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
           >
             End Quiz <XCircle size={20} />
@@ -5391,15 +5354,12 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
 }
 
 function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
-  const defaultTab = session?.type === 'attendance' ? 'live' : 'launch';
-  const [subTab, setSubTab] = useState(defaultTab);
+  const [subTab, setSubTab] = useState(session?.type === 'attendance' ? 'live' : 'launch');
+  // Always jump to live when an attendance session starts
+  const effectiveSubTab = (session && session.type === 'attendance') ? 'live' : subTab;
   
   // Local state for Attendance Report
   const [selectedClassId, setSelectedClassId] = useState('');
-
-  useEffect(() => {
-    if (session && session.type === 'attendance') setSubTab('live');
-  }, [session]);
 
   const handleSubTabChange = (t) => {
     if (t !== 'live' && session && session.type === 'attendance') {
@@ -5416,7 +5376,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   let reportMatrix = [];
   let uniqueAttendanceTitles = [];
 
-  if (subTab === 'report' && selectedClassId) {
+  if (effectiveSubTab === 'report' && selectedClassId) {
     reportClass = classes.find(c => c.id === selectedClassId);
     if (reportClass) {
       attendanceReports = reports.filter(r => r.type === 'attendance' && (r.assigned_classes || []).includes(selectedClassId));
@@ -5494,7 +5454,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       ].map(t => (
         <button
           key={t.id} onClick={() => handleSubTabChange(t.id)}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${effectiveSubTab === t.id ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
         >
           {t.label} {t.id === 'live' && session?.type === 'attendance' && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-white animate-pulse"></span>}
         </button>
@@ -5505,13 +5465,13 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   return (
     <div>
       <SubNav />
-      {subTab === 'launch' && (
+      {effectiveSubTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
            {/* We will modify LaunchTab to take an initial category next */}
            <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="attendance" />
         </div>
       )}
-      {subTab === 'live' && (
+      {effectiveSubTab === 'live' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
           {session?.type === 'attendance' ? (
             <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
@@ -5525,11 +5485,11 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
           )}
         </div>
       )}
-      {subTab === 'history' && (() => {
+      {effectiveSubTab === 'history' && (() => {
         const attendanceReports = reports.filter(r => r.type === 'attendance' && !r.hidden);
         return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} isAttendanceHistory={true} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />;
       })()}
-      {subTab === 'report' && (
+      {effectiveSubTab === 'report' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
           <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
@@ -5618,12 +5578,9 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
 }
 
 function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
-  const defaultTab = session?.type === 'feedback' ? 'live' : 'launch';
-  const [subTab, setSubTab] = useState(defaultTab);
-  
-  useEffect(() => {
-    if (session && session.type === 'feedback') setSubTab('live');
-  }, [session]);
+  const [subTab, setSubTab] = useState(session?.type === 'feedback' ? 'live' : 'launch');
+  // Always jump to live when a feedback session starts
+  const effectiveSubTab = (session && session.type === 'feedback') ? 'live' : subTab;
 
   const handleSubTabChange = (t) => {
     if (t !== 'live' && session && session.type === 'feedback') {
@@ -5641,7 +5598,7 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
       ].map(t => (
         <button
           key={t.id} onClick={() => handleSubTabChange(t.id)}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${effectiveSubTab === t.id ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
         >
           {t.label} {t.id === 'live' && session?.type === 'feedback' && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-white animate-pulse"></span>}
         </button>
@@ -5652,12 +5609,12 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
   return (
     <div>
       <SubNav />
-      {subTab === 'launch' && (
+      {effectiveSubTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
            <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="feedback" />
         </div>
       )}
-      {subTab === 'live' && (
+      {effectiveSubTab === 'live' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
           {session?.type === 'feedback' ? (
             <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
@@ -5671,7 +5628,7 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
           )}
         </div>
       )}
-      {subTab === 'report' && (() => {
+      {effectiveSubTab === 'report' && (() => {
         const feedbackReports = reports.filter(r => r.type === 'feedback' && !r.hidden);
         return <ReportsTab reports={feedbackReports} allReports={feedbackReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />;
       })()}
