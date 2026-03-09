@@ -2022,8 +2022,8 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
       <button onClick={() => {
         setScheduledLink(null);
-        setType(null);
-        setCategory(null);
+        setType(defaultCategory === 'poll' ? 'poll' : null);
+        setCategory(defaultCategory);
         setAssignedClasses([]);
         setShuffleQuestions(false);
         setShuffleChoices(false);
@@ -2129,8 +2129,8 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     }
     
     if (category !== 'async') {
-      setType(null);
-      setCategory(null);
+      setType(defaultCategory === 'poll' ? 'poll' : null);
+      setCategory(defaultCategory);
       setAssignedClasses([]);
       setShuffleQuestions(false);
       setShuffleChoices(false);
@@ -2287,7 +2287,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => { setType(null); setCategory(null); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
+        <button onClick={() => { setType(defaultCategory === 'poll' ? 'poll' : null); setCategory(defaultCategory); setSelectedItems([]); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
           disabled={selectedItems.length === 0 || (category !== 'poll' && assignedClasses.length === 0) || (category === 'async' && (!startTime || !endTime))}
