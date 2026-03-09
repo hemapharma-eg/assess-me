@@ -2460,7 +2460,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
     {showCloseModal && (
       <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
         <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6">
+          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
             <AlertTriangle size={32} />
           </div>
           <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Close This Room?</h3>
@@ -2470,7 +2470,7 @@ function ResultsTab({ session, responses, onEnd, roomCode }) {
           <div className="space-y-3">
             <button
               onClick={async () => { setShowCloseModal(false); await onEnd(); }}
-              className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-red-100"
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
             >
               Close Room & Save Results
             </button>
