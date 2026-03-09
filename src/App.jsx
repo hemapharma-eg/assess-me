@@ -3398,7 +3398,10 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
         if (effectiveClasses.includes(selectedClassId)) return true;
 
         // For reports with no assigned_classes (old format before the fix)
-        if (effectiveClasses.length === 0) {
+        // IMPORTANT: Skip this fallback for attendance sessions to prevent cross-class leakage
+        // Attendance sessions always require explicit class assignment, so unassigned ones
+        // should NOT appear in any class's attendance report
+        if (effectiveClasses.length === 0 && r.type !== 'attendance') {
           // Determine which class the session belongs to by checking students who responded
           const responderIds = getEffectiveResponses(r).map(resp => String(resp.student_id).trim().toLowerCase());
           if (responderIds.length === 0) return false; // can't determine class if nobody responded
