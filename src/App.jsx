@@ -62,29 +62,45 @@ function MainApp() {
       }
     } catch (e) { }
 
-    // Check if we just returned from an OAuth redirect
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = hashParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token');
-    
-    if (accessToken && refreshToken) {
-       // We successfully authenticated via redirect, but we might be in an iframe
-       // Force Supabase to explicitly set the session because third-party cookies 
-       // might be blocked, preventing the auto-detection.
-       supabase.auth.setSession({
-           access_token: accessToken,
-           refresh_token: refreshToken
-       }).then(({ data, error }) => {
-           if (!error && data.session) {
-               setUser(data.session.user);
-               setRole('teacher'); // default OAuth role
-               // Clean up the URL to prevent re-triggering and look nicer
-               window.history.replaceState(null, '', window.location.pathname + window.location.search);
-           }
-       });
-    }
+    // --- AGGRESSIVE IFRAME OAUTH CALLBACK HANDLER ---
+    // In iframes, Supabase auto-detection often fails due to third-party cookie blocking.
+    // We must manually parse the hash, forcefully set the session, save it, and reload to apply.
+    const hashStr = window.location.hash.substring(1);
+    if (hashStr && hashStr.includes('access_token=')) {
+        setLoadingContext(true); // Keep loading screen up during this critical phase
+        const hashParams = new URLSearchParams(hashStr);
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const providerToken = hashParams.get('provider_token');
 
-    // Init Supabase session
+        if (accessToken) {
+            // 1. Force Supabase to explicitly know about this session immediately
+            supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || ''
+            }).then(({ data, error }) => {
+                if (!error && data?.session) {
+                    // 2. We successfully forced the session. 
+                    // To ensure it persists across iframes, we must completely clear the hash
+                    // so we don't accidentally re-trigger this logic on subsequent reloads.
+                    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+                    
+                    // 3. Immediately set state to render the app
+                    setUser(data.session.user);
+                    setRole('teacher');
+                    setLoadingContext(false);
+                } else {
+                    // If forcing it failed, fall back
+                    setAuthError(error?.message || "Failed to parse iframe session.");
+                    setLoadingContext(false);
+                }
+            });
+            return; // Stop the rest of the useEffect so we don't override this delicate process
+        }
+    }
+    // --- END OAUTH HANDLER ---
+
+    // Normal Initialization for successful sessions (if we aren't handling a fresh OAuth redirect)
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) setAuthError(error.message);
       else if (session) {
