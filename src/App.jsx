@@ -657,7 +657,11 @@ function TeacherPortal({ setRole, user }) {
 
       if (resAsyncRooms.data && resAsyncRooms.data.length > 0) {
         const asyncCodes = resAsyncRooms.data.map(r => r.id);
-        const { data: asyncResponses } = await supabase.from('responses').select('*').in('room_code', asyncCodes);
+        const asyncResponsesProm = asyncCodes.length > 0 
+          ? supabase.from('responses').select('*').in('room_code', asyncCodes)
+          : Promise.resolve({ data: [] });
+        
+        const { data: asyncResponses } = await asyncResponsesProm;
         
         const pseudoReports = resAsyncRooms.data.map(room => ({
           id: room.id,
