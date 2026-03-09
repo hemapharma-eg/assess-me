@@ -682,6 +682,7 @@ function PollsTab({ polls, setPolls, user }) {
   const [type, setType] = useState('multiple_choice');
   const [options, setOptions] = useState(['', '']);
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const openCreate = () => {
     setEditingPoll(null);
@@ -734,39 +735,105 @@ function PollsTab({ polls, setPolls, user }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+      <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Polls Library</h2>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Interative Cloud Polls</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Interactive Cloud Polls</p>
         </div>
-        <button onClick={openCreate} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-100 flex items-center gap-2">
+        
+        <div className="flex-1 max-w-md relative">
+          <input
+            type="text"
+            placeholder="Search polls..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-700 focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 focus:bg-white"
+          />
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
+
+        <button onClick={openCreate} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-100 flex items-center gap-2 whitespace-nowrap">
           <Plus size={20} /> Create New Poll
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {polls.map(p => (
-          <div key={p.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group hover:shadow-xl hover:shadow-blue-50/50 transition-all border-b-4 border-b-blue-600/10">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
-                {p.type === 'multiple_choice' ? <BarChart2 size={24} /> : p.type === 'word_cloud' ? <Cloud size={24} /> : <Star size={24} />}
-              </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit2 size={18} /></button>
-                <button onClick={() => deletePoll(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button>
-              </div>
-            </div>
-            <h3 className="text-xl font-black text-slate-800 mb-1 line-clamp-2">{p.title}</h3>
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
-              {p.type.replace('_', ' ')} • Created {new Date(p.created_at).toLocaleDateString()}
-            </p>
-          </div>
-        ))}
-        {polls.length === 0 && (
-          <div className="col-span-full py-20 text-center text-slate-300 font-black uppercase tracking-widest text-sm border-2 border-dashed border-slate-100 rounded-[2.5rem]">
-            No polls created yet.
-          </div>
-        )}
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto no-scrollbar">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 border-b-2 border-slate-100/50 uppercase tracking-widest text-[10px] font-black text-slate-400">
+              <tr>
+                <th className="p-4 w-12 text-center rounded-tl-[2rem]">Type</th>
+                <th className="p-4 min-w-[300px]">Poll Name</th>
+                <th className="p-4 hidden md:table-cell">Format</th>
+                <th className="p-4 hidden sm:table-cell">Created</th>
+                <th className="p-4 text-right rounded-tr-[2rem]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {(() => {
+                const filteredPolls = polls.filter(p => 
+                  p.title.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+
+                if (polls.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan="5" className="py-20 text-center text-slate-300 font-black uppercase tracking-widest text-sm bg-slate-50/50">
+                        No polls created yet.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                if (filteredPolls.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan="5" className="py-20 text-center text-slate-400 font-bold bg-slate-50/50">
+                        No polls match your search.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filteredPolls.map(p => (
+                  <tr key={p.id} className="hover:bg-slate-50 border-white transition-colors group">
+                    <td className="p-4 text-center">
+                      <div className="w-10 h-10 mx-auto bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                        {p.type === 'multiple_choice' ? <BarChart2 size={20} /> : p.type === 'word_cloud' ? <Cloud size={20} /> : <Star size={20} />}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="font-black text-slate-800 text-sm">{p.title}</div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 md:hidden">
+                        {p.type.replace('_', ' ')} • {new Date(p.created_at).toLocaleDateString()}
+                      </div>
+                    </td>
+                    <td className="p-4 hidden md:table-cell">
+                      <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                        {p.type.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="p-4 hidden sm:table-cell">
+                      <span className="text-xs font-bold text-slate-500">
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right align-middle">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEdit(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Edit Poll">
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => deletePoll(p.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete Poll">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showModal && (
