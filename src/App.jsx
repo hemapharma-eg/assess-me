@@ -3436,35 +3436,6 @@ function PollInteraction({ session, answers, submit, onFinish, idx, total, onNex
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 mt-8">
-        {total > 1 && (
-          <div className="flex gap-2 w-full sm:w-auto">
-            <button
-              onClick={onPrev}
-              disabled={idx === 0}
-              className="flex-1 px-6 py-5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-3xl font-black transition-all flex items-center justify-center gap-2"
-            >
-              <ArrowLeft size={20} /> Prev
-            </button>
-            <button
-              onClick={onNext}
-              disabled={idx >= total - 1}
-              className="flex-1 px-6 py-5 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-600 rounded-3xl font-black transition-all flex items-center justify-center gap-2"
-            >
-              Next <ArrowRight size={20} />
-            </button>
-          </div>
-        )}
-
-        {(idx === total - 1 || total <= 1) && (
-          <button
-            onClick={onFinish}
-            className="flex-1 py-6 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-3"
-          >
-            Submit <CheckCircle size={24} />
-          </button>
-        )}
-      </div>
     </div>
   );
 }
