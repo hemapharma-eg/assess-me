@@ -62,6 +62,32 @@ function MainApp() {
       }
     } catch (e) { }
 
+    // Check if we are inside the OAuth popup redirect
+    if (window.opener && window.location.hash.includes('access_token=')) {
+      window.opener.postMessage({ type: 'oauth_redirect', hash: window.location.hash }, window.location.origin);
+      window.close();
+      return;
+    }
+
+    // Listen for OAuth messages from the popup
+    const handleMessage = (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'oauth_redirect' && event.data?.hash) {
+        // Supabase handles the session automatically if we just set the hash manually
+        // But since we are in a SPA, we can parse it and manually set it if needed
+        // The easiest way is to let Supabase's client read it from the URL
+        window.history.replaceState(null, null, event.data.hash);
+        // Sometimes the client needs a nudge to read the new hash
+        supabase.auth.getSession().then(({ data: { session }, error }) => {
+            if (session) {
+                setUser(session.user);
+                setRole(prev => prev || 'teacher');
+            }
+        });
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     // Init Supabase session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) setAuthError(error.message);
@@ -82,7 +108,10 @@ function MainApp() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+        subscription.unsubscribe();
+        window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   if (loadingContext) return <SplashScreen message="Establishing Secure Connection..." />;
