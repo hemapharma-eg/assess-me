@@ -3788,6 +3788,19 @@ function StudentPortal({ setRole, initialRoom }) {
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoCompleted, setVideoCompleted] = useState(false);
 
+  // Reset video state when session/quiz changes (e.g., opening a second video quiz)
+  const videoUrl = session?.quiz?.video_url;
+  useEffect(() => {
+    if (videoUrl) {
+      setPlayedSeconds(0);
+      setVideoPlaying(false);
+      setMaxPlayed(0);
+      setVideoInitializing(true);
+      setVideoDuration(0);
+      setVideoCompleted(false);
+    }
+  }, [videoUrl]);
+
   useEffect(() => {
     if (!joined || !room) return;
 
