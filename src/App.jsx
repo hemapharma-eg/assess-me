@@ -2925,6 +2925,11 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
     catch { return []; }
   });
   const [typeFilter, setTypeFilter] = useState({ teacher_paced: true, student_paced: true, attendance: true });
+  // Helper: map async types to the student_paced filter bucket
+  const matchesTypeFilter = (type) => {
+    if (type === 'async_quiz' || type === 'async_video') return typeFilter['student_paced'];
+    return typeFilter[type];
+  };
   const [renamingReport, setRenamingReport] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [assigningClassReport, setAssigningClassReport] = useState(null);
@@ -3569,7 +3574,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                     reports
                       .filter(r => r.type !== 'feedback')
                       .filter(r => !hiddenSessions.includes(r.id))
-                      .filter(r => typeFilter[r.type])
+                      .filter(r => matchesTypeFilter(r.type))
                       .filter(r => {
                         const title = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
                         return !searchFilter || title.toLowerCase().includes(searchFilter.toLowerCase());
@@ -3658,7 +3663,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                         <div className="text-xs font-bold text-slate-500">
                           {new Date(r.ts).toLocaleDateString('en-GB')} • {new Date(r.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : r.type === 'attendance' ? 'Attendance' : 'Student Paced'}</div>
+                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">{r.type === 'teacher_paced' ? 'Teacher Paced' : r.type === 'attendance' ? 'Attendance' : r.type === 'async_video' ? 'Async Video' : r.type === 'async_quiz' ? 'Async Quiz' : 'Student Paced'}</div>
                       </td>
                       <td className="p-3 text-center align-middle font-black text-slate-700 text-sm">
                         {getEffectiveResponses(r).length}
@@ -3679,7 +3684,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                   {(() => {
                     const hasVisible = reports
                       .filter(r => !hiddenSessions.includes(r.id))
-                      .filter(r => typeFilter[r.type])
+                      .filter(r => matchesTypeFilter(r.type))
                       .filter(r => {
                         const title = getEffectiveField(r, 'title') || (r.type === 'attendance' ? 'Attendance Session' : 'Untitled');
                         return !searchFilter || title.toLowerCase().includes(searchFilter.toLowerCase());
