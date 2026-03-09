@@ -608,7 +608,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
 //               POLLS FEATURE
 // ==========================================
 
-function PollsTabMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd }) {
+function PollsTabMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const [subTab, setSubTab] = useState(session && session.type === 'poll' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -627,7 +627,8 @@ function PollsTabMain({ polls, setPolls, user, profile, classes, onLaunch, sessi
       {[
         { id: 'manage', label: 'Create/Edit' },
         { id: 'launch', label: 'Launch' },
-        { id: 'live', label: 'Live Poll' }
+        { id: 'live', label: 'Live Poll' },
+        { id: 'history', label: 'History' }
       ].map(t => (
         <button
           key={t.id} onClick={() => handleSubTabChange(t.id)}
@@ -662,6 +663,12 @@ function PollsTabMain({ polls, setPolls, user, profile, classes, onLaunch, sessi
           )}
         </div>
       )}
+      {subTab === 'history' && (() => {
+        const pollReports = [...reports, ...asyncReports]
+          .filter(r => r.type === 'poll')
+          .filter(r => !r.hidden);
+        return <ReportsTab reports={pollReports} allReports={pollReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
+      })()}
     </div>
   );
 }
@@ -1499,6 +1506,12 @@ function TeacherPortal({ setRole, user }) {
             responses={responses}
             roomCode={roomCode}
             onEnd={onEnd}
+            reports={reports}
+            asyncReports={asyncReports}
+            updateReportStatus={updateReportStatus}
+            saOverrides={saOverrides}
+            setSaOverrides={setSaOverrides}
+            handleToggleSaOverride={handleToggleSaOverride}
           />
         )}
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />}
@@ -5690,7 +5703,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   const [gradebookSettings, setGradebookSettings] = useState({});
 
   useEffect(() => {
-    if (session && session.quiz.type !== 'feedback') setSubTab('live');
+    if (session && session.type !== 'feedback' && session.type !== 'poll') setSubTab('live');
   }, [session]);
 
   const handleSubTabChange = (t) => {
@@ -5870,7 +5883,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       )}
       {subTab === 'live' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
-          {session ? (
+          {session && (session.type === 'teacher_paced' || session.type === 'student_paced') ? (
             <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
           ) : (
              <div className="m-auto text-center text-slate-400 p-10">
@@ -5885,7 +5898,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       {subTab === 'async' && <ScheduledTab user={user} classes={classes} />}
       {subTab === 'history' && (() => {
         const quizReports = [...reports, ...asyncReports]
-          .filter(r => r.type !== 'attendance' && r.type !== 'feedback')
+          .filter(r => r.type !== 'attendance' && r.type !== 'feedback' && r.type !== 'poll')
           .filter(r => !r.hidden);
         return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
       })()}
