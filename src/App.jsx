@@ -3023,6 +3023,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
           ...questions.map((_, i) => `Q${i + 1} Correct?`)
         ];
         const resultsData = [headers];
+        const overrides = saOverrides[report.id] || report.score_overrides || {};
         getEffectiveResponses(report).forEach(r => {
           let correctCount = 0;
           const ansRow = [];
@@ -3036,11 +3037,19 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
                 : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
             }
             ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
-            const isOk = rawAns !== undefined && (
-              q.type === 'sa'
-                ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
-                : (String(rawAns) === String(q.correct))
-            );
+            
+            let isOk = false;
+            if (rawAns !== undefined) {
+              const overrideKey = `${r.student_id}___${qIdx}`;
+              if (overrides[overrideKey] !== undefined) {
+                isOk = overrides[overrideKey];
+              } else {
+                isOk = q.type === 'sa'
+                  ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
+                  : (String(rawAns) === String(q.correct));
+              }
+            }
+
             isCorrectRow.push(isOk ? 'Yes' : 'No');
             if (isOk) correctCount++;
           });
@@ -3436,12 +3445,23 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus }) {
             if (hasDuplicateId) return res.student_name === stu.name;
             return true;
           });
+          const overrides = saOverrides[rep.id] || rep.score_overrides || {};
           if (stuResp) {
             let correctCount = 0;
             rep.questions.forEach((q, qIdx) => {
               const rawAns = stuResp.answers?.[qIdx];
               if (rawAns !== undefined) {
-                const isOk = q.type === 'sa' ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) : (String(rawAns) === String(q.correct));
+                let isOk = false;
+                const overrideKey = `${stuResp.student_id}___${qIdx}`;
+                
+                if (overrides[overrideKey] !== undefined) {
+                  isOk = overrides[overrideKey];
+                } else {
+                  isOk = q.type === 'sa' 
+                    ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim()) 
+                    : (String(rawAns) === String(q.correct));
+                }
+                
                 if (isOk) correctCount++;
               }
             });
