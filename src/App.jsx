@@ -5586,9 +5586,9 @@ function StudentPortal({ setRole, initialRoom }) {
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
         <form onSubmit={attemptJoin} className="bg-white p-12 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
           <div className="text-center mb-10">
-            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative ${roomType === 'feedback' ? 'bg-purple-100 text-purple-600' : (roomType === 'poll' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600')}`}>
-              {roomType === 'feedback' ? <BarChart2 size={40} /> : (roomType === 'poll' ? <Activity size={40} /> : <Users size={40} />)}
-              {roomType !== 'feedback' && roomType !== 'poll' && <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />}
+            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 relative ${roomType === 'feedback' ? 'bg-purple-100 text-purple-600' : (roomType === 'poll' ? 'bg-blue-100 text-blue-600' : (roomType === 'slides' ? 'bg-indigo-100 text-indigo-600' : 'bg-orange-100 text-orange-600'))}`}>
+              {roomType === 'feedback' ? <BarChart2 size={40} /> : (roomType === 'poll' ? <Activity size={40} /> : (roomType === 'slides' ? <Presentation size={40} /> : <Users size={40} />))}
+              {roomType !== 'feedback' && roomType !== 'poll' && roomType !== 'slides' && <Fingerprint size={16} className="absolute bottom-4 right-4 text-orange-400" />}
             </div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Student Entry</h2>
             <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-2 px-2 text-center break-words">{idError ? <span className="text-red-500 flex items-center justify-center gap-1"><AlertCircle size={12} className="shrink-0" /> {idError}</span> : "Enter details below"}</p>
@@ -5600,7 +5600,7 @@ function StudentPortal({ setRole, initialRoom }) {
                 placeholder="ROOM CODE" value={room} onChange={e => setRoom(e.target.value.toUpperCase())} required
               />
             </div>
-            {roomType !== 'feedback' && roomType !== 'poll' && (
+            {roomType !== 'feedback' && roomType !== 'poll' && roomType !== 'slides' && (
               <>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
@@ -5623,8 +5623,13 @@ function StudentPortal({ setRole, initialRoom }) {
                 This is an anonymous live poll. No Student ID is required to join.
               </p>
             )}
-            <button type="submit" disabled={checkingId} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl mt-2 transition-transform active:scale-95 flex justify-center items-center text-white ${roomType === 'feedback' ? 'bg-purple-600 shadow-purple-100' : (roomType === 'poll' ? 'bg-blue-600 shadow-blue-100' : 'bg-orange-500 shadow-orange-100')}`}>
-              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : (roomType === 'feedback' ? 'JOIN ANONYMOUSLY' : (roomType === 'poll' ? 'JOIN POLL' : 'ENTER ROOM'))}
+            {roomType === 'slides' && (
+              <p className="text-[10px] font-bold text-indigo-400 text-center px-4 leading-relaxed bg-indigo-50 py-3 rounded-2xl border border-indigo-100">
+                This is an anonymous presentation. No Student ID is required to join.
+              </p>
+            )}
+            <button type="submit" disabled={checkingId} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl mt-2 transition-transform active:scale-95 flex justify-center items-center text-white ${roomType === 'feedback' ? 'bg-purple-600 shadow-purple-100' : (roomType === 'poll' ? 'bg-blue-600 shadow-blue-100' : (roomType === 'slides' ? 'bg-indigo-600 shadow-indigo-100' : 'bg-orange-500 shadow-orange-100'))}`}>
+              {checkingId ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div> : (roomType === 'feedback' ? 'JOIN ANONYMOUSLY' : (roomType === 'poll' ? 'JOIN POLL' : (roomType === 'slides' ? 'JOIN SLIDES' : 'ENTER ROOM')))}
             </button>
           </div>
           <button type="button" onClick={clearStudentSession} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
