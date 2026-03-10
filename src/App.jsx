@@ -1049,7 +1049,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
   return (
     <div ref={containerRef} className={`flex-1 flex flex-col md:flex-row gap-6 ${isFullscreen ? 'h-screen p-6 bg-slate-950 text-white' : 'h-[80vh]'}`}>
       <div className={`w-full md:w-[75%] bg-slate-900 ${isFullscreen ? 'rounded-xl' : 'rounded-3xl'} overflow-hidden shadow-2xl relative flex flex-col`}>
-        {showQR && !isFullscreen && (
+        {showQR && (
           <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md p-4 rounded-3xl shadow-2xl flex flex-col items-center animate-in slide-in-from-top border-4 border-white/50">
              <div className="bg-white p-2 rounded-xl"><QRCode value={joinUrl} size={100} /></div>
              <div className="font-black text-blue-600 text-2xl tracking-[0.2em] mt-2 bg-blue-50 px-4 py-1 rounded-lg w-full text-center border border-blue-100">{roomCode}</div>
@@ -1057,7 +1057,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
              <button onClick={()=>setShowQR(false)} className="absolute top-2 right-2 text-slate-300 hover:text-slate-500 bg-slate-100/50 rounded-full p-1"><X size={14} /></button>
           </div>
         )}
-        {!showQR && !isFullscreen && (
+        {!showQR && (
           <button onClick={()=>setShowQR(true)} className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-black shadow-xl text-slate-700 border border-slate-200 hover:bg-white flex items-center gap-2 transition-all">
             <QrCode size={16} /> Join Info
           </button>
@@ -5353,7 +5353,7 @@ function StudentPortal({ setRole, initialRoom }) {
       return;
     }
 
-    if (roomData.type === 'feedback' || roomData.type === 'poll') {
+    if (roomData.type === 'feedback' || roomData.type === 'poll' || roomData.type === 'slides') {
       setSid(`anon_${localId}`);
       setName(roomData.type === 'poll' ? 'Poll Student' : 'Anonymous Student');
       setTempSession(roomData);
