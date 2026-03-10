@@ -1189,7 +1189,7 @@ function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaun
         const slideReports = [...reports, ...asyncReports]
           .filter(r => r.type === 'slides')
           .filter(r => !r.hidden);
-        return <ReportsTab reports={slideReports} allReports={slideReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
+        return <ReportsTab reports={slideReports} allReports={slideReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} isPolls={true} />;
       })()}
     </div>
   );
@@ -1280,7 +1280,7 @@ function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch
         const pollReports = [...reports, ...asyncReports]
           .filter(r => r.type === 'poll')
           .filter(r => !r.hidden);
-        return <ReportsTab reports={pollReports} allReports={pollReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
+        return <ReportsTab reports={pollReports} allReports={pollReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} isPolls={true} />;
       })()}
     </div>
   );
@@ -2888,7 +2888,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       )}
 
 
-      {category !== 'poll' && (
+      {category !== 'poll' && category !== 'slides' && (
         <>
           <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Assign to Class(s) (Required)</h2>
           <div className="space-y-2 mb-10 max-h-[150px] overflow-y-auto pr-2 custom-scroll">
@@ -2913,7 +2913,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         </>
       )}
 
-      {category !== 'poll' && (
+      {category !== 'poll' && category !== 'slides' && (
         <>
           <h2 className="text-xl font-black mb-4 text-slate-800 border-t pt-6">Quiz Settings</h2>
           <div className="space-y-2 mb-10">
@@ -2972,7 +2972,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
         <button onClick={() => { setType((defaultCategory === 'poll' || defaultCategory === 'slides') ? defaultCategory : null); setCategory(defaultCategory); setSelectedItems([]); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
-          disabled={selectedItems.length === 0 || (category !== 'poll' && assignedClasses.length === 0) || (category === 'async' && (!startTime || !endTime))}
+          disabled={selectedItems.length === 0 || (category !== 'poll' && category !== 'slides' && assignedClasses.length === 0) || (category === 'async' && (!startTime || !endTime))}
           className="flex-1 py-4 font-black text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 disabled:opacity-50"
         >
           {category === 'async' ? 'Schedule' : 'Launch'}
@@ -4356,7 +4356,7 @@ function FeedbackDashboard({ reports, classes }) {
   );
 }
 
-function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttendanceHistory, saOverrides, setSaOverrides, handleToggleSaOverride }) {
+function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttendanceHistory, saOverrides, setSaOverrides, handleToggleSaOverride, isPolls }) {
   const [view, setView] = useState('history'); 
   const [openReport, setOpenReport] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
@@ -4474,9 +4474,15 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
             const rawAns = r.answers?.[qIdx];
             let formattedAns = rawAns;
             if (rawAns !== undefined && q.type !== 'sa') {
-              formattedAns = q.options && q.type === 'mc'
-                ? String.fromCharCode(65 + Number(rawAns))
-                : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
+              if (q.type === 'word_cloud') {
+                formattedAns = String(rawAns);
+              } else if (q.type === 'rating') {
+                formattedAns = `${rawAns} Stars`;
+              } else {
+                formattedAns = q.options && q.type === 'mc'
+                  ? String.fromCharCode(65 + Number(rawAns))
+                  : (q.type === 'tf' ? (Number(rawAns) === 0 ? 'True' : 'False') : rawAns);
+              }
             }
             ansRow.push(formattedAns !== undefined ? formattedAns : 'N/A');
             
@@ -4486,9 +4492,13 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
               if (overrides[overrideKey] !== undefined) {
                 isOk = overrides[overrideKey];
               } else {
-                isOk = q.type === 'sa'
-                  ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
-                  : (String(rawAns) === String(q.correct));
+                if (q.type === 'word_cloud' || q.type === 'rating') {
+                  isOk = true; // Always 'correct' for participation
+                } else {
+                  isOk = q.type === 'sa'
+                    ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
+                    : (String(rawAns) === String(q.correct));
+                }
               }
             }
 
@@ -4526,15 +4536,20 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
         if (rawAns !== undefined) {
           if (q.type === 'mc') display = String.fromCharCode(65 + Number(rawAns));
           else if (q.type === 'tf') display = Number(rawAns) === 0 ? 'True' : 'False';
+          else if (q.type === 'rating') display = `${rawAns} Stars`;
           else display = String(rawAns);
           // Check for manual override first, then fall back to auto-grade
           const overrideKey = `${r.student_id}___${qIdx}`;
           if (overrides[overrideKey] !== undefined) {
             isOk = overrides[overrideKey];
           } else {
-            isOk = q.type === 'sa'
-              ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
-              : (String(rawAns) === String(q.correct));
+            if (q.type === 'word_cloud' || q.type === 'rating') {
+              isOk = true;
+            } else {
+              isOk = q.type === 'sa'
+                ? (q.correct && String(rawAns).toLowerCase().trim() === String(q.correct).toLowerCase().trim())
+                : (String(rawAns) === String(q.correct));
+            }
           }
           if (isOk) correctCount++;
         }
@@ -4624,7 +4639,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                   <th className="p-4 border-b border-slate-200">ID</th>
                   {activeReport.type === 'attendance' && <th className="p-4 border-b border-slate-200 text-center">Status</th>}
                   {(activeReport.questions || []).map((_, i) => <th key={i} className="p-4 border-b border-slate-200 text-center">Q{i + 1}</th>)}
-                  {activeReport.type !== 'attendance' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
+                  {activeReport.type !== 'attendance' && activeReport.type !== 'poll' && activeReport.type !== 'slides' && <th className="p-4 border-b border-slate-200 text-center text-blue-600">Total %</th>}
                   <th className="p-4 border-b border-slate-200 text-center">Actions</th>
                 </tr>
               </thead>
@@ -4685,14 +4700,21 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                             </td>
                           );
                         }
-                        // MC / TF plain cell
+                        // MC / TF plain cell, but handling Polls too
+                        if (activeReport.type === 'poll' || activeReport.type === 'slides') {
+                          const qType = activeReport.questions?.[qi]?.type;
+                          if (qType === 'word_cloud' || qType === 'rating') {
+                            return <td key={qi} className="p-4 text-center text-slate-700 font-bold">{pq.display}</td>;
+                          }
+                        }
+                        
                         return (
                           <td key={qi} className={`p-4 text-center ${pq.isOk ? 'text-green-600' : 'text-red-500'}`}>
                             {pq.isOk ? <span>{pq.display} ✓</span> : <span>{pq.display} ✗</span>}
                           </td>
                         );
                       })}
-                      {activeReport.type !== 'attendance' && (
+                      {activeReport.type !== 'attendance' && activeReport.type !== 'poll' && activeReport.type !== 'slides' && (
                         <td className={`p-4 text-center font-black text-lg ${s.total >= 80 ? 'text-green-600' : s.total >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{s.total}%</td>
                       )}
                       <td className="p-4 text-center">
@@ -4712,7 +4734,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
                     </tr>
                   );
                 })}
-                {activeReport.type !== 'attendance' && activeReport.type !== 'async_survey' && scored.length > 0 && (
+                {activeReport.type !== 'attendance' && activeReport.type !== 'async_survey' && activeReport.type !== 'poll' && activeReport.type !== 'slides' && scored.length > 0 && (
                   <tr className="bg-slate-50/50 border-t-4 border-slate-200">
                     <td colSpan="4" className="p-4 text-right font-black uppercase tracking-widest text-slate-500 text-xs">% Correct</td>
                     {difficultyIndices.map((di, i) => (
@@ -4849,7 +4871,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
           <div className="flex flex-col md:flex-row gap-4 mb-4">
             <input value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Search sessions by name..." className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-300" />
             <div className="flex flex-wrap gap-2 items-center">
-              {!isAttendanceHistory && [
+              {!isAttendanceHistory && !isPolls && [
                 { id: 'teacher_paced', label: 'Sync', icon: <BarChart2 size={14} />, color: 'purple' },
                 { id: 'student_paced', label: 'Async', icon: <BarChart2 size={14} />, color: 'blue' }
               ].map(f => (
