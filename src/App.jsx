@@ -1944,16 +1944,23 @@ function TeacherPortal({ setRole, user }) {
   useEffect(() => {
     if (!roomCode) return;
 
-    // Check if room exists first
-    supabase.from('rooms').select('*').eq('id', roomCode).single().then(res => {
-      if (res.data) {
-        setSession(res.data);
-        // Fetch existing responses just in case a reconnect happened
-        supabase.from('responses').select('*').eq('room_code', roomCode).then(r => {
-          if (r.data) setResponses(r.data);
-        });
-      }
-    });
+    // Helper: re-fetch room + responses from DB (used on init + reconnect)
+    const refetchAll = () => {
+      supabase.from('rooms').select('*').eq('id', roomCode).single().then(res => {
+        if (res.data) {
+          setSession(res.data);
+          supabase.from('responses').select('*').eq('room_code', roomCode).then(r => {
+            if (r.data) setResponses(r.data);
+          });
+        } else {
+          // Room was deleted while we were offline
+          setSession(null);
+        }
+      });
+    };
+
+    // Initial fetch
+    refetchAll();
 
     const roomSub = supabase.channel(`room-chan-${roomCode}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomCode}` }, p => {
@@ -1978,9 +1985,15 @@ function TeacherPortal({ setRole, user }) {
         }
       }).subscribe();
 
+    // === AUTO-RECONNECT: when browser comes back online, re-fetch everything ===
+    // Catches events the realtime channel may have missed during a network drop
+    const handleOnline = () => refetchAll();
+    window.addEventListener('online', handleOnline);
+
     return () => {
       supabase.removeChannel(roomSub);
       supabase.removeChannel(respSub);
+      window.removeEventListener('online', handleOnline);
     };
   }, [roomCode]);
 
@@ -5164,8 +5177,31 @@ function StudentPortal({ setRole, initialRoom }) {
     }
   }, [joined, room, sid, name]);
 
+  // === LOCAL BACKUP of answers — never lose student work ===
+  const answersBackupKey = `ClassLabX_Answers_${room?.toUpperCase()}_${sid || localId}`;
+  // Save answers to localStorage on every change as a safety net
+  useEffect(() => {
+    if (joined && Object.keys(answers).length > 0) {
+      try { localStorage.setItem(answersBackupKey, JSON.stringify({ answers, idx })); } catch {}
+    }
+  }, [answers, idx, joined, answersBackupKey]);
+
+  // Restore answers from localStorage backup if state is empty (e.g., after hard refresh)
+  useEffect(() => {
+    if (joined && Object.keys(answers).length === 0) {
+      try {
+        const backup = JSON.parse(localStorage.getItem(answersBackupKey));
+        if (backup?.answers && Object.keys(backup.answers).length > 0) {
+          setAnswers(backup.answers);
+          if (backup.idx !== undefined) setIdx(backup.idx);
+        }
+      } catch {}
+    }
+  }, [joined, answersBackupKey]);
+
   const clearStudentSession = () => {
     localStorage.removeItem('ClassLabX_StudentState');
+    try { localStorage.removeItem(answersBackupKey); } catch {}
     setRole(null);
   };
 
@@ -5206,10 +5242,20 @@ function StudentPortal({ setRole, initialRoom }) {
 
     const code = room.toUpperCase();
 
-    // Initial check
-    supabase.from('rooms').select('*').eq('id', code).single().then(res => {
-      if (res.data) setSession(res.data);
-    });
+    // Helper: fetch latest room state from DB (used on initial load + reconnect)
+    const refetchRoom = () => {
+      supabase.from('rooms').select('*').eq('id', code).single().then(res => {
+        if (res.data) setSession(res.data);
+        else if (res.error?.code === 'PGRST116') {
+          // Room not found — it was deleted (session ended)
+          setSession(null);
+          setQuizEnded(true);
+        }
+      });
+    };
+
+    // Initial fetch
+    refetchRoom();
 
     const roomSub = supabase.channel(`student-chan-${code}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${code}` }, s => {
@@ -5221,10 +5267,35 @@ function StudentPortal({ setRole, initialRoom }) {
         }
       }).subscribe();
 
+    // === AUTO-RECONNECT: when browser comes back online, re-fetch room state ===
+    // This catches cases where the realtime channel missed events during a disconnect
+    const handleOnline = () => {
+      refetchRoom();
+      // Also flush any locally-backed-up answers to the server
+      try {
+        const backup = JSON.parse(localStorage.getItem(`ClassLabX_Answers_${code}_${sid || localId}`));
+        if (backup?.answers && Object.keys(backup.answers).length > 0) {
+          const respId = `${code}_${sid || localId}`;
+          supabase.from('responses').upsert({
+            id: respId,
+            room_code: code,
+            student_name: name,
+            student_id: sid,
+            answers: backup.answers,
+            current_idx: backup.idx ?? 0,
+            ts: Date.now()
+          }).then(() => {});
+        }
+      } catch {}
+    };
+
+    window.addEventListener('online', handleOnline);
+
     return () => {
       supabase.removeChannel(roomSub);
+      window.removeEventListener('online', handleOnline);
     };
-  }, [joined, room]);
+  }, [joined, room, sid, localId, name]);
 
   // Restore answers & question index when rejoining via cached localStorage state
   useEffect(() => {
@@ -5245,6 +5316,8 @@ function StudentPortal({ setRole, initialRoom }) {
   // Save progress helper (used by submit, auto-save, and timer expiry)
   const saveProgress = useCallback(async (currentAnswers, currentIdx) => {
     const respId = `${room.toUpperCase()}_${sid || localId}`;
+    // Always save to localStorage first as a safety net
+    try { localStorage.setItem(`ClassLabX_Answers_${room.toUpperCase()}_${sid || localId}`, JSON.stringify({ answers: currentAnswers, idx: currentIdx })); } catch {}
     try {
       await supabase.from('responses').upsert({
         id: respId,
@@ -5256,7 +5329,7 @@ function StudentPortal({ setRole, initialRoom }) {
         ts: Date.now()
       });
     } catch { 
-      // Network ignore
+      // Network failed — answers are safe in localStorage and will sync when online
     }
   }, [room, sid, localId, name]);
 
