@@ -6,11 +6,20 @@ import {
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, AlertTriangle,
   UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check, Settings, Send, Cloud, Star, Monitor, Presentation, ArrowUp, ArrowDown
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import ReactPlayer from 'react-player';
 import QRCode from 'react-qr-code';
+
+// Lazy loaders for heavy libraries
+const loadXLSX = async () => {
+  const XLSX = await import('xlsx');
+  return XLSX;
+};
+
+const loadPDF = async () => {
+  const { jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+  return { jsPDF, autoTable };
+};
 
 const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Korea, South", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe", "Other"
@@ -52,6 +61,15 @@ function MainApp() {
   const [authError, setAuthError] = useState(null);
   const [loadingContext, setLoadingContext] = useState(true);
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = useCallback((message, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  }, []);
 
   useEffect(() => {
     // Check URL params for QR scanning
@@ -141,10 +159,15 @@ function MainApp() {
 
   if (!role || isRecoveryMode) return <RolePicker setRole={setRole} user={user} isRecoveryMode={isRecoveryMode} setIsRecoveryMode={setIsRecoveryMode} />;
 
-  return role === 'teacher' ? (
-    <TeacherPortal setRole={setRole} user={user} />
-  ) : (
-    <StudentPortal setRole={setRole} initialRoom={initialRoom} />
+  return (
+    <>
+      <ToastContainer toasts={toasts} setToasts={setToasts} />
+      {role === 'teacher' ? (
+        <TeacherPortal setRole={setRole} user={user} showToast={showToast} />
+      ) : (
+        <StudentPortal setRole={setRole} initialRoom={initialRoom} showToast={showToast} />
+      )}
+    </>
   );
 }
 
@@ -159,7 +182,38 @@ function SplashScreen({ message, isError }) {
   );
 }
 
-function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
+function ToastContainer({ toasts, setToasts }) {
+  return (
+    <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+      {toasts.map(toast => (
+        <div
+          key={toast.id}
+          className={`
+            pointer-events-auto min-w-[300px] p-4 rounded-2xl shadow-2xl border flex items-center gap-3
+            animate-in slide-in-from-right duration-300
+            ${toast.type === 'success' ? 'bg-green-50 border-green-100 text-green-800' :
+              toast.type === 'error' ? 'bg-red-50 border-red-100 text-red-800' :
+              toast.type === 'warning' ? 'bg-orange-50 border-orange-100 text-orange-800' :
+              'bg-blue-50 border-blue-100 text-blue-800'}
+          `}
+        >
+          {toast.type === 'success' && <CheckCircle size={20} className="shrink-0" />}
+          {toast.type === 'error' && <XCircle size={20} className="shrink-0" />}
+          {(toast.type === 'warning' || toast.type === 'info') && <AlertCircle size={20} className="shrink-0" />}
+          <p className="font-bold text-sm flex-1">{toast.message}</p>
+          <button 
+            onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+            className="hover:opacity-70 transition-opacity"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode, showToast }) {
   const [showTeacherAuth, setShowTeacherAuth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -197,7 +251,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
     setLoading(true);
     if (authMode === 'signup') {
       if (!selectedCountry) {
-        alert("Please select your country.");
+        showToast("Please select your country.", "warning");
         setLoading(false);
         return;
       }
@@ -214,28 +268,28 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
           }
         }
       });
-      if (error) alert("Sign Up Error: " + error.message);
+      if (error) showToast("Sign Up Error: " + error.message, "error");
       else {
-        alert("Account created! Please check your email and click the confirmation link before logging in.");
+        showToast("Account created! Please check your email and click the confirmation link before logging in.", "success");
         setAuthMode('login');
       }
     } else if (authMode === 'forgot') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin
       });
-      if (error) alert("Error: " + error.message);
-      else alert("Check your email for the password reset link!");
+      if (error) showToast("Error: " + error.message, "error");
+      else showToast("Check your email for the password reset link!", "success");
     } else if (authMode === 'recovery') {
       const { error } = await supabase.auth.updateUser({ password });
-      if (error) alert("Error updating password: " + error.message);
+      if (error) showToast("Error updating password: " + error.message, "error");
       else {
-        alert("Password updated successfully! You are now logged in.");
+        showToast("Password updated successfully! You are now logged in.", "success");
         setIsRecoveryMode(false);
         setRole('teacher');
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert("Login Error: " + error.message);
+      if (error) showToast("Login Error: " + error.message, "error");
       else setRole('teacher');
     }
     setLoading(false);
@@ -269,7 +323,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
     });
 
     if (error) {
-      alert("Google Login Error: " + error.message);
+      showToast("Google Login Error: " + error.message, "error");
       setLoading(false);
     } else if (data?.url) {
       // Break out of the iframe entirely
@@ -479,7 +533,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode }) {
 }
 
 // --- Profile Completion Overlay for Google/OAuth Sign-ups ---
-function ProfileCompletionOverlay({ profile, setProfile, user }) {
+function ProfileCompletionOverlay({ profile, setProfile, user, showToast }) {
   const [fullName, setFullName] = useState(profile?.full_name || user?.user_metadata?.full_name || '');
   const [selectedCountry, setSelectedCountry] = useState('');
   const [customCountry, setCustomCountry] = useState('');
@@ -490,7 +544,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCountry) {
-      alert("Please select your country.");
+      showToast("Please select your country.", "warning");
       return;
     }
 
@@ -506,7 +560,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
 
     const { error } = await supabase.from('profiles').upsert(updates);
     if (error) {
-      alert("Error updating profile: " + error.message);
+      showToast("Error updating profile: " + error.message, "error");
     } else {
       setProfile({ ...profile, ...updates });
     }
@@ -643,7 +697,7 @@ function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
 
   const saveDeck = async (e) => {
     e.preventDefault();
-    if (!videoUrl) return alert("Please provide a Google Slides link.");
+    if (!videoUrl) return showToast("Please provide a Google Slides link.", "warning");
     
     let finalUrl = videoUrl;
     if (finalUrl.includes('docs.google.com/presentation') && (finalUrl.includes('/edit') || finalUrl.includes('/view'))) {
@@ -666,7 +720,7 @@ function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
       res = await supabase.from('quizzes').insert(data).select().single();
     }
 
-    if (res.error) alert(res.error.message);
+    if (res.error) showToast(res.error.message, "error");
     else {
       if (editingDeck) setQuizzes(quizzes.map(q => q.id === res.data.id ? res.data : q));
       else setQuizzes([res.data, ...quizzes]);
@@ -1321,7 +1375,7 @@ function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch
   );
 }
 
-function PollsTab({ polls, setPolls, user }) {
+function PollsTab({ polls, setPolls, user, showToast }) {
   const [showModal, setShowModal] = useState(false);
   const [editingPoll, setEditingPoll] = useState(null);
   const [title, setTitle] = useState('');
@@ -1363,7 +1417,7 @@ function PollsTab({ polls, setPolls, user }) {
       res = await supabase.from('polls').insert(data).select().single();
     }
 
-    if (res.error) alert(res.error.message);
+    if (res.error) showToast(res.error.message, "error");
     else {
       if (editingPoll) setPolls(polls.map(p => p.id === res.data.id ? res.data : p));
       else setPolls([res.data, ...polls]);
@@ -1375,7 +1429,7 @@ function PollsTab({ polls, setPolls, user }) {
   const deletePoll = async (id) => {
     if (!window.confirm("Delete this poll?")) return;
     const { error } = await supabase.from('polls').delete().eq('id', id);
-    if (error) alert(error.message);
+    if (error) showToast(error.message, "error");
     else setPolls(polls.filter(p => p.id !== id));
   };
 
@@ -1660,7 +1714,7 @@ function PollResultsTab({ session, responses, onEnd, roomCode }) {
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(joinUrl);
-                  alert("Join link copied!");
+                  showToast("Join link copied!", "success");
                 }}
                 className="flex items-center justify-center gap-2 text-xs font-black text-slate-400 hover:text-blue-600 transition-colors"
               >
@@ -1718,7 +1772,7 @@ function PollResultsTab({ session, responses, onEnd, roomCode }) {
 // ==========================================
 //               TEACHER PORTAL
 // ==========================================
-function TeacherPortal({ setRole, user }) {
+function TeacherPortal({ setRole, user, showToast }) {
   useEffect(() => {
     if (!user) setRole(null);
   }, [user, setRole]);
@@ -2002,7 +2056,7 @@ function TeacherPortal({ setRole, user }) {
 
     // Prevent launching a new synchronous live session if one is already active
     if (!isAsync && session && !session.is_async) {
-      alert("Another live session is currently active. Please close the active session before launching a new one.");
+      showToast("Another live session is currently active. Please close the active session before launching a new one.", "warning");
       return null;
     }
 
@@ -2034,7 +2088,7 @@ function TeacherPortal({ setRole, user }) {
 
     const { error } = await supabase.from('rooms').insert(data);
     if (error) {
-      alert("Error creating room: " + error.message);
+      showToast("Error creating room: " + error.message, "error");
       return null;
     } else {
       if (isAsync) {
@@ -2218,7 +2272,7 @@ function TeacherPortal({ setRole, user }) {
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-        {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} />}
+        {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} showToast={showToast} />}
         {activeTab === 'quizzes' && (
           <QuizzesTabMain
             quizzes={quizzes}
@@ -2238,6 +2292,7 @@ function TeacherPortal({ setRole, user }) {
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
             goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
+            showToast={showToast}
           />
         )}
         {activeTab === 'polls' && (
@@ -2261,10 +2316,11 @@ function TeacherPortal({ setRole, user }) {
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
             goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
+            showToast={showToast}
           />
         )}
-        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} />}
-        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} />}
+        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
+        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
       </main>
 
 
@@ -2337,7 +2393,7 @@ function TeacherPortal({ setRole, user }) {
 
 // --- Teacher Sections ---
 
-function ScheduledTab({ user, classes }) {
+function ScheduledTab({ user, classes, showToast }) {
   const [scheduledRooms, setScheduledRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingRoom, setEditingRoom] = useState(null);
@@ -2386,7 +2442,7 @@ function ScheduledTab({ user, classes }) {
 
   const saveEdit = async (room) => {
     if (!editStart || !editEnd) {
-      alert("Start and end time are required.");
+      showToast("Start and end time are required.", "warning");
       return;
     }
     
@@ -2394,7 +2450,7 @@ function ScheduledTab({ user, classes }) {
     const endObj = new Date(editEnd);
     
     if (endObj <= startObj) {
-      alert("End time must be after start time.");
+      showToast("End time must be after start time.", "warning");
       return;
     }
 
@@ -2409,7 +2465,7 @@ function ScheduledTab({ user, classes }) {
     if (!error) {
       setScheduledRooms(prev => prev.map(r => r.id === room.id ? { ...r, start_time: startIso, end_time: endIso } : r));
     } else {
-      alert("Failed to update schedules: " + error.message);
+      showToast("Failed to update schedules: " + error.message, "error");
     }
     setEditingRoom(null);
   };
@@ -2420,7 +2476,7 @@ function ScheduledTab({ user, classes }) {
     if (!error) {
       setScheduledRooms(prev => prev.map(r => r.id === room.id ? { ...r, is_paused: newState } : r));
     } else {
-      alert("Error: " + error.message);
+      showToast("Error: " + error.message, "error");
     }
   };
 
@@ -2636,7 +2692,7 @@ function ScheduledTab({ user, classes }) {
                         <button 
                           onClick={() => {
                             navigator.clipboard.writeText(`${window.location.href.split('?')[0]}?room=${room.id}`);
-                            alert("Join Link Copied!");
+                            showToast("Join Link Copied!", "success");
                           }}
                           className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
                           title="Copy Link"
@@ -2715,7 +2771,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
           <input readOnly value={scheduledLink.url} className="flex-1 bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl font-bold text-slate-700 text-sm focus:outline-none focus:border-blue-400 transition-colors" />
           <button onClick={() => {
             navigator.clipboard.writeText(scheduledLink.url);
-            alert("Link copied to clipboard!");
+            showToast("Link copied to clipboard!", "success");
           }} className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 transition-all active:scale-95 flex items-center justify-center">Copy</button>
         </div>
       </div>
@@ -2746,20 +2802,20 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       if (profile?.subscription === 'free') {
         const attendanceCount = reports.filter(r => r.type === 'attendance').length;
         if (attendanceCount >= 3) {
-          alert("Free Tier Limit: You can only have up to 3 attendance sessions. Please upgrade to Pro to start more.");
+          showToast("Free Tier Limit: You can only have up to 3 attendance sessions. Please upgrade to Pro to start more.", "warning");
           return;
         }
       }
       if (assignedClasses.length === 0) {
-        alert("Please select at least one class.");
+        showToast("Please select at least one class.", "warning");
         return;
       }
       if (attendanceMode === 'new' && !sessionName) {
-        alert("Please enter a session name.");
+        showToast("Please enter a session name.", "warning");
         return;
       }
       if (attendanceMode === 'relaunch' && !selectedOldAttendance) {
-        alert("Please select a previous session to relaunch.");
+        showToast("Please select a previous session to relaunch.", "warning");
         return;
       }
 
@@ -3308,7 +3364,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   );
 } // Close LaunchTab
 
-function QuizzesTab({ quizzes, setQuizzes, user, profile }) {
+function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
   const [edit, setEdit] = useState(null);
 
   const save = async (data) => {
@@ -3319,20 +3375,20 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile }) {
         if (data.type === 'survey') {
           const surveysCount = quizzes.filter(q => q.type === 'survey').length;
           if (surveysCount >= 3) {
-            alert("Free Tier Limit: You can only have up to 3 surveys. Please upgrade to Pro to create more.");
+            showToast("Free Tier Limit: You can only have up to 3 surveys. Please upgrade to Pro to create more.", "warning");
             return;
           }
         } else {
           const quizzesCount = quizzes.filter(q => q.type !== 'survey').length;
           if (quizzesCount >= 3) {
-            alert("Free Tier Limit: You can only have up to 3 quizzes. Please upgrade to Pro to create more.");
+            showToast("Free Tier Limit: You can only have up to 3 quizzes. Please upgrade to Pro to create more.", "warning");
             return;
           }
         }
       }
 
       const { data: ret, error } = await supabase.from('quizzes').insert({ user_id: user.id, title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).select().single();
-      if (error) alert("Save error: " + error.message);
+      if (error) showToast("Save error: " + error.message, "error");
       else saved = ret;
     } else {
       // Edit limits for free tier: only the first 3 are editable if they have more
@@ -3340,13 +3396,13 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile }) {
         const sorted = [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const indexInHistory = sorted.findIndex(q => q.id === data.id);
         if (indexInHistory >= 3) {
-          alert("Free Tier Restriction: You can only edit your 3 oldest items. This item is locked. Please upgrade to Pro to edit all items.");
+          showToast("Free Tier Restriction: You can only edit your 3 oldest items. This item is locked. Please upgrade to Pro to edit all items.", "warning");
           return;
         }
       }
 
       const { data: ret, error } = await supabase.from('quizzes').update({ title: data.title, type: data.type, video_url: data.video_url, questions: data.questions }).eq('id', data.id).select().single();
-      if (error) alert("Save error: " + error.message);
+      if (error) showToast("Save error: " + error.message, "error");
       else saved = ret;
     }
 
@@ -3360,12 +3416,12 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile }) {
   const del = async (id) => {
     if (window.confirm("Delete this cloud quiz?")) {
       const { error } = await supabase.from('quizzes').delete().eq('id', id);
-      if (error) alert("Delete Error: " + error.message);
+      if (error) showToast("Delete Error: " + error.message, "error");
       else setQuizzes(quizzes.filter(q => q.id !== id));
     }
   };
 
-  if (edit) return <QuizEditor quiz={edit} onSave={save} onCancel={() => setEdit(null)} profile={profile} />;
+  if (edit) return <QuizEditor quiz={edit} onSave={save} onCancel={() => setEdit(null)} profile={profile} showToast={showToast} />;
 
   return (
     <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
@@ -3405,7 +3461,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile }) {
   );
 }
 
-function QuizEditor({ quiz, onSave, onCancel, profile }) {
+function QuizEditor({ quiz, onSave, onCancel, profile, showToast }) {
   const [title, setTitle] = useState(quiz.title || '');
   const [type, setType] = useState(quiz.type || null);
   const [videoUrl, setVideoUrl] = useState(quiz.video_url || '');
@@ -3467,7 +3523,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
       n[idx].image_url = data.publicUrl;
       setQs(n);
     } catch (error) {
-      alert("Error uploading image: " + error.message);
+      showToast("Error uploading image: " + error.message, "error");
     } finally {
       setUploadingImageFor(null);
     }
@@ -3556,7 +3612,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
 
         if (newQs.length > 0) setQs([...qs, ...newQs]);
       } catch (err) {
-        alert("Failed to parse Quiz Excel file.");
+        showToast("Failed to parse Quiz Excel file.", "error");
       }
       e.target.value = null;
     };
@@ -3711,7 +3767,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile }) {
   );
 }
 
-function ResultsTab({ session, responses, onEnd, roomCode }) {
+function ResultsTab({ session, responses, onEnd, roomCode, showToast }) {
   const [showQR, setShowQR] = useState(true);
   const [attendanceToken, setAttendanceToken] = useState(() => Date.now().toString());
 
@@ -5125,7 +5181,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
 // ==========================================
 //               STUDENT PORTAL
 // ==========================================
-function StudentPortal({ setRole, initialRoom }) {
+function StudentPortal({ setRole, initialRoom, showToast }) {
   // Initialize from cache if refresh happened mid-session
   const [cachedState] = useState(() => {
     try {
@@ -6003,7 +6059,7 @@ function StudentPortal({ setRole, initialRoom }) {
 // ==========================================
 //               CLASSES & ROSTERS
 // ==========================================
-function ClassesTab({ classes, setClasses, user }) {
+function ClassesTab({ classes, setClasses, user, showToast }) {
   const [selectedClass, setSelectedClass] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -6026,6 +6082,7 @@ function ClassesTab({ classes, setClasses, user }) {
         setClasses(classes.filter(c => c.id !== id));
         setSelectedClass(null);
       }}
+      showToast={showToast}
     />;
   }
 
@@ -6075,7 +6132,7 @@ function ClassesTab({ classes, setClasses, user }) {
   );
 }
 
-function CreateClassView({ user, onCancel, onSaved }) {
+function CreateClassView({ user, onCancel, onSaved, showToast }) {
   const [name, setName] = useState('');
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -6089,8 +6146,9 @@ function CreateClassView({ user, onCancel, onSaved }) {
 
     // Preview the Excel file
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const XLSX = await loadXLSX();
         const bstr = evt.target.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
@@ -6249,7 +6307,7 @@ function CreateClassView({ user, onCancel, onSaved }) {
   );
 }
 
-function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
+function ClassDetailView({ cls, onUpdate, onBack, onDeleted, showToast }) {
   const [students, setStudents] = useState(cls.students || []);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -6267,6 +6325,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
+        const XLSX = await loadXLSX();
         const bstr = evt.target.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
@@ -6315,7 +6374,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           }
 
           if (duplicatesSkipped > 0) {
-            alert(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this class.`);
+            showToast(`Skipped ${duplicatesSkipped} student(s) from the import because their Student ID or Email already exists in this class.`, "warning");
           }
 
           if (parsedStudents.length > 0) {
@@ -6327,7 +6386,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
           }
         }
       } catch (err) {
-        alert("Failed to append: " + err.message);
+        showToast("Failed to append: " + err.message, "error");
       }
       setLoading(false);
       e.target.value = null; // reset input
@@ -6335,7 +6394,8 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
     reader.readAsBinaryString(f);
   };
 
-  const downloadRosterTemplate = () => {
+  const downloadRosterTemplate = async () => {
+    const XLSX = await loadXLSX();
     const ws = XLSX.utils.aoa_to_sheet([
       ['ID', 'Name', 'Email'],
       ['1001', 'Alice Smith', 'alice@school.edu'],
@@ -6353,7 +6413,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 
     const { data, error } = await supabase.from('students').insert([newStudent]).select().single();
     setLoading(false);
-    if (error) return alert("Failed to add: " + error.message);
+    if (error) return showToast("Failed to add: " + error.message, "error");
 
     const nextStudents = [data, ...students];
     setStudents(nextStudents);
@@ -6364,7 +6424,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
   const deleteStudent = async (id) => {
     if (!window.confirm("Remove this student?")) return;
     const { error } = await supabase.from('students').delete().eq('id', id);
-    if (error) return alert("Failed to delete: " + error.message);
+    if (error) return showToast("Failed to delete: " + error.message, "error");
 
     const nextStudents = students.filter(s => s.id !== id);
     setStudents(nextStudents);
@@ -6376,7 +6436,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
     setLoading(true);
     const { error } = await supabase.from('students').delete().eq('class_id', cls.id);
     setLoading(false);
-    if (error) return alert("Failed to clear: " + error.message);
+    if (error) return showToast("Failed to clear: " + error.message, "error");
 
     setStudents([]);
     onUpdate({ ...cls, students: [] });
@@ -6387,7 +6447,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
     setLoading(true);
     const { error } = await supabase.from('classes').delete().eq('id', cls.id);
     setLoading(false);
-    if (error) alert("Failed to delete class: " + error.message);
+    if (error) showToast("Failed to delete class: " + error.message, "error");
     else onDeleted(cls.id);
   };
 
@@ -6516,7 +6576,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 //          NEW FEATURE TAB CONTAINERS
 // ==========================================
 
-function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession }) {
+function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession, showToast }) {
   const isLiveQuizUrl = new URLSearchParams(window.location.search).get('room');
   const defaultTab = session || isLiveQuizUrl ? 'live' : 'manage';
   const [subTab, setSubTab] = useState(defaultTab);
@@ -6632,8 +6692,9 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
     }
   }
 
-  const exportGradebook = () => {
+  const exportGradebook = async () => {
     if (!gradebookClass) return;
+    const XLSX = await loadXLSX();
     const wb = XLSX.utils.book_new();
     const classSettings = gradebookSettings[selectedClassId] || { mode: 'simple' };
     const classWeights = quizWeights[selectedClassId] || {};
@@ -6657,8 +6718,9 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
     XLSX.writeFile(wb, `ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.xlsx`);
   };
 
-  const exportGradebookPDF = () => {
+  const exportGradebookPDF = async () => {
     if (!gradebookClass) return;
+    const { jsPDF, autoTable } = await loadPDF();
     const doc = new jsPDF('landscape');
     const classSettings = gradebookSettings[selectedClassId] || { mode: 'simple' };
     const classWeights = quizWeights[selectedClassId] || {};
@@ -6693,7 +6755,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       doc.save(`ClassLabX_Gradebook_${gradebookClass.name.replace(/\s+/g, '_')}.pdf`);
     } catch (e) {
       console.error(e);
-      alert('Failed to generate PDF: ' + e.message);
+      showToast('Failed to generate PDF: ' + e.message, 'error');
     }
   };
 
@@ -6708,7 +6770,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
     if (draftMode === 'weighted') {
       const total = Object.values(draftWeights).reduce((a, b) => a + b, 0);
       if (total !== 100) {
-        alert(`Total weight must equal exactly 100%. Current total is ${total}%.`);
+        showToast(`Total weight must equal exactly 100%. Current total is ${total}%.`, "warning");
         return;
       }
     }
@@ -6740,16 +6802,16 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   return (
     <div>
       <SubNav />
-      {subTab === 'manage' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} />}
+      {subTab === 'manage' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} showToast={showToast} />}
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-           <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} goToLiveSession={goToLiveSession} />
+           <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} goToLiveSession={goToLiveSession} showToast={showToast} />
         </div>
       )}
       {subTab === 'live' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
           {session && (session.type === 'teacher_paced' || session.type === 'student_paced') ? (
-            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} showToast={showToast} />
           ) : (
              <div className="m-auto text-center text-slate-400 p-10">
                <Activity size={48} className="mx-auto mb-4 opacity-50" />
@@ -6760,12 +6822,12 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
           )}
         </div>
       )}
-      {subTab === 'async' && <ScheduledTab user={user} classes={classes} />}
+      {subTab === 'async' && <ScheduledTab user={user} classes={classes} showToast={showToast} />}
       {subTab === 'history' && (() => {
         const quizReports = [...reports, ...asyncReports]
           .filter(r => r.type !== 'attendance' && r.type !== 'feedback' && r.type !== 'poll' && r.type !== 'slides')
           .filter(r => !r.hidden);
-        return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
+        return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} showToast={showToast} />;
       })()}
       {subTab === 'gradebook' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
@@ -6937,7 +6999,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   );
 }
 
-function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, goToLiveSession }) {
+function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, goToLiveSession, showToast }) {
   const [subTab, setSubTab] = useState(session?.type === 'attendance' ? 'live' : 'launch');
   // Always jump to live when an attendance session starts
   const effectiveSubTab = (session && session.type === 'attendance') ? 'live' : subTab;
@@ -7003,8 +7065,9 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
     updateReportStatus(rep.id, studentId, nextStatus);
   };
 
-  const exportAttendanceReport = () => {
+  const exportAttendanceReport = async () => {
     if (!reportClass) return;
+    const XLSX = await loadXLSX();
     const wb = XLSX.utils.book_new();
     const wsData = [];
     const headers = ['Student ID', 'Name', 'Email', 'Overall Attendance %'];
@@ -7025,7 +7088,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
     XLSX.writeFile(wb, `ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.xlsx`);
   };
 
-  const exportAttendancePDF = () => {
+  const exportAttendancePDF = async () => {
     if (!reportClass) return;
     const doc = new jsPDF('landscape');
 
@@ -7043,6 +7106,8 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
     });
 
     try {
+      const { jsPDF, autoTable } = await loadPDF();
+      const doc = new jsPDF('landscape');
       autoTable(doc, {
         head: [headers],
         body: body,
@@ -7059,7 +7124,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       doc.save(`ClassLabX_Attendance_${reportClass.name.replace(/\s+/g, '_')}.pdf`);
     } catch (e) {
       console.error(e);
-      alert('Failed to generate PDF: ' + e.message);
+      showToast('Failed to generate PDF: ' + e.message, 'error');
     }
   };
 
@@ -7093,7 +7158,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       {effectiveSubTab === 'live' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
           {session?.type === 'attendance' ? (
-            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} showToast={showToast} />
           ) : (
              <div className="m-auto text-center text-slate-400 p-10">
                <UserCheck size={48} className="mx-auto mb-4 opacity-50" />
@@ -7106,7 +7171,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       )}
       {effectiveSubTab === 'history' && (() => {
         const attendanceReports = reports.filter(r => r.type === 'attendance' && !r.hidden);
-        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} isAttendanceHistory={true} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />;
+        return <ReportsTab reports={attendanceReports} allReports={attendanceReports} classes={classes} updateReportStatus={updateReportStatus} isAttendanceHistory={true} saOverrides={saOverrides} setSaOverrides={setSaOverrides} showToast={showToast} />;
       })()}
       {effectiveSubTab === 'report' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh]">
@@ -7201,7 +7266,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   );
 }
 
-function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, goToLiveSession }) {
+function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, goToLiveSession, showToast }) {
   const [subTab, setSubTab] = useState(session?.type === 'feedback' ? 'live' : 'launch');
   // Always jump to live when a feedback session starts
   const effectiveSubTab = (session && session.type === 'feedback') ? 'live' : subTab;
@@ -7232,13 +7297,13 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
       <SubNav />
       {effectiveSubTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="feedback" goToLiveSession={goToLiveSession} />
+           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="feedback" goToLiveSession={goToLiveSession} showToast={showToast} />
         </div>
       )}
       {effectiveSubTab === 'live' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
           {session?.type === 'feedback' ? (
-            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+            <ResultsTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} showToast={showToast} />
           ) : (
              <div className="m-auto text-center text-slate-400 p-10">
                <BarChart2 size={48} className="mx-auto mb-4 opacity-50" />
