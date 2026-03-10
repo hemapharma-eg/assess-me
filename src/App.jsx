@@ -5627,7 +5627,7 @@ function StudentPortal({ setRole, initialRoom }) {
   }
 
   const isFinished = (session?.type === 'student_paced' || session?.type === 'async_quiz' || session?.type === 'async_video' || session?.type === 'feedback') ?
-    (session?.quiz?.type === 'video' ? idx >= total : idx >= total) : false;
+    idx >= total : false;
 
   if (quizEnded || isFinished) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
@@ -6690,7 +6690,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       {subTab === 'async' && <ScheduledTab user={user} classes={classes} />}
       {subTab === 'history' && (() => {
         const quizReports = [...reports, ...asyncReports]
-          .filter(r => r.type !== 'attendance' && r.type !== 'feedback' && r.type !== 'poll')
+          .filter(r => r.type !== 'attendance' && r.type !== 'feedback' && r.type !== 'poll' && r.type !== 'slides')
           .filter(r => !r.hidden);
         return <ReportsTab reports={quizReports} allReports={quizReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
       })()}
