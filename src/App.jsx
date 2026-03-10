@@ -3379,7 +3379,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
             return;
           }
         } else {
-          const quizzesCount = quizzes.filter(q => q.type !== 'survey').length;
+          const quizzesCount = quizzes.filter(q => !q.type || ['standard', 'video'].includes(q.type)).length;
           if (quizzesCount >= 3) {
             showToast("Free Tier Limit: You can only have up to 3 quizzes. Please upgrade to Pro to create more.", "warning");
             return;
@@ -3432,7 +3432,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
         </button>
       </div>
       <div className="divide-y divide-slate-100">
-        {quizzes.map(q => (
+        {quizzes.filter(q => !q.type || ['standard', 'video', 'survey'].includes(q.type)).map(q => (
           <div key={q.id} className="p-8 flex items-center justify-between hover:bg-slate-50 transition-colors">
             <div>
               <div className="flex items-center gap-2">
@@ -3455,7 +3455,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
             </div>
           </div>
         ))}
-        {quizzes.length === 0 && <div className="p-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm">No quizzes saved in your cloud library.</div>}
+        {quizzes.filter(q => !q.type || ['standard', 'video', 'survey'].includes(q.type)).length === 0 && <div className="p-20 text-center text-slate-300 font-bold uppercase tracking-widest text-sm">No quizzes saved in your cloud library.</div>}
       </div>
     </div>
   );
@@ -3742,7 +3742,6 @@ function QuizEditor({ quiz, onSave, onCancel, profile, showToast }) {
           <div className="flex gap-2">
             {type === 'video' ? (
               <>
-                <div className="text-xs font-bold text-purple-600 mr-4 flex items-center gap-2"><Video size={16} /> Add at current video time:</div>
                 <button onClick={() => add('mc')} className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black transition-all shadow-lg shadow-purple-200 text-xs uppercase tracking-widest">Multi Choice</button>
                 <button onClick={() => add('tf')} className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black transition-all shadow-lg shadow-purple-200 text-xs uppercase tracking-widest">True/False</button>
                 <button onClick={() => add('sa')} className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black transition-all shadow-lg shadow-purple-200 text-xs uppercase tracking-widest">Short Answer</button>
