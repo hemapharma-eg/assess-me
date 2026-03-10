@@ -1217,6 +1217,25 @@ function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaun
 function PollsTabMain(props) {
   const [pollMode, setPollMode] = useState('standalone'); // 'standalone' | 'slides'
 
+  // Smart goToLiveSession that also switches poll mode based on session type
+  const pollsGoToLiveSession = () => {
+    const { session, goToLiveSession } = props;
+    if (session && !session.is_async) {
+      const sType = session.type || session.quiz?.type;
+      if (sType === 'slides') {
+        setPollMode('slides');
+      } else if (sType === 'poll') {
+        setPollMode('standalone');
+      } else {
+        // Session is in a completely different section (quiz, attendance, etc)
+        if (goToLiveSession) goToLiveSession();
+        return;
+      }
+    } else if (goToLiveSession) {
+      goToLiveSession();
+    }
+  };
+
   return (
     <div>
       <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 max-w-sm border border-slate-200 shadow-inner">
@@ -1234,8 +1253,8 @@ function PollsTabMain(props) {
         </button>
       </div>
 
-      {pollMode === 'standalone' && <StandalonePollsMain {...props} />}
-      {pollMode === 'slides' && <PollsInSlidesMain {...props} />}
+      {pollMode === 'standalone' && <StandalonePollsMain {...props} goToLiveSession={pollsGoToLiveSession} />}
+      {pollMode === 'slides' && <PollsInSlidesMain {...props} goToLiveSession={pollsGoToLiveSession} />}
     </div>
   );
 }
