@@ -2649,7 +2649,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   const [selectedItems, setSelectedItems] = useState([]); // Array for multi-select
 
   const [category, setCategory] = useState(defaultCategory); // 'sync', 'async', 'attendance', 'feedback', 'poll'
-  const [type, setType] = useState(defaultCategory === 'poll' ? 'poll' : null); 
+  const [type, setType] = useState((defaultCategory === 'poll' || defaultCategory === 'slides') ? defaultCategory : null); 
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
@@ -2702,7 +2702,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
       <button onClick={() => {
         setScheduledLink(null);
-        setType(defaultCategory === 'poll' ? 'poll' : null);
+        setType((defaultCategory === 'poll' || defaultCategory === 'slides') ? defaultCategory : null);
         setCategory(defaultCategory);
         setAssignedClasses([]);
         setShuffleQuestions(false);
@@ -2809,7 +2809,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     }
     
     if (category !== 'async') {
-      setType(defaultCategory === 'poll' ? 'poll' : null);
+      setType((defaultCategory === 'poll' || defaultCategory === 'slides') ? defaultCategory : null);
       setCategory(defaultCategory);
       setAssignedClasses([]);
       setShuffleQuestions(false);
@@ -2829,6 +2829,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
 
   const filteredQuizzes = quizzes.filter(q => {
     if (category === 'poll') return true;
+    if (category === 'slides') return q.type === 'slides';
     if (type === 'async_video') return q.type === 'video';
     if (type === 'async_quiz' || category === 'sync') return q.type === 'standard' || !q.type;
     return true; 
@@ -2837,7 +2838,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
   if (type && category !== 'attendance') return (
     <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100">
       <h2 className="text-2xl font-black mb-6 text-slate-800">
-        Choose {category === 'poll' ? 'Poll(s)' : (type === 'async_video' ? 'a Video Quiz' : 'a Standard Quiz')}
+        Choose {category === 'poll' ? 'Poll(s)' : (category === 'slides' ? 'a Presentation' : (type === 'async_video' ? 'a Video Quiz' : 'a Standard Quiz'))}
       </h2>
       <div className="space-y-3 mb-10 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
         {filteredQuizzes.map(q => {
@@ -2857,7 +2858,8 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
               <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-200 bg-white'}`}>
                 {isSelected && <Check size={14} className="text-white" />}
               </div>
-              {q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : 
+              {q.type === 'slides' ? <Presentation size={20} className="text-blue-500 shrink-0" /> : 
+               q.type === 'video' ? <Video size={20} className="text-purple-500 shrink-0" /> : 
                category === 'poll' ? (
                  q.type === 'word_cloud' ? <Cloud size={20} className="text-blue-500 shrink-0" /> :
                  q.type === 'rating' ? <Star size={20} className="text-blue-500 shrink-0" /> :
@@ -2869,13 +2871,13 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
               <div>
                 <div className="font-black text-slate-800 text-sm">{q.title}</div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                  {category === 'poll' ? q.type?.replace('_', ' ') : `${(q.questions || []).length} ${q.type === 'survey' ? 'Items' : 'Questions'}`}
+                  {category === 'poll' ? q.type?.replace('_', ' ') : (category === 'slides' ? `${(q.questions || []).length} Polls` : `${(q.questions || []).length} ${q.type === 'survey' ? 'Items' : 'Questions'}`)}
                 </div>
               </div>
             </button>
           );
         })}
-        {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No {category === 'poll' ? 'polls' : 'matching quizzes'} found.</p>}
+        {filteredQuizzes.length === 0 && <p className="text-slate-400 italic text-center py-6">No {category === 'poll' ? 'polls' : (category === 'slides' ? 'presentations' : 'matching quizzes')} found.</p>}
       </div>
 
       {category === 'poll' && selectedItems.length > 0 && (
@@ -2950,13 +2952,13 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
               </label>
             )}
 
-            {type !== 'async_video' && (
+            {type !== 'async_video' && type !== 'slides' && (
               <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
                 <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} />
                 <span className="font-bold text-slate-700 text-sm">Shuffle Questions</span>
               </label>
             )}
-            {true && (
+            {type !== 'slides' && (
               <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
                 <input type="checkbox" className="w-5 h-5 accent-blue-600 rounded" checked={shuffleChoices} onChange={e => setShuffleChoices(e.target.checked)} />
                 <span className="font-bold text-slate-700 text-sm">Shuffle Choices (MCQs only)</span>
@@ -2967,7 +2969,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       )}
 
       <div className="flex gap-3">
-        <button onClick={() => { setType(defaultCategory === 'poll' ? 'poll' : null); setCategory(defaultCategory); setSelectedItems([]); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
+        <button onClick={() => { setType((defaultCategory === 'poll' || defaultCategory === 'slides') ? defaultCategory : null); setCategory(defaultCategory); setSelectedItems([]); }} className="flex-1 py-4 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
         <button
           onClick={start}
           disabled={selectedItems.length === 0 || (category !== 'poll' && assignedClasses.length === 0) || (category === 'async' && (!startTime || !endTime))}
