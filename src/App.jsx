@@ -1054,7 +1054,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
              <div className="bg-white p-2 rounded-xl"><QRCode value={joinUrl} size={100} /></div>
              <div className="font-black text-blue-600 text-2xl tracking-[0.2em] mt-2 bg-blue-50 px-4 py-1 rounded-lg w-full text-center border border-blue-100">{roomCode}</div>
              <p className="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest text-center">Scan to Join</p>
-             <button onClick={()=>setShowQR(false)} className="absolute top-2 right-2 text-slate-300 hover:text-slate-500 bg-slate-100/50 rounded-full p-1"><X size={14} /></button>
+             <button onClick={()=>setShowQR(false)} className="absolute top-2 right-2 text-white bg-red-500 hover:bg-red-600 shadow-sm rounded-full p-1 transition-colors"><X size={14} /></button>
           </div>
         )}
         {!showQR && (
