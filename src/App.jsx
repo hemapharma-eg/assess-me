@@ -4407,6 +4407,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
     // Both 'async_quiz' and 'async_video' fall under 'student_paced' Sync/Async toggle
     if (type === 'async_quiz' || type === 'async_video') return typeFilter['student_paced'];
     if (isAttendanceHistory && type === 'attendance') return true;
+    if (isPolls) return true;
     return typeFilter[type];
   };
   const [renamingReport, setRenamingReport] = useState(null);
