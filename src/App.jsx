@@ -3563,7 +3563,8 @@ function QuizEditor({ quiz, onSave, onCancel, profile, showToast }) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await loadXLSX();
     const ws = XLSX.utils.aoa_to_sheet([
       ['Type', 'Question', 'Option_1', 'Option_2', 'Option_3', 'Option_4', 'Correct_Answer'],
       ['mc', 'What is 2 + 2?', '1', '2', '3', '4', '4'],
@@ -3582,8 +3583,9 @@ function QuizEditor({ quiz, onSave, onCancel, profile, showToast }) {
     const f = e.target.files[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const XLSX = await loadXLSX();
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
@@ -4288,8 +4290,9 @@ function FeedbackDashboard({ reports, classes }) {
   const classFilteredReports = classFilter ? feedbackReports.filter(r => r.assigned_classes?.includes(classFilter)) : feedbackReports;
   const uniqueTitles = [...new Set(classFilteredReports.map(r => r.title))];
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
+      const XLSX = await loadXLSX();
       const wb = XLSX.utils.book_new();
 
       // Sheet 1: Overview Stats
@@ -4508,8 +4511,9 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
     if (openReport) setSelectedForEmail([]);
   }, [openReport]);
 
-  const exportToExcel = (report) => {
+  const exportToExcel = async (report) => {
     try {
+      const XLSX = await loadXLSX();
       const wb = XLSX.utils.book_new();
       const safeTitle = (report.title || 'Report').replace(/[\\/*?[\]:]/g, '').replace(/\s+/g, '_');
       const typeLabel = report.type === 'teacher_paced' ? 'Teacher Paced' : report.type === 'attendance' ? 'Attendance' : 'Student Paced';
@@ -4897,9 +4901,10 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
     );
   }
 
-  const exportGradebook = (cls, assignedReps, matrix, hasAttendance, attendanceTitles, attendanceOnly = false) => {
+  const exportGradebook = async (cls, assignedReps, matrix, hasAttendance, attendanceTitles, attendanceOnly = false) => {
 
     try {
+      const XLSX = await loadXLSX();
       const wb = XLSX.utils.book_new();
       const weights = quizWeights[cls.id] || cls.quiz_weights || {};
 
@@ -6186,7 +6191,8 @@ function CreateClassView({ user, onCancel, onSaved, showToast }) {
     reader.readAsBinaryString(f);
   };
 
-  const downloadRosterTemplate = () => {
+  const downloadRosterTemplate = async () => {
+    const XLSX = await loadXLSX();
     const ws = XLSX.utils.aoa_to_sheet([
       ['ID', 'Name', 'Email'],
       ['1001', 'Alice Smith', 'alice@school.edu'],
@@ -7090,7 +7096,6 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
 
   const exportAttendancePDF = async () => {
     if (!reportClass) return;
-    const doc = new jsPDF('landscape');
 
     const headers = ['Student ID', 'Name', 'Email', 'Overall %'];
     uniqueAttendanceTitles.forEach(t => headers.push(t));
