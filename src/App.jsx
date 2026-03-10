@@ -1153,7 +1153,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
   );
 }
 
-function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, requestCloseWarning }) {
+function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const [subTab, setSubTab] = useState(session && session.quiz?.type === 'slides' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1161,12 +1161,6 @@ function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaun
   }, [session]);
 
   const handleSubTabChange = (t) => {
-    if (t !== 'live' && session && session.quiz?.type === 'slides') {
-      if (requestCloseWarning) {
-        requestCloseWarning(t);
-        return;
-      }
-    }
     setSubTab(t);
   };
 
@@ -1246,7 +1240,7 @@ function PollsTabMain(props) {
   );
 }
 
-function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, requestCloseWarning }) {
+function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const [subTab, setSubTab] = useState(session && session.type === 'poll' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1254,12 +1248,6 @@ function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch
   }, [session]);
 
   const handleSubTabChange = (t) => {
-    if (t !== 'live' && session && session.type === 'poll') {
-      if (requestCloseWarning) {
-        requestCloseWarning(t);
-        return;
-      }
-    }
     setSubTab(t);
   };
 
@@ -1736,8 +1724,16 @@ function TeacherPortal({ setRole, user }) {
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('ClassLabX_RoomCode') || '');
   const [asyncReports, setAsyncReports] = useState([]);
 
-  const [showCloseWarning, setShowCloseWarning] = useState(false);
-  const [pendingTab, setPendingTab] = useState(null);
+  // Live session tab tracking for header link
+  const getSessionTab = () => {
+    if (!session || session.is_async) return null;
+    const t = session.type;
+    if (t === 'poll') return 'polls';
+    if (t === 'slides') return 'polls';
+    if (t === 'attendance') return 'attendance';
+    if (t === 'feedback') return 'feedback';
+    return 'quizzes';
+  };
   const [podiumData, setPodiumData] = useState(null); // { top3: [{name, score, id}] }
 
   // Global override state for Short Answer grading
@@ -2112,13 +2108,7 @@ function TeacherPortal({ setRole, user }) {
   };
 
   const handleTabChange = (newTab) => {
-    // If navigating away from a tab with an active live room, warn them using the unified modal
-    if (session && !session.is_async && newTab !== activeTab) {
-      setPendingTab(newTab);
-      setShowCloseWarning(true);
-    } else {
-      setActiveTab(newTab);
-    }
+    setActiveTab(newTab);
   };
 
   const handleSignOut = async () => {
@@ -2159,6 +2149,15 @@ function TeacherPortal({ setRole, user }) {
               <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Plan:</span>
               <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{(profile.subscription || 'free').replace('_', ' ')}</span>
             </div>
+          )}
+          {session && !session.is_async && (
+            <button
+              onClick={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
+              className="flex items-center gap-2 px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-100 animate-pulse"
+            >
+              <Wifi size={14} className="text-white" />
+              LIVE — {session.quiz?.title || 'Session'}
+            </button>
           )}
           {roomCode && (
             <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest flex items-center gap-2">
@@ -2206,7 +2205,7 @@ function TeacherPortal({ setRole, user }) {
             saOverrides={saOverrides}
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
-            requestCloseWarning={(t) => triggerCloseWarning(t)}
+
           />
         )}
         {activeTab === 'polls' && (
@@ -2229,61 +2228,14 @@ function TeacherPortal({ setRole, user }) {
             saOverrides={saOverrides}
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
-            requestCloseWarning={(t) => triggerCloseWarning(t)}
+
           />
         )}
-        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} requestCloseWarning={(t) => triggerCloseWarning(t)} />}
-        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} requestCloseWarning={(t) => triggerCloseWarning(t)} />}
+        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />}
+        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />}
       </main>
 
-      {/* Close Warning Modal */}
-      {showCloseWarning && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-              <AlertTriangle size={32} />
-            </div>
-            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Active Room Alert</h3>
-            <p className="text-slate-500 font-bold mb-8 leading-relaxed">
-              You are leaving an active session. <span className="text-blue-600 bg-blue-50 px-1 rounded">Results will not be finalized or saved to reports until this room is closed.</span> What would you like to do?
-            </p>
-            <div className="space-y-3">
-              <button 
-                onClick={async () => {
-                   setShowCloseWarning(false);
-                   await onEnd();
-                   if (pendingTab) {
-                       setActiveTab(pendingTab);
-                   }
-                   setPendingTab(null);
-                }} 
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-colors shadow-lg shadow-blue-100"
-              >
-                Close Room (Record Results & Go)
-              </button>
-              <button 
-                onClick={() => {
-                   setShowCloseWarning(false);
-                   setActiveTab(pendingTab);
-                   setPendingTab(null);
-                }} 
-                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-sm uppercase tracking-widest transition-colors"
-              >
-                Keep Room Open (Go quietly)
-              </button>
-              <button 
-                onClick={() => {
-                   setShowCloseWarning(false);
-                   setPendingTab(null);
-                }} 
-                className="w-full py-4 bg-white hover:bg-slate-50 text-slate-400 rounded-xl font-black text-xs uppercase tracking-widest transition-colors border-2 border-slate-100"
-              >
-                Cancel (Stay Here)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* 🏆 Top 3 Podium Overlay */}
       {podiumData && (
@@ -6472,7 +6424,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 //          NEW FEATURE TAB CONTAINERS
 // ==========================================
 
-function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, requestCloseWarning }) {
+function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const isLiveQuizUrl = new URLSearchParams(window.location.search).get('room');
   const defaultTab = session || isLiveQuizUrl ? 'live' : 'manage';
   const [subTab, setSubTab] = useState(defaultTab);
@@ -6491,12 +6443,6 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   }, [session]);
 
   const handleSubTabChange = (t) => {
-    if (t !== 'live' && session) {
-      if (requestCloseWarning) {
-        requestCloseWarning(t);
-        return;
-      }
-    }
     setSubTab(t);
   };
 
@@ -6899,7 +6845,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   );
 }
 
-function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, requestCloseWarning }) {
+function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
   const [subTab, setSubTab] = useState(session?.type === 'attendance' ? 'live' : 'launch');
   // Always jump to live when an attendance session starts
   const effectiveSubTab = (session && session.type === 'attendance') ? 'live' : subTab;
@@ -6908,12 +6854,6 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   const [selectedClassId, setSelectedClassId] = useState('');
 
   const handleSubTabChange = (t) => {
-    if (t !== 'live' && session && session.type === 'attendance') {
-      if (requestCloseWarning) {
-        requestCloseWarning(t);
-        return;
-      }
-    }
     setSubTab(t);
   };
 
@@ -7169,18 +7109,12 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   );
 }
 
-function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, requestCloseWarning }) {
+function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
   const [subTab, setSubTab] = useState(session?.type === 'feedback' ? 'live' : 'launch');
   // Always jump to live when a feedback session starts
   const effectiveSubTab = (session && session.type === 'feedback') ? 'live' : subTab;
 
   const handleSubTabChange = (t) => {
-    if (t !== 'live' && session && session.type === 'feedback') {
-      if (requestCloseWarning) {
-        requestCloseWarning(t);
-        return;
-      }
-    }
     setSubTab(t);
   };
 
