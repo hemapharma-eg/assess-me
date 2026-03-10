@@ -647,7 +647,7 @@ function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
     
     let finalUrl = videoUrl;
     if (finalUrl.includes('docs.google.com/presentation') && (finalUrl.includes('/edit') || finalUrl.includes('/view'))) {
-      finalUrl = finalUrl.replace(/\/(edit|view).*/, '/embed?rm=minimal');
+      finalUrl = finalUrl.replace(/\/(edit|view).*/, '/embed');
     }
 
     setLoading(true);
@@ -981,6 +981,8 @@ function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
 
 function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
   const [showQR, setShowQR] = useState(true);
+  const containerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const qIdx = session.quiz.current_question_idx;
   const questions = session.quiz.questions || [];
   
@@ -1026,10 +1028,28 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
     await supabase.from('rooms').update({ quiz: newQuiz }).eq('id', roomCode);
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      if (containerRef.current?.requestFullscreen) {
+        containerRef.current.requestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
   return (
-    <div className="flex-1 flex flex-col md:flex-row gap-6 h-[80vh]">
-      <div className="w-full md:w-[75%] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl relative flex flex-col">
-        {showQR && (
+    <div ref={containerRef} className={`flex-1 flex flex-col md:flex-row gap-6 ${isFullscreen ? 'h-screen p-6 bg-slate-950 text-white' : 'h-[80vh]'}`}>
+      <div className={`w-full md:w-[75%] bg-slate-900 ${isFullscreen ? 'rounded-xl' : 'rounded-3xl'} overflow-hidden shadow-2xl relative flex flex-col`}>
+        {showQR && !isFullscreen && (
           <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md p-4 rounded-3xl shadow-2xl flex flex-col items-center animate-in slide-in-from-top border-4 border-white/50">
              <div className="bg-white p-2 rounded-xl"><QRCode value={joinUrl} size={100} /></div>
              <div className="font-black text-blue-600 text-2xl tracking-[0.2em] mt-2 bg-blue-50 px-4 py-1 rounded-lg w-full text-center border border-blue-100">{roomCode}</div>
@@ -1037,15 +1057,18 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
              <button onClick={()=>setShowQR(false)} className="absolute top-2 right-2 text-slate-300 hover:text-slate-500 bg-slate-100/50 rounded-full p-1"><X size={14} /></button>
           </div>
         )}
-        {!showQR && (
+        {!showQR && !isFullscreen && (
           <button onClick={()=>setShowQR(true)} className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-black shadow-xl text-slate-700 border border-slate-200 hover:bg-white flex items-center gap-2 transition-all">
             <QrCode size={16} /> Join Info
           </button>
         )}
+        <button onClick={toggleFullscreen} className="absolute top-4 right-4 z-10 bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-black shadow-xl text-white border border-white/20 hover:bg-black flex items-center gap-2 transition-all">
+          <Monitor size={16} /> {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+        </button>
         <iframe src={session.quiz.video_url} className="w-full h-full border-0" allowFullScreen />
       </div>
 
-      <div className="w-full md:w-[25%] bg-slate-50 rounded-3xl border border-slate-200 p-6 flex flex-col pt-0">
+      <div className={`w-full md:w-[25%] bg-slate-50 ${isFullscreen ? 'rounded-xl text-slate-900' : 'rounded-3xl'} border border-slate-200 p-6 flex flex-col pt-0`}>
          {activePoll ? (
            <div className="flex flex-col h-full mt-6">
              <div className="flex justify-between items-start mb-4 bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-900 relative">
@@ -1110,8 +1133,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
                    <p className="text-center text-slate-400 text-xs font-bold italic py-4">No polls available in this deck.</p>
                  ) : questions.map((q, i) => (
                    <div key={q.id || i} className="p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-shadow cursor-pointer relative group" onClick={() => setLivePollState(i)}>
-                       <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Poll {i + 1}</div>
-                       <div className="font-bold text-slate-800 text-sm leading-snug pr-6">{q.title}</div>
+                       <div className="text-[13px] font-black uppercase text-slate-600 tracking-widest mt-1">Poll {i + 1}</div>
                        <div className="absolute top-1/2 -translate-y-1/2 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                          <Play size={16} className="text-blue-500" />
                        </div>
@@ -1960,7 +1982,7 @@ function TeacherPortal({ setRole, user }) {
             old_report_id: quiz.attendanceMode === 'relaunch' ? quiz.selectedOldAttendance?.id : null,
             current_token: Date.now().toString()
           }
-        : { ...quiz, current_question_idx: 0, show_results: false },
+        : { ...quiz, current_question_idx: type === 'slides' ? -1 : 0, show_results: false },
       is_active: !isAsync, // async rooms aren't "live" tracking
       ts: Date.now(),
       is_async: isAsync,
