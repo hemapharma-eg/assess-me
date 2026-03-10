@@ -1807,7 +1807,7 @@ function TeacherPortal({ setRole, user, showToast }) {
     if (t === 'feedback') return 'feedback';
     return 'quizzes';
   };
-  const [podiumData, setPodiumData] = useState(null); // { top3: [{name, score, id}] }
+  const [podiumData, setPodiumData] = useState(null); // { top3: [{name, score, id}], title: string }
 
   // Global override state for Short Answer grading
   const [saOverrides, setSaOverrides] = useState({}); // { reportId: { "studentId___qIdx": true|false } }
@@ -2160,8 +2160,8 @@ function TeacherPortal({ setRole, user, showToast }) {
        // Optional: fetch refreshed polls if needed
     }
 
-    // Show podium for quiz types (not attendance/feedback/poll)
-    const isQuizType = session.type === 'teacher_paced' || session.type === 'student_paced';
+    // 🏆 Top 3 Podium Calculation for Quizzes
+    const isQuizType = session.type === 'standard' || session.type === 'video' || session.quiz?.type === 'standard' || session.quiz?.type === 'video';
     if (isQuizType && responses.length > 0 && session.quiz?.questions?.length > 0) {
       const questions = session.quiz.questions;
       const scored = responses.map(r => {
@@ -7199,6 +7199,14 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
                 <button onClick={exportAttendancePDF} className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all">
                   <FileText size={16} /> PDF
                 </button>
+                {reportMatrix.filter(r => r.attendanceTotal < 75 && r.email).length > 0 && (
+                  <a
+                    href={`mailto:?bcc=${reportMatrix.filter(r => r.attendanceTotal < 75 && r.email).map(r => r.email).join(',')}&subject=Immediate Action Required: Attendance Warning&body=Dear Student,%0D%0A%0D%0AOur records indicate that your overall attendance has fallen below the required 75% threshold. Please reach out to your instructor immediately to discuss this matter.%0D%0A%0D%0AClassLabX Automated Notification`}
+                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-red-100 transition-transform active:scale-95"
+                  >
+                    <AlertCircle size={16} /> Email At-Risk
+                  </a>
+                )}
               </div>
             )}
           </div>
@@ -7232,8 +7240,8 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
                              <div className="text-[9px] text-slate-400 font-mono w-16 truncate">{rm.student_id}</div>
                            </div>
                         </td>
-                        <td className="p-4 bg-green-50/30 w-24">
-                           <div className="font-black text-green-600 text-sm whitespace-nowrap">{rm.attendanceTotal}%</div>
+                        <td className={`p-4 ${rm.attendanceTotal < 75 ? 'bg-red-50/30' : 'bg-green-50/30'} w-24`}>
+                           <div className={`font-black ${rm.attendanceTotal < 75 ? 'text-red-500' : 'text-green-600'} text-sm whitespace-nowrap`}>{rm.attendanceTotal}%</div>
                         </td>
                         {uniqueAttendanceTitles.map(t => {
                            const rec = rm.attendanceRecords[t];
