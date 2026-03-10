@@ -1153,7 +1153,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
   );
 }
 
-function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
+function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession }) {
   const [subTab, setSubTab] = useState(session && session.quiz?.type === 'slides' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1187,7 +1187,7 @@ function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaun
       {subTab === 'manage' && <SlidePollsManageTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} slideQuizzes={slideQuizzes} />}
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-           <LaunchTab quizzes={slideQuizzes} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="slides" roomType="slides" />
+           <LaunchTab quizzes={slideQuizzes} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="slides" roomType="slides" goToLiveSession={goToLiveSession} />
         </div>
       )}
       {subTab === 'live' && (
@@ -1240,7 +1240,7 @@ function PollsTabMain(props) {
   );
 }
 
-function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
+function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession }) {
   const [subTab, setSubTab] = useState(session && session.type === 'poll' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1275,7 +1275,7 @@ function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch
       {subTab === 'manage' && <PollsTab polls={polls} setPolls={setPolls} user={user} />}
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-           <LaunchTab quizzes={polls} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="poll" />
+           <LaunchTab quizzes={polls} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="poll" goToLiveSession={goToLiveSession} />
         </div>
       )}
       {subTab === 'live' && (
@@ -2205,7 +2205,7 @@ function TeacherPortal({ setRole, user }) {
             saOverrides={saOverrides}
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
-
+            goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
           />
         )}
         {activeTab === 'polls' && (
@@ -2228,11 +2228,11 @@ function TeacherPortal({ setRole, user }) {
             saOverrides={saOverrides}
             setSaOverrides={setSaOverrides}
             handleToggleSaOverride={handleToggleSaOverride}
-
+            goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
           />
         )}
-        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />}
-        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} />}
+        {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} />}
+        {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} />}
       </main>
 
 
@@ -2633,7 +2633,7 @@ function ScheduledTab({ user, classes }) {
   );
 }
 
-function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile, defaultCategory = null }) {
+function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, setActiveTab, profile, defaultCategory = null, goToLiveSession }) {
   const [selectedItems, setSelectedItems] = useState([]); // Array for multi-select
 
   const [category, setCategory] = useState(defaultCategory); // 'sync', 'async', 'attendance', 'feedback', 'poll'
@@ -2660,7 +2660,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
       </div>
       <h2 className="text-3xl font-black text-slate-800 mb-2">Room {session.quiz.title} is LIVE</h2>
       <p className="text-slate-400 font-medium mb-8">Room Code: {roomCode}</p>
-      <button onClick={() => setActiveTab('live')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100">Go to Live Tab</button>
+      <button onClick={() => goToLiveSession ? goToLiveSession() : setActiveTab('live')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100">Go to Live Tab</button>
     </div>
   );
 
@@ -6424,7 +6424,7 @@ function ClassDetailView({ cls, onUpdate, onBack, onDeleted }) {
 //          NEW FEATURE TAB CONTAINERS
 // ==========================================
 
-function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
+function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession }) {
   const isLiveQuizUrl = new URLSearchParams(window.location.search).get('room');
   const defaultTab = session || isLiveQuizUrl ? 'live' : 'manage';
   const [subTab, setSubTab] = useState(defaultTab);
@@ -6651,7 +6651,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
       {subTab === 'manage' && <QuizzesTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} />}
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-           <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} />
+           <LaunchTab quizzes={quizzes} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} goToLiveSession={goToLiveSession} />
         </div>
       )}
       {subTab === 'live' && (
@@ -6845,7 +6845,7 @@ function QuizzesTabMain({ quizzes, setQuizzes, user, profile, classes, reports, 
   );
 }
 
-function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
+function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, goToLiveSession }) {
   const [subTab, setSubTab] = useState(session?.type === 'attendance' ? 'live' : 'launch');
   // Always jump to live when an attendance session starts
   const effectiveSubTab = (session && session.type === 'attendance') ? 'live' : subTab;
@@ -6995,7 +6995,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
       {effectiveSubTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
            {/* We will modify LaunchTab to take an initial category next */}
-           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="attendance" />
+           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="attendance" goToLiveSession={goToLiveSession} />
         </div>
       )}
       {effectiveSubTab === 'live' && (
@@ -7109,7 +7109,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
   );
 }
 
-function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides }) {
+function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaunch, session, responses, roomCode, onEnd, updateReportStatus, saOverrides, setSaOverrides, goToLiveSession }) {
   const [subTab, setSubTab] = useState(session?.type === 'feedback' ? 'live' : 'launch');
   // Always jump to live when a feedback session starts
   const effectiveSubTab = (session && session.type === 'feedback') ? 'live' : subTab;
@@ -7140,7 +7140,7 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
       <SubNav />
       {effectiveSubTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="feedback" />
+           <LaunchTab quizzes={[]} classes={classes} reports={reports} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="feedback" goToLiveSession={goToLiveSession} />
         </div>
       )}
       {effectiveSubTab === 'live' && (
