@@ -4,7 +4,7 @@ import {
   Users, Rocket, CheckSquare, LogOut, Download, Upload,
   Plus, Trash2, Edit2, Play, CheckCircle, XCircle, QrCode,
   ArrowRight, ArrowLeft, Wifi, Database, FileText, AlertCircle, AlertTriangle,
-  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check, Settings, Send, Cloud, Star
+  UserCheck, Fingerprint, Activity, BarChart2, UploadCloud, X, Eye, EyeOff, Video, Clock, Copy, Pencil, Search, Pause, PauseCircle, PlayCircle, Check, Settings, Send, Cloud, Star, Monitor, Presentation
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -610,7 +610,618 @@ function ProfileCompletionOverlay({ profile, setProfile, user }) {
 //               POLLS FEATURE
 // ==========================================
 
-function PollsTabMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
+function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editingDeck, setEditingDeck] = useState(null);
+  const [title, setTitle] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [editingPollIdx, setEditingPollIdx] = useState(null);
+  const [pollTitle, setPollTitle] = useState('');
+  const [pollType, setPollType] = useState('multiple_choice');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [showPollModal, setShowPollModal] = useState(false);
+
+  const openCreate = () => {
+    setEditingDeck(null);
+    setTitle('');
+    setVideoUrl('');
+    setQuestions([]);
+    setShowModal(true);
+  };
+
+  const openEdit = (dq) => {
+    setEditingDeck(dq);
+    setTitle(dq.title);
+    setVideoUrl(dq.video_url || '');
+    setQuestions(dq.questions || []);
+    setShowModal(true);
+  };
+
+  const saveDeck = async (e) => {
+    e.preventDefault();
+    if (!videoUrl) return alert("Please provide a Google Slides link.");
+    
+    let finalUrl = videoUrl;
+    if (finalUrl.includes('docs.google.com/presentation') && (finalUrl.includes('/edit') || finalUrl.includes('/view'))) {
+      finalUrl = finalUrl.replace(/\/(edit|view).*/, '/embed?rm=minimal');
+    }
+
+    setLoading(true);
+    const data = {
+      user_id: user.id,
+      type: 'slides',
+      title,
+      video_url: finalUrl,
+      questions
+    };
+
+    let res;
+    if (editingDeck) {
+      res = await supabase.from('quizzes').update(data).eq('id', editingDeck.id).select().single();
+    } else {
+      res = await supabase.from('quizzes').insert(data).select().single();
+    }
+
+    if (res.error) alert(res.error.message);
+    else {
+      if (editingDeck) setQuizzes(quizzes.map(q => q.id === res.data.id ? res.data : q));
+      else setQuizzes([res.data, ...quizzes]);
+      setShowModal(false);
+    }
+    setLoading(false);
+  };
+
+  const deleteDeck = async (id) => {
+    if (!window.confirm("Delete this presentation and all its polls?")) return;
+    const { error } = await supabase.from('quizzes').delete().eq('id', id);
+    if (!error) setQuizzes(quizzes.filter(q => q.id !== id));
+  };
+
+  const openPollCreate = () => {
+    setEditingPollIdx(null);
+    setPollTitle('');
+    setPollType('multiple_choice');
+    setPollOptions(['', '']);
+    setShowPollModal(true);
+  };
+
+  const openPollEdit = (idx) => {
+    const p = questions[idx];
+    setEditingPollIdx(idx);
+    setPollTitle(p.title);
+    setPollType(p.type);
+    setPollOptions(p.options || ['', '']);
+    setShowPollModal(true);
+  };
+
+  const savePoll = (e) => {
+    e.preventDefault();
+    const newPoll = {
+      id: editingPollIdx !== null ? questions[editingPollIdx].id : Math.random().toString(36).substring(7),
+      title: pollTitle,
+      type: pollType,
+      options: pollType === 'multiple_choice' ? pollOptions.filter(o => o.trim() !== '') : []
+    };
+    if (editingPollIdx !== null) {
+      const qs = [...questions];
+      qs[editingPollIdx] = newPoll;
+      setQuestions(qs);
+    } else {
+      setQuestions([...questions, newPoll]);
+    }
+    setShowPollModal(false);
+  };
+
+  const deletePoll = (idx) => {
+    if (!window.confirm("Remove this poll?")) return;
+    setQuestions(questions.filter((_, i) => i !== idx));
+  };
+
+  const movePoll = (idx, dir) => {
+    if (idx + dir < 0 || idx + dir >= questions.length) return;
+    const qs = [...questions];
+    const temp = qs[idx];
+    qs[idx] = qs[idx + dir];
+    qs[idx + dir] = temp;
+    setQuestions(qs);
+  };
+
+  const filteredDecks = slideQuizzes.filter(q => q.title.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex-wrap gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Polls in Slides Library</h2>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Presentations with Embedded Polls</p>
+        </div>
+        
+        <div className="flex-1 max-w-md relative">
+          <input
+            type="text"
+            placeholder="Search presentations..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-700 focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 focus:bg-white"
+          />
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
+
+        <button onClick={openCreate} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-100 flex items-center gap-2 whitespace-nowrap">
+          <Plus size={20} /> New Presentation
+        </button>
+      </div>
+
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto no-scrollbar">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 border-b-2 border-slate-100/50 uppercase tracking-widest text-[10px] font-black text-slate-400">
+              <tr>
+                <th className="p-4 w-12 text-center rounded-tl-[2rem]">Type</th>
+                <th className="p-4 min-w-[300px]">Presentation Name</th>
+                <th className="p-4 hidden md:table-cell">Polls Included</th>
+                <th className="p-4 hidden sm:table-cell">Created</th>
+                <th className="p-4 text-right rounded-tr-[2rem]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {slideQuizzes.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-20 text-center text-slate-300 font-black uppercase tracking-widest text-sm bg-slate-50/50">
+                    No presentations created yet.
+                  </td>
+                </tr>
+              ) : filteredDecks.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-20 text-center text-slate-400 font-bold bg-slate-50/50">
+                    No presentations match your search.
+                  </td>
+                </tr>
+              ) : filteredDecks.map(q => (
+                <tr key={q.id} className="hover:bg-slate-50 border-white transition-colors group">
+                  <td className="p-4 text-center">
+                    <div className="w-10 h-10 mx-auto bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                      <Presentation size={20} />
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="font-black text-slate-800 text-sm">{q.title}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 md:hidden">
+                      {(q.questions || []).length} Polls • {new Date(q.created_at).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td className="p-4 hidden md:table-cell">
+                    <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                      {(q.questions || []).length} Polls
+                    </span>
+                  </td>
+                  <td className="p-4 hidden sm:table-cell">
+                    <span className="text-xs font-bold text-slate-500">
+                      {new Date(q.created_at).toLocaleDateString()}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right align-middle">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(q)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Edit">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => deleteDeck(q.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex p-6 items-center justify-center">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl flex flex-col md:flex-row overflow-hidden border border-slate-100 h-[90vh]">
+            
+            <div className="w-full md:w-[70%] bg-slate-50 flex flex-col p-8 border-r border-slate-100 relative">
+              <h2 className="text-3xl font-black text-slate-800 mb-6 tracking-tight">{editingDeck ? 'Edit Presentation' : 'New Presentation'}</h2>
+              
+              <div className="mb-4">
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Presentation Title</label>
+                <input
+                  value={title} onChange={e => setTitle(e.target.value)} required
+                  className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                  placeholder="e.g. Intro to Chemistry"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Google Slides Link</label>
+                <input
+                  value={videoUrl} onChange={e => setVideoUrl(e.target.value)} required
+                  className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all text-sm"
+                  placeholder="Paste Google Slides URL here"
+                />
+              </div>
+
+              <div className="flex-1 bg-slate-200 rounded-3xl overflow-hidden shadow-inner flex flex-col relative">
+                {videoUrl ? (
+                  <iframe 
+                    src={videoUrl.includes('/edit') || videoUrl.includes('/view') ? videoUrl.replace(/\/(edit|view).*/, '/embed?rm=minimal') : videoUrl} 
+                    className="w-full h-full border-0" 
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="m-auto text-slate-400 text-center flex flex-col items-center">
+                    <Monitor size={48} className="mb-4 opacity-30" />
+                    <p className="font-black tracking-widest uppercase text-sm">No Slides Provided</p>
+                    <p className="font-bold text-xs mt-2 max-w-xs">Paste a Google Slides URL above to preview it here.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="w-full md:w-[30%] bg-white flex flex-col p-6 h-full relative">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">Polls ({questions.length})</h3>
+                <button onClick={openPollCreate} className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors">
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 custom-scroll space-y-3 pb-20 border-t border-slate-100 pt-6">
+                {questions.length === 0 ? (
+                  <div className="text-center p-6 border-2 border-dashed border-slate-200 rounded-2xl">
+                    <Activity size={24} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-xs font-bold text-slate-400">No polls added yet.</p>
+                    <button onClick={openPollCreate} className="mt-3 text-[10px] font-black bg-slate-100 px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-200 uppercase tracking-widest">Add Poll</button>
+                  </div>
+                ) : (
+                  questions.map((q, idx) => (
+                    <div key={q.id || idx} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl group relative hover:border-blue-200 transition-colors">
+                       <div className="flex justify-between items-start mb-2">
+                         <div className="flex-1 pr-6">
+                           <div className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Poll {idx + 1} • {q.type.replace('_', ' ')}</div>
+                           <div className="font-bold text-sm text-slate-700 mt-1 line-clamp-2">{q.title}</div>
+                         </div>
+                         <div className="flex flex-col gap-1 ml-2 shrink-0">
+                           <button disabled={idx===0} onClick={()=>movePoll(idx, -1)} className="text-slate-300 hover:text-blue-500 disabled:opacity-30 p-1"><ArrowUp size={14}/></button>
+                           <button disabled={idx===questions.length-1} onClick={()=>movePoll(idx, 1)} className="text-slate-300 hover:text-blue-500 disabled:opacity-30 p-1"><ArrowDown size={14}/></button>
+                         </div>
+                       </div>
+                       <div className="flex gap-2 mt-3 pt-3 border-t border-slate-200/50 justify-end">
+                         <button onClick={()=>openPollEdit(idx)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 px-3 py-1.5 bg-white rounded-lg shadow-sm border border-slate-100">Edit</button>
+                         <button onClick={()=>deletePoll(idx)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-red-600 px-3 py-1.5 bg-white rounded-lg shadow-sm border border-slate-100">Remove</button>
+                       </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-auto pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 shrink-0 absolute bottom-6 left-6 right-6 bg-white">
+                <button type="button" onClick={() => setShowModal(false)} className="py-4 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+                <button type="submit" disabled={loading} onClick={saveDeck} className="py-4 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl shadow-blue-100/50 disabled:opacity-50">
+                  {loading ? 'Saving...' : 'Save Deck'}
+                </button>
+              </div>
+            </div>
+            
+            {showPollModal && (
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in">
+                <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-lg w-full border border-slate-200">
+                  <h2 className="text-2xl font-black text-slate-800 mb-6 tracking-tight">{editingPollIdx !== null ? 'Edit Poll' : 'New Poll in Slides'}</h2>
+                  <form onSubmit={savePoll} className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Poll Question</label>
+                      <input
+                        autoFocus value={pollTitle} onChange={e => setPollTitle(e.target.value)} required
+                        className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                        placeholder="What's your question?"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Poll Type</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'multiple_choice', label: 'Choices', icon: CheckCircle },
+                          { id: 'word_cloud', label: 'Cloud', icon: Activity },
+                          { id: 'rating', label: 'Rating', icon: BarChart2 }
+                        ].map(t => (
+                          <button
+                            key={t.id} type="button" onClick={() => setPollType(t.id)}
+                            className={`p-3 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all ${pollType === t.id ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:bg-slate-50'}`}
+                          >
+                            <t.icon size={16} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">{t.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {pollType === 'multiple_choice' && (
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Options</label>
+                        <div className="space-y-2">
+                          {pollOptions.map((opt, i) => (
+                            <div key={i} className="flex gap-2">
+                              <input
+                                value={opt} onChange={e => {
+                                  const newOpts = [...pollOptions];
+                                  newOpts[i] = e.target.value;
+                                  setPollOptions(newOpts);
+                                }}
+                                className="flex-1 p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all text-sm"
+                                placeholder={`Option ${i+1}`}
+                              />
+                              {pollOptions.length > 2 && (
+                                <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, idx)=>idx!==i))} className="p-2 text-slate-300 hover:text-red-500"><X size={18}/></button>
+                              )}
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => setPollOptions([...pollOptions, ''])} className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">+ Add Option</button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex gap-3 mt-8">
+                      <button type="button" onClick={() => setShowPollModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+                      <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl shadow-blue-100/50 disabled:opacity-50">Save Poll</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
+  const [showQR, setShowQR] = useState(true);
+  const qIdx = session.quiz.current_question_idx;
+  const questions = session.quiz.questions || [];
+  
+  const joinUrl = `${window.location.href.split('?')[0]}?room=${roomCode}`;
+  
+  const activePoll = qIdx >= 0 && qIdx < questions.length ? questions[qIdx] : null;
+
+  const chartData = useMemo(() => {
+    if (!activePoll) return [];
+    if (activePoll.type === 'multiple_choice') {
+      const counts = {};
+      activePoll.options.forEach(o => counts[o] = 0);
+      responses.forEach(r => {
+        const resp = r.answers?.[qIdx];
+        if (resp) counts[resp] = (counts[resp] || 0) + 1;
+      });
+      return Object.entries(counts).map(([label, count]) => ({ label, count }));
+    } else if (activePoll.type === 'word_cloud') {
+       const words = {};
+       responses.forEach(r => {
+         const resp = r.answers?.[qIdx];
+         if (resp) {
+           const w = String(resp).toLowerCase().trim();
+           if (w) words[w] = (words[w] || 0) + 1;
+         }
+       });
+       return Object.entries(words).map(([text, value]) => ({ text, value }));
+    } else if (activePoll.type === 'rating') {
+       const counts = { '1':0, '2':0, '3':0, '4':0, '5':0 };
+       responses.forEach(r => {
+         const resp = r.answers?.[qIdx];
+         if (resp) counts[resp] = (counts[resp] || 0) + 1;
+       });
+       return Object.entries(counts).map(([label, count]) => ({ label, count }));
+    }
+    return [];
+  }, [activePoll, responses, qIdx]);
+
+  const maxCount = Math.max(...chartData.map(d => d.count || 0), 1);
+
+  const setLivePollState = async (idx) => {
+    const newQuiz = { ...session.quiz, current_question_idx: idx };
+    await supabase.from('rooms').update({ quiz: newQuiz }).eq('id', roomCode);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col md:flex-row gap-6 h-[80vh]">
+      <div className="w-full md:w-[75%] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl relative flex flex-col">
+        {showQR && (
+          <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md p-4 rounded-3xl shadow-2xl flex flex-col items-center animate-in slide-in-from-top border-4 border-white/50">
+             <div className="bg-white p-2 rounded-xl"><QRCode value={joinUrl} size={100} /></div>
+             <div className="font-black text-blue-600 text-2xl tracking-[0.2em] mt-2 bg-blue-50 px-4 py-1 rounded-lg w-full text-center border border-blue-100">{roomCode}</div>
+             <p className="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest text-center">Scan to Join</p>
+             <button onClick={()=>setShowQR(false)} className="absolute top-2 right-2 text-slate-300 hover:text-slate-500 bg-slate-100/50 rounded-full p-1"><X size={14} /></button>
+          </div>
+        )}
+        {!showQR && (
+          <button onClick={()=>setShowQR(true)} className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-black shadow-xl text-slate-700 border border-slate-200 hover:bg-white flex items-center gap-2 transition-all">
+            <QrCode size={16} /> Join Info
+          </button>
+        )}
+        <iframe src={session.quiz.video_url} className="w-full h-full border-0" allowFullScreen />
+      </div>
+
+      <div className="w-full md:w-[25%] bg-slate-50 rounded-3xl border border-slate-200 p-6 flex flex-col pt-0">
+         {activePoll ? (
+           <div className="flex flex-col h-full mt-6">
+             <div className="flex justify-between items-start mb-4 bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-900 relative">
+                <span className="absolute top-0 right-0 -mt-2 -mr-2 w-4 h-4 rounded-full bg-green-500 animate-pulse border-2 border-white"></span>
+                <div className="flex-1 pr-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Live Poll {qIdx + 1}/{questions.length}</div>
+                  <div className="font-black text-lg leading-tight">{activePoll.title}</div>
+                  <div className="text-xs font-bold text-blue-600 mt-2">{responses.length} Submissions</div>
+                </div>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto custom-scroll -mx-2 px-2 py-2">
+                 {activePoll.type === 'multiple_choice' || activePoll.type === 'rating' ? (
+                  <div className="space-y-4">
+                    {chartData.map((d, i) => (
+                      <div key={i} className="group">
+                        <div className="flex justify-between mb-1">
+                          <span className="font-black text-slate-700 text-xs tracking-tight">{d.label}</span>
+                          <span className="font-bold text-blue-600 text-[10px]">{d.count}</span>
+                        </div>
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 transition-all duration-500 shadow-sm"
+                            style={{ width: `${maxCount > 0 ? (d.count / maxCount) * 100 : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 justify-center py-4">
+                    {chartData.length === 0 && <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] italic">Waiting for responses...</p>}
+                    {chartData.map((d, i) => (
+                      <span 
+                        key={i} 
+                        className="font-black text-blue-600 animate-in fade-in"
+                        style={{ fontSize: `${Math.min(12 + d.value * 6, 28)}px`, opacity: Math.min(0.5 + d.value * 0.1, 1) }}
+                      >
+                        {d.text}
+                      </span>
+                    ))}
+                  </div>
+                )}
+             </div>
+
+             <div className="mt-4 pt-4 border-t border-slate-200">
+                <button onClick={() => setLivePollState(-1)} className="w-full py-4 rounded-xl bg-orange-100 text-orange-600 font-black text-xs uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all shadow-lg hover:shadow-xl shadow-orange-100/50">
+                  Close Poll
+                </button>
+             </div>
+           </div>
+         ) : (
+           <div className="flex flex-col h-full mt-6">
+              <div className="text-center p-6 bg-slate-100 rounded-2xl border border-slate-200 mb-6 relative">
+                 <Monitor size={32} className="mx-auto text-slate-400 mb-2" />
+                 <h3 className="font-black text-slate-700 text-sm uppercase tracking-widest">Slides Active</h3>
+                 <p className="text-[10px] font-bold text-slate-500 mt-1">Students are viewing slides or waiting. Click a poll below to launch it.</p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scroll space-y-3">
+                 {questions.length === 0 ? (
+                   <p className="text-center text-slate-400 text-xs font-bold italic py-4">No polls available in this deck.</p>
+                 ) : questions.map((q, i) => (
+                   <div key={q.id || i} className="p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-shadow cursor-pointer relative group" onClick={() => setLivePollState(i)}>
+                       <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Poll {i + 1}</div>
+                       <div className="font-bold text-slate-800 text-sm leading-snug pr-6">{q.title}</div>
+                       <div className="absolute top-1/2 -translate-y-1/2 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <Play size={16} className="text-blue-500" />
+                       </div>
+                   </div>
+                 ))}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <button onClick={onEnd} className="w-full py-4 rounded-xl bg-red-50 text-red-600 font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2">
+                  <PauseCircle size={16} /> End Session
+                </button>
+              </div>
+           </div>
+         )}
+      </div>
+    </div>
+  );
+}
+
+function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
+  const [subTab, setSubTab] = useState(session && session.quiz?.type === 'slides' ? 'live' : 'manage');
+
+  useEffect(() => {
+    if (session && session.quiz?.type === 'slides') setSubTab('live');
+  }, [session]);
+
+  const handleSubTabChange = (t) => {
+    if (t !== 'live' && session && session.quiz?.type === 'slides') {
+      if (!window.confirm("A slides session is currently running! Navigate away?")) return;
+    }
+    setSubTab(t);
+  };
+
+  const slideQuizzes = quizzes.filter(q => q.type === 'slides');
+
+  return (
+    <div>
+      <div className="flex overflow-x-auto no-scrollbar gap-2 mb-6 border-b border-slate-200 pb-2">
+        {[
+          { id: 'manage', label: 'Create/Edit' },
+          { id: 'launch', label: 'Launch' },
+          { id: 'live', label: 'Live Poll' },
+          { id: 'history', label: 'History' }
+        ].map(t => (
+          <button
+            key={t.id} onClick={() => handleSubTabChange(t.id)}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${subTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+          >
+            {t.label} {t.id === 'live' && session && session.quiz?.type === 'slides' && <span className="ml-2 w-2 h-2 inline-block rounded-full bg-green-400 animate-pulse"></span>}
+          </button>
+        ))}
+      </div>
+      
+      {subTab === 'manage' && <SlidePollsManageTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} slideQuizzes={slideQuizzes} />}
+      {subTab === 'launch' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+           <LaunchTab quizzes={slideQuizzes} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="slides" roomType="slides" />
+        </div>
+      )}
+      {subTab === 'live' && (
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[50vh] flex flex-col">
+          {session && session.quiz?.type === 'slides' ? (
+            <SlidePollsLiveTab session={session} responses={responses} onEnd={onEnd} roomCode={roomCode} />
+          ) : (
+             <div className="m-auto text-center text-slate-400 p-10 mt-10">
+               <Presentation size={48} className="mx-auto mb-4 opacity-50" />
+               <h3 className="text-xl font-black mb-2">No Active Slides Session</h3>
+               <p className="font-bold text-sm">Go to Launch to present polls in slides.</p>
+               <button onClick={() => setSubTab('launch')} className="mt-6 font-black text-sm text-blue-600 underline underline-offset-4">Launch Slides</button>
+             </div>
+          )}
+        </div>
+      )}
+      {subTab === 'history' && (() => {
+        const slideReports = [...reports, ...asyncReports]
+          .filter(r => r.type === 'slides')
+          .filter(r => !r.hidden);
+        return <ReportsTab reports={slideReports} allReports={slideReports} classes={classes} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} handleToggleSaOverride={handleToggleSaOverride} />;
+      })()}
+    </div>
+  );
+}
+
+function PollsTabMain(props) {
+  const [pollMode, setPollMode] = useState('standalone'); // 'standalone' | 'slides'
+
+  return (
+    <div>
+      <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 max-w-sm border border-slate-200 shadow-inner">
+        <button 
+          onClick={() => setPollMode('standalone')}
+          className={`flex-1 py-2 text-sm font-black uppercase tracking-widest rounded-xl transition-all ${pollMode === 'standalone' ? 'bg-white text-blue-600 shadow border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Standalone Polls
+        </button>
+        <button 
+          onClick={() => setPollMode('slides')}
+          className={`flex-1 py-2 text-sm font-black uppercase tracking-widest rounded-xl transition-all ${pollMode === 'slides' ? 'bg-white text-blue-600 shadow border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Polls in Slides
+        </button>
+      </div>
+
+      {pollMode === 'standalone' && <StandalonePollsMain {...props} />}
+      {pollMode === 'slides' && <PollsInSlidesMain {...props} />}
+    </div>
+  );
+}
+
+function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride }) {
   const [subTab, setSubTab] = useState(session && session.type === 'poll' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1567,6 +2178,8 @@ function TeacherPortal({ setRole, user }) {
           <PollsTabMain
             polls={polls}
             setPolls={setPolls}
+            quizzes={quizzes}
+            setQuizzes={setQuizzes}
             user={user}
             profile={profile}
             classes={classes}
@@ -5019,6 +5632,21 @@ function StudentPortal({ setRole, initialRoom }) {
 
   if (session.type === 'poll') {
     return <PollInteraction session={session} answers={answers} submit={submit} onFinish={() => setIdx(total)} idx={idx} total={total} onNext={handleNext} onPrev={handlePrev} />;
+  }
+
+  if (session.type === 'slides') {
+    const activeIdx = session.quiz?.current_question_idx;
+    if (activeIdx === undefined || activeIdx === -1) {
+      return (
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-10 text-center animate-in fade-in">
+          <Presentation size={64} className="text-white/20 mb-8" />
+          <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter">Presentation Active</h2>
+          <p className="text-slate-400 font-bold uppercase text-xs tracking-widest max-w-sm leading-relaxed">Please follow along with the instructor's slides.<br/><br/>The next poll will appear here automatically.</p>
+        </div>
+      );
+    } else {
+      return <PollInteraction session={session} answers={answers} submit={submit} onFinish={() => {}} idx={activeIdx} total={(session.quiz?.questions || []).length} onNext={()=>{}} onPrev={()=>{}} />;
+    }
   }
 
   return (
