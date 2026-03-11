@@ -340,8 +340,8 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode, showToas
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 max-w-md w-full border border-slate-100">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 max-w-md w-full border border-slate-100 mb-6">
         <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-200">
           <Database size={40} />
         </div>
@@ -528,6 +528,7 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode, showToas
           </div>
         )}
       </div>
+      <PoliciesFooter />
     </div>
   );
 }
@@ -7329,6 +7330,79 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
       {effectiveSubTab === 'report' && (
         <FeedbackDashboard reports={reports} classes={classes} />
       )}
+    </div>
+  );
+}
+
+
+// --- Policies Components ---
+function PoliciesFooter() {
+  const [activeModal, setActiveModal] = useState(null);
+
+  return (
+    <>
+      <div className="w-full max-w-md flex justify-center gap-6 py-4 text-xs font-bold text-slate-400">
+        <button onClick={() => setActiveModal('terms')} className="hover:text-blue-600 transition-colors">Terms & Conditions</button>
+        <button onClick={() => setActiveModal('privacy')} className="hover:text-blue-600 transition-colors">Privacy Policy</button>
+        <button onClick={() => setActiveModal('refund')} className="hover:text-blue-600 transition-colors">Refund Policy</button>
+      </div>
+      {activeModal && <PoliciesModal type={activeModal} onClose={() => setActiveModal(null)} />}
+    </>
+  );
+}
+
+function PoliciesModal({ type, onClose }) {
+  const content = {
+    terms: (
+      <div className="space-y-4 text-sm text-slate-600">
+        <h3 className="text-xl font-black text-slate-800 mb-4">Terms and Conditions (T&C)</h3>
+        <p className="font-bold">Last Updated: March 11, 2026</p>
+        <p>Welcome to ClassLabX. These Terms and Conditions govern your use of the ClassLabX platform and the website located at https://toolabx.com/classlabx-landing/.</p>
+        <div><strong className="text-slate-800">1. General Agreement</strong><br/>By accessing or using ClassLabX, you agree to be bound by these Terms. The platform is operated and legally represented by Ibrahim Elsayed (under the brand TooLabX).</div>
+        <div><strong className="text-slate-800">2. Merchant of Record</strong><br/>Our order process is conducted by our online reseller, Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns related to your payments. Your relationship regarding the financial transaction is governed by Paddle’s Terms and Conditions.</div>
+        <div><strong className="text-slate-800">3. Use of the Service</strong><br/>ClassLabX provides a mini-LMS toolkit for educators, including attendance tracking, interactive quizzes, and a matrix gradebook. You are responsible for ensuring that your use of the platform to collect student data (such as Student IDs and attendance records) complies with the educational regulations and institutional policies applicable to you.</div>
+        <div><strong className="text-slate-800">4. Account and Security</strong><br/>Educators are responsible for safeguarding their account credentials. Because students access the platform via dynamic QR codes and room pins without creating accounts, educators are entirely responsible for the sessions they launch and the data exported from them.</div>
+        <div><strong className="text-slate-800">5. Governing Law</strong><br/>These Terms shall be governed and construed in accordance with the laws of Ajman, United Arab Emirates, without regard to its conflict of law provisions.</div>
+      </div>
+    ),
+    privacy: (
+      <div className="space-y-4 text-sm text-slate-600">
+        <h3 className="text-xl font-black text-slate-800 mb-4">Privacy Policy</h3>
+        <p className="font-bold">Last Updated: March 11, 2026</p>
+        <p>This Privacy Policy explains how Ibrahim Elsayed (under the brand TooLabX), referred to as "we", "us", or "our", collects, uses, and protects your data when you use ClassLabX.</p>
+        <div><strong className="text-slate-800">1. Information We Collect</strong>
+          <ul className="list-disc pl-5 mt-2 space-y-1">
+            <li><strong>Educator Data:</strong> When you create an account, we collect your name, email address, and account credentials.</li>
+            <li><strong>Student Data:</strong> We collect and store student names, email addresses, Student IDs, quiz responses, satisfaction surveys, and attendance records in our database on behalf of the educator. We intentionally do not require or collect student passwords.</li>
+            <li><strong>Device & Anti-Cheat Data:</strong> To enable our anti-cheat smart attendance, we collect temporary device fingerprinting data when a student scans a QR code. This ensures proxy check-ins are prevented.</li>
+            <li><strong>Payment Data:</strong> All subscription payments are processed securely by Paddle.com. We do not collect, process, or store your credit card or financial information on our servers.</li>
+          </ul>
+        </div>
+        <div><strong className="text-slate-800">2. How We Use Your Data</strong><br/>We use the information collected solely to operate the ClassLabX platform, sync the Matrix Gradebook, improve our services, and communicate with you regarding your account or updates.</div>
+        <div><strong className="text-slate-800">3. Data Sharing</strong><br/>We do not sell your personal data or your students' data. Information is only shared with trusted third-party service providers (like Paddle for payment processing and our cloud hosting providers) strictly for the purpose of running the application.</div>
+      </div>
+    ),
+    refund: (
+      <div className="space-y-4 text-sm text-slate-600">
+        <h3 className="text-xl font-black text-slate-800 mb-4">Refund Policy</h3>
+        <p className="font-bold">Last Updated: March 11, 2026</p>
+        <p>We want you to be completely confident when upgrading to the "Pro Professor" plan on ClassLabX.</p>
+        <div><strong className="text-slate-800">1. 7-Day Money-Back Guarantee</strong><br/>If you purchase a paid subscription and find that it does not meet your lecture hall needs, we offer a full, no-questions-asked refund within the first 7 days of your initial purchase.</div>
+        <div><strong className="text-slate-800">2. How to Request a Refund</strong><br/>To request a refund within the 7-day window, contact Paddle.com buyer support. Please ensure you include the Paddle order receipt number you received via email at the time of purchase.</div>
+        <div><strong className="text-slate-800">3. Subscription Cancellations and Renewals</strong><br/>You can cancel your subscription at any time from your account settings to prevent future automatic renewals. If you cancel after the initial 7-day refund window, no prorated refunds will be issued for the remainder of that billing cycle, but you will retain full access to all Pro features until your current billing period ends.</div>
+        <div><strong className="text-slate-800">4. Beta Purchases</strong><br/>Any access granted during the "Free Beta" period involves no financial transaction and is therefore exempt from this refund policy.</div>
+      </div>
+    )
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6 pb-20 sm:pb-6">
+      <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-2xl w-full max-h-[85vh] overflow-y-auto relative animate-in zoom-in-95 duration-200">
+        <button onClick={onClose} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors flex items-center justify-center">
+          <X size={20} />
+        </button>
+        {content[type]}
+      </div>
     </div>
   );
 }
