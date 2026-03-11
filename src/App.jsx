@@ -10,6 +10,19 @@ import ReactPlayer from 'react-player';
 import QRCode from 'react-qr-code';
 
 // Lazy loaders for heavy libraries
+
+const getEffectiveSubscription = (profile) => {
+  if (!profile) return 'free';
+  if (profile.subscription === 'beta') {
+    const betaEndDate = new Date('2026-07-30T23:59:59Z');
+    if (new Date() > betaEndDate) {
+      return 'free';
+    }
+    return 'beta';
+  }
+  return profile.subscription || 'free';
+};
+
 const loadXLSX = async () => {
   const XLSX = await import('xlsx');
   return XLSX;
@@ -667,7 +680,7 @@ function ProfileCompletionOverlay({ profile, setProfile, user, showToast }) {
 //               POLLS FEATURE
 // ==========================================
 
-function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
+function SlidePollsManageTab({ quizzes, setQuizzes, user, profile, slideQuizzes, showToast }) {
   const [showModal, setShowModal] = useState(false);
   const [editingDeck, setEditingDeck] = useState(null);
   const [title, setTitle] = useState('');
@@ -683,6 +696,10 @@ function SlidePollsManageTab({ quizzes, setQuizzes, user, slideQuizzes }) {
   const [showPollModal, setShowPollModal] = useState(false);
 
   const openCreate = () => {
+    if (getEffectiveSubscription(profile) === 'free' && slideQuizzes.length >= 3) {
+      if (showToast) showToast("Free Tier Limit: You can only have up to 3 Poll Presentations. Please upgrade to Pro to create more.", "warning");
+      return;
+    }
     setEditingDeck(null);
     setTitle('');
     setVideoUrl('');
@@ -1241,7 +1258,7 @@ function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaun
         ))}
       </div>
       
-      {subTab === 'manage' && <SlidePollsManageTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} slideQuizzes={slideQuizzes} />}
+      {subTab === 'manage' && <SlidePollsManageTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} slideQuizzes={slideQuizzes} showToast={showToast} />}
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
            <LaunchTab quizzes={slideQuizzes} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="slides" roomType="slides" goToLiveSession={goToLiveSession} />
@@ -1388,6 +1405,10 @@ function PollsTab({ polls, setPolls, user, showToast }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const openCreate = () => {
+    if (getEffectiveSubscription(profile) === 'free' && polls.length >= 3) {
+      if (showToast) showToast("Free Tier Limit: You can only have up to 3 Standalone Polls. Please upgrade to Pro to create more.", "warning");
+      return;
+    }
     setEditingPoll(null);
     setTitle('');
     setType('multiple_choice');
@@ -2276,7 +2297,7 @@ function TeacherPortal({ setRole, user, showToast }) {
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-        {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} showToast={showToast} />}
+        {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} profile={profile} showToast={showToast} />}
         {activeTab === 'quizzes' && (
           <QuizzesTabMain
             quizzes={quizzes}
@@ -2803,7 +2824,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     let launchedQuiz = null;
 
     if (category === 'attendance') {
-      if (profile?.subscription === 'free') {
+      if (getEffectiveSubscription(profile) === 'free') {
         const attendanceCount = reports.filter(r => r.type === 'attendance').length;
         if (attendanceCount >= 3) {
           showToast("Free Tier Limit: You can only have up to 3 attendance sessions. Please upgrade to Pro to start more.", "warning");
@@ -3375,7 +3396,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
     let saved;
     if (!data.id) {
       // New creation limits for free tier
-      if (profile?.subscription === 'free') {
+      if (getEffectiveSubscription(profile) === 'free') {
         if (data.type === 'survey') {
           const surveysCount = quizzes.filter(q => q.type === 'survey').length;
           if (surveysCount >= 3) {
@@ -3396,7 +3417,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
       else saved = ret;
     } else {
       // Edit limits for free tier: only the first 3 are editable if they have more
-      if (profile?.subscription === 'free') {
+      if (getEffectiveSubscription(profile) === 'free') {
         const sorted = [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const indexInHistory = sorted.findIndex(q => q.id === data.id);
         if (indexInHistory >= 3) {
@@ -3450,8 +3471,8 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
             <div className="flex gap-2">
               <button 
                 onClick={() => setEdit(q)} 
-                className={`p-3 rounded-xl transition-all ${profile?.subscription === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
-                title={profile?.subscription === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? "Locked for Free Tier" : "Edit"}
+                className={`p-3 rounded-xl transition-all ${getEffectiveSubscription(profile) === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                title={getEffectiveSubscription(profile) === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? "Locked for Free Tier" : "Edit"}
               >
                 <Edit2 size={20} />
               </button>
@@ -3503,7 +3524,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile, showToast }) {
       alert(`Image too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Please upload an image under 1 MB.`);
       return;
     }
-    if (profile?.subscription === 'free' || profile?.subscription === 'beta') {
+    if (getEffectiveSubscription(profile) === 'free' || getEffectiveSubscription(profile) === 'beta') {
       alert("Photo uploads are not available on your current subscription plan. Please upgrade to Pro.");
       return;
     }
@@ -6068,7 +6089,7 @@ function StudentPortal({ setRole, initialRoom, showToast }) {
 // ==========================================
 //               CLASSES & ROSTERS
 // ==========================================
-function ClassesTab({ classes, setClasses, user, showToast }) {
+function ClassesTab({ classes, setClasses, user, profile, showToast }) {
   const [selectedClass, setSelectedClass] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
 
