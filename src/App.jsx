@@ -5175,6 +5175,7 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
           </div>
         );
       })()}
+      <PoliciesFooter />
     </>
   );
 }
@@ -7275,6 +7276,7 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
           )}
         </div>
       )}
+      <PoliciesFooter />
     </div>
   );
 }
