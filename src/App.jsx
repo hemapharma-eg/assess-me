@@ -348,6 +348,9 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode, showToas
         <h1 className="text-4xl font-black text-slate-800 text-center mb-2">ClassLab<span className="text-blue-600">X</span></h1>
         <p className="text-slate-400 text-center mb-10 font-bold text-xs uppercase tracking-widest">Cloud Assessments</p>
 
+        <div className="w-full flex justify-center mb-6">
+          <PoliciesHeaderLinks />
+        </div>
         {(isRecoveryMode || !user) && showTeacherAuth ? (
           <form onSubmit={handleTeacherAccess} className="space-y-4 mb-4">
             {authMode !== 'recovery' && (
@@ -528,7 +531,6 @@ function RolePicker({ setRole, user, isRecoveryMode, setIsRecoveryMode, showToas
           </div>
         )}
       </div>
-      <PoliciesFooter />
     </div>
   );
 }
@@ -2237,6 +2239,7 @@ function TeacherPortal({ setRole, user, showToast }) {
               <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{(profile.subscription || 'free').replace('_', ' ')}</span>
             </div>
           )}
+          <PoliciesHeaderLinks />
           {session && !session.is_async && (
             <button
               onClick={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
@@ -5175,7 +5178,6 @@ function ReportsTab({ reports, allReports, classes, updateReportStatus, isAttend
           </div>
         );
       })()}
-      <PoliciesFooter />
     </>
   );
 }
@@ -5837,6 +5839,7 @@ function StudentPortal({ setRole, initialRoom, showToast }) {
               </div>
             )}
           </div>
+          <PoliciesHeaderLinks />
           <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">ID: {sid}</div>
         </header>
       )}
@@ -7276,7 +7279,6 @@ function AttendanceTabMain({ user, profile, classes, reports, asyncReports, onLa
           )}
         </div>
       )}
-      <PoliciesFooter />
     </div>
   );
 }
@@ -7338,15 +7340,15 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
 
 
 // --- Policies Components ---
-function PoliciesFooter() {
+function PoliciesHeaderLinks() {
   const [activeModal, setActiveModal] = useState(null);
 
   return (
     <>
-      <div className="w-full max-w-md flex justify-center gap-6 py-4 text-xs font-bold text-slate-400">
-        <button onClick={() => setActiveModal('terms')} className="hover:text-blue-600 transition-colors">Terms & Conditions</button>
-        <button onClick={() => setActiveModal('privacy')} className="hover:text-blue-600 transition-colors">Privacy Policy</button>
-        <button onClick={() => setActiveModal('refund')} className="hover:text-blue-600 transition-colors">Refund Policy</button>
+      <div className="hidden md:flex items-center justify-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+        <button onClick={() => setActiveModal('terms')} className="hover:text-blue-600 transition-colors">Terms</button>
+        <button onClick={() => setActiveModal('privacy')} className="hover:text-blue-600 transition-colors">Privacy</button>
+        <button onClick={() => setActiveModal('refund')} className="hover:text-blue-600 transition-colors">Refund</button>
       </div>
       {activeModal && <PoliciesModal type={activeModal} onClose={() => setActiveModal(null)} />}
     </>
