@@ -1256,11 +1256,7 @@ function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaun
         ))}
       </div>
       
-<<<<<<< HEAD
       {subTab === 'manage' && <SlidePollsManageTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} profile={profile} slideQuizzes={slideQuizzes} showToast={showToast} />}
-=======
-      {subTab === 'manage' && <SlidePollsManageTab quizzes={quizzes} setQuizzes={setQuizzes} user={user} slideQuizzes={slideQuizzes} />}
->>>>>>> 330c862 (Integrate SlideCaster tab)
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
            <LaunchTab quizzes={slideQuizzes} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="slides" roomType="slides" goToLiveSession={goToLiveSession} />
@@ -1407,13 +1403,10 @@ function PollsTab({ polls, setPolls, user, showToast }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const openCreate = () => {
-<<<<<<< HEAD
     if (getEffectiveSubscription(profile) === 'free' && polls.length >= 3) {
       if (showToast) showToast("Free Tier Limit: You can only have up to 3 Standalone Polls. Please upgrade to Pro to create more.", "warning");
       return;
     }
-=======
->>>>>>> 330c862 (Integrate SlideCaster tab)
     setEditingPoll(null);
     setTitle('');
     setType('multiple_choice');
@@ -2242,14 +2235,9 @@ function TeacherPortal({ setRole, user, showToast }) {
           <h1 className="text-xl font-black text-blue-600 flex items-center gap-2 tracking-tighter">
             <Database size={20} /> ClassLabX <span className="text-[10px] bg-blue-100 px-2 py-0.5 rounded-full tracking-widest uppercase text-blue-800">Cloud Sync</span>
           </h1>
-<<<<<<< HEAD
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback'].map(t => (
-=======
-          <nav className="hidden md:flex gap-1">
             {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback', 'SlideCaster'].map(t => (
->>>>>>> 330c862 (Integrate SlideCaster tab)
               <button
                 key={t} onClick={() => handleTabChange(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -2270,10 +2258,7 @@ function TeacherPortal({ setRole, user, showToast }) {
               <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{(profile.subscription || 'free').replace('_', ' ')}</span>
             </div>
           )}
-<<<<<<< HEAD
           <PoliciesHeaderLinks />
-=======
->>>>>>> 330c862 (Integrate SlideCaster tab)
           {session && !session.is_async && (
             <button
               onClick={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
@@ -2298,11 +2283,7 @@ function TeacherPortal({ setRole, user, showToast }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full print:hidden">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-<<<<<<< HEAD
-          {['classes', 'quizzes', 'polls', 'attendance', 'feedback'].map(tab => (
-=======
           {['classes', 'quizzes', 'polls', 'attendance', 'feedback', 'slidecaster'].map(tab => (
->>>>>>> 330c862 (Integrate SlideCaster tab)
             <button
               key={tab} onClick={() => handleTabChange(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -2314,11 +2295,7 @@ function TeacherPortal({ setRole, user, showToast }) {
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 pt-6 md:pt-10">
-<<<<<<< HEAD
         {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} profile={profile} showToast={showToast} />}
-=======
-        {activeTab === 'classes' && <ClassesTab classes={classes} setClasses={setClasses} user={user} showToast={showToast} />}
->>>>>>> 330c862 (Integrate SlideCaster tab)
         {activeTab === 'quizzes' && (
           <QuizzesTabMain
             quizzes={quizzes}
@@ -2367,14 +2344,11 @@ function TeacherPortal({ setRole, user, showToast }) {
         )}
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
         {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
-<<<<<<< HEAD
-=======
         {activeTab === 'slidecaster' && (
           <div className="w-full h-[calc(100vh-160px)] rounded-3xl overflow-hidden border border-slate-200 bg-white shadow-inner">
             <iframe src="/slidecaster.html" className="w-full h-full border-none" title="SlideCaster" />
           </div>
         )}
->>>>>>> 330c862 (Integrate SlideCaster tab)
       </main>
 
 
@@ -2853,11 +2827,7 @@ function LaunchTab({ quizzes, classes, reports, onLaunch, session, roomCode, set
     let launchedQuiz = null;
 
     if (category === 'attendance') {
-<<<<<<< HEAD
       if (getEffectiveSubscription(profile) === 'free') {
-=======
-      if (profile?.subscription === 'free') {
->>>>>>> 330c862 (Integrate SlideCaster tab)
         const attendanceCount = reports.filter(r => r.type === 'attendance').length;
         if (attendanceCount >= 3) {
           showToast("Free Tier Limit: You can only have up to 3 attendance sessions. Please upgrade to Pro to start more.", "warning");
@@ -3429,11 +3399,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
     let saved;
     if (!data.id) {
       // New creation limits for free tier
-<<<<<<< HEAD
       if (getEffectiveSubscription(profile) === 'free') {
-=======
-      if (profile?.subscription === 'free') {
->>>>>>> 330c862 (Integrate SlideCaster tab)
         if (data.type === 'survey') {
           const surveysCount = quizzes.filter(q => q.type === 'survey').length;
           if (surveysCount >= 3) {
@@ -3454,11 +3420,7 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
       else saved = ret;
     } else {
       // Edit limits for free tier: only the first 3 are editable if they have more
-<<<<<<< HEAD
       if (getEffectiveSubscription(profile) === 'free') {
-=======
-      if (profile?.subscription === 'free') {
->>>>>>> 330c862 (Integrate SlideCaster tab)
         const sorted = [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const indexInHistory = sorted.findIndex(q => q.id === data.id);
         if (indexInHistory >= 3) {
@@ -3512,13 +3474,8 @@ function QuizzesTab({ quizzes, setQuizzes, user, profile, showToast }) {
             <div className="flex gap-2">
               <button 
                 onClick={() => setEdit(q)} 
-<<<<<<< HEAD
                 className={`p-3 rounded-xl transition-all ${getEffectiveSubscription(profile) === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
                 title={getEffectiveSubscription(profile) === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? "Locked for Free Tier" : "Edit"}
-=======
-                className={`p-3 rounded-xl transition-all ${profile?.subscription === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
-                title={profile?.subscription === 'free' && [...quizzes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex(x => x.id === q.id) >= 3 ? "Locked for Free Tier" : "Edit"}
->>>>>>> 330c862 (Integrate SlideCaster tab)
               >
                 <Edit2 size={20} />
               </button>
@@ -3570,11 +3527,7 @@ function QuizEditor({ quiz, onSave, onCancel, profile, showToast }) {
       alert(`Image too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Please upload an image under 1 MB.`);
       return;
     }
-<<<<<<< HEAD
     if (getEffectiveSubscription(profile) === 'free' || getEffectiveSubscription(profile) === 'beta') {
-=======
-    if (profile?.subscription === 'free' || profile?.subscription === 'beta') {
->>>>>>> 330c862 (Integrate SlideCaster tab)
       alert("Photo uploads are not available on your current subscription plan. Please upgrade to Pro.");
       return;
     }
@@ -5910,10 +5863,7 @@ function StudentPortal({ setRole, initialRoom, showToast }) {
               </div>
             )}
           </div>
-<<<<<<< HEAD
           <PoliciesHeaderLinks />
-=======
->>>>>>> 330c862 (Integrate SlideCaster tab)
           <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">ID: {sid}</div>
         </header>
       )}
@@ -6142,11 +6092,7 @@ function StudentPortal({ setRole, initialRoom, showToast }) {
 // ==========================================
 //               CLASSES & ROSTERS
 // ==========================================
-<<<<<<< HEAD
 function ClassesTab({ classes, setClasses, user, profile, showToast }) {
-=======
-function ClassesTab({ classes, setClasses, user, showToast }) {
->>>>>>> 330c862 (Integrate SlideCaster tab)
   const [selectedClass, setSelectedClass] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -7415,7 +7361,7 @@ function FeedbackTabMain({ user, profile, classes, reports, asyncReports, onLaun
     </div>
   );
 }
-<<<<<<< HEAD
+
 
 
 // --- Policies Components ---
@@ -7489,5 +7435,4 @@ function PoliciesModal({ type, onClose }) {
     </div>
   );
 }
-=======
->>>>>>> 330c862 (Integrate SlideCaster tab)
+
