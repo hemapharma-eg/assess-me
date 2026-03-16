@@ -2345,7 +2345,7 @@ function TeacherPortal({ setRole, user, showToast }) {
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
         {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
         {activeTab === 'slidecaster' && (
-          <div className="w-full h-[calc(100vh-160px)] rounded-3xl overflow-hidden border border-slate-200 bg-white shadow-inner">
+          <div className="w-full h-[calc(100vh-80px)] min-h-[800px] rounded-[2.5rem] overflow-hidden border border-slate-200 bg-white shadow-2xl">
             <iframe src="/slidecaster.html" className="w-full h-full border-none" title="SlideCaster" />
           </div>
         )}
