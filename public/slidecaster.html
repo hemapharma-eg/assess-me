@@ -813,8 +813,20 @@
             fastStart: 'in-memory'
           });
 
+          let baseTimeVideo = null;
           const videoEncoder = new VideoEncoder({
-            output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+            output: (chunk, meta) => {
+              if (baseTimeVideo === null) baseTimeVideo = chunk.timestamp;
+              const buffer = new ArrayBuffer(chunk.byteLength);
+              chunk.copyTo(buffer);
+              const newChunk = new EncodedVideoChunk({
+                type: chunk.type,
+                timestamp: chunk.timestamp - baseTimeVideo,
+                duration: chunk.duration,
+                data: buffer
+              });
+              muxer.addVideoChunk(newChunk, meta);
+            },
             error: e => console.error(e)
           });
           videoEncoder.configure({
@@ -825,8 +837,20 @@
             framerate: 30
           });
 
+          let baseTimeAudio = null;
           const audioEncoder = new AudioEncoder({
-            output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+            output: (chunk, meta) => {
+              if (baseTimeAudio === null) baseTimeAudio = chunk.timestamp;
+              const buffer = new ArrayBuffer(chunk.byteLength);
+              chunk.copyTo(buffer);
+              const newChunk = new EncodedAudioChunk({
+                type: chunk.type,
+                timestamp: chunk.timestamp - baseTimeAudio,
+                duration: chunk.duration,
+                data: buffer
+              });
+              muxer.addAudioChunk(newChunk, meta);
+            },
             error: e => console.error(e)
           });
           audioEncoder.configure({
