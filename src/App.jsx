@@ -1225,7 +1225,7 @@ function SlidePollsLiveTab({ session, responses, onEnd, roomCode }) {
   );
 }
 
-function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession }) {
+function PollsInSlidesMain({ quizzes, setQuizzes, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession, showToast }) {
   const [subTab, setSubTab] = useState(session && session.quiz?.type === 'slides' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1331,7 +1331,7 @@ function PollsTabMain(props) {
   );
 }
 
-function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession }) {
+function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch, session, responses, roomCode, onEnd, reports, asyncReports, updateReportStatus, saOverrides, setSaOverrides, handleToggleSaOverride, goToLiveSession, showToast }) {
   const [subTab, setSubTab] = useState(session && session.type === 'poll' ? 'live' : 'manage');
 
   useEffect(() => {
@@ -1363,7 +1363,7 @@ function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch
   return (
     <div>
       <SubNav />
-      {subTab === 'manage' && <PollsTab polls={polls} setPolls={setPolls} user={user} />}
+      {subTab === 'manage' && <PollsTab polls={polls} setPolls={setPolls} user={user} showToast={showToast} profile={profile} />}
       {subTab === 'launch' && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
            <LaunchTab quizzes={polls} classes={classes} reports={[]} onLaunch={onLaunch} session={session} roomCode={roomCode} setActiveTab={setSubTab} profile={profile} defaultCategory="poll" goToLiveSession={goToLiveSession} />
@@ -1393,7 +1393,7 @@ function StandalonePollsMain({ polls, setPolls, user, profile, classes, onLaunch
   );
 }
 
-function PollsTab({ polls, setPolls, user, showToast }) {
+function PollsTab({ polls, setPolls, user, showToast, profile }) {
   const [showModal, setShowModal] = useState(false);
   const [editingPoll, setEditingPoll] = useState(null);
   const [title, setTitle] = useState('');
