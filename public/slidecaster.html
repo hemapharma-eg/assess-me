@@ -13,6 +13,7 @@
   <script src="https://unpkg.com/lucide-react@0.344.0/dist/umd/lucide-react.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://unpkg.com/fix-webm-duration@1.0.6/fix-webm-duration.js"></script>
   
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
@@ -216,9 +217,76 @@
       const [isCompiling, setIsCompiling] = useState(false);
       const [compilationProgress, setCompilationProgress] = useState("");
       const [finalVideoUrl, setFinalVideoUrl] = useState(null);
-      const [finalExtension, setFinalExtension] = useState("webm");
+      const finalExtension = "webm"; // Actually state is used, maybe let's check
+      const [finalExtensionState, setFinalExtension] = useState("webm");
 
       const fileInputRef = useRef(null);
+      const pdfInputRef = useRef(null);
+
+      const handlePdfUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+          if (typeof pdfjsLib === 'undefined') {
+             alert('PDF library not loaded.');
+             return;
+          }
+          if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          }
+
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          const numPages = pdf.numPages;
+          if (numPages === 0) return;
+
+          const newSlides = [];
+          for (let i = 1; i <= numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 }); 
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            
+            await page.render({ canvasContext: ctx, viewport }).promise;
+
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            const imageFile = new File([blob], `slide_${i}.png`, { type: 'image/png' });
+            
+            newSlides.push({
+              id: Date.now() + i + Math.random(),
+              imageFile: imageFile,
+              imagePreviewUrl: URL.createObjectURL(imageFile),
+              script: "",
+              audioBlob: null,
+              audioUrl: null,
+              isGenerating: false,
+              voice: globalVoice,
+              isGeneratingScript: false,
+              scriptGenerationProgress: ""
+            });
+          }
+
+          setSlides(prev => {
+            if (prev.length === 1 && !prev[0].imageFile && !prev[0].script) {
+              return newSlides;
+            } else {
+              return [...prev, ...newSlides];
+            }
+          });
+
+        } catch (error) {
+          console.error("PDF upload failed:", error);
+          alert("Failed to parse PDF file. Ensure it is a valid PDF.");
+        } finally {
+          if (pdfInputRef.current) {
+            pdfInputRef.current.value = '';
+          }
+        }
+      };
 
       // --- Professional API Layer with Full Diagnostics ---
       const safeGeminiFetch = async (url, payload, maxRetries = 4) => {
@@ -731,6 +799,7 @@
           });
 
           // Manual data slice for robustness
+          const startTime = Date.now();
           recorder.start(500); 
           
           if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -804,7 +873,16 @@
           await new Promise(r => setTimeout(r, 500)); 
           isRecording = false; 
           recorder.stop();
-          const finalBlob = await recordPromise;
+          const duration = Date.now() - startTime;
+          let finalBlob = await recordPromise;
+
+          if (finalBlob.type.includes('webm') && typeof ysFixWebmDuration !== 'undefined') {
+            setCompilationProgress("Fixing video duration for Windows Media Player...");
+            finalBlob = await new Promise(resolve => {
+               ysFixWebmDuration(finalBlob, duration, fixedBlob => resolve(fixedBlob));
+            });
+          }
+
           const extension = finalBlob.type.includes('mp4') ? 'mp4' : 'webm';
           setFinalExtension(extension);
           setFinalVideoUrl(URL.createObjectURL(finalBlob));
@@ -940,11 +1018,17 @@
               </div>
               <div>
                 <h3 className="font-semibold text-indigo-900 mb-1">How it works</h3>
-                <p className="text-sm text-indigo-800/80 mb-3">Upload slide images, add scripts, and compile your video.</p>
-                <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleBulkImageUpload} />
-                <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2">
-                  <PresentationIcon className="w-4 h-4" /> Bulk Upload Slide Images
-                </button>
+                <p className="text-sm text-indigo-800/80 mb-3">Upload slide images or import a PDF, add scripts, and compile your video.</p>
+                <div className="flex flex-wrap gap-2">
+                  <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleBulkImageUpload} />
+                  <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2">
+                    <PresentationIcon className="w-4 h-4" /> Bulk Upload Slide Images
+                  </button>
+                  <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={handlePdfUpload} />
+                  <button onClick={() => pdfInputRef.current?.click()} className="bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2">
+                    <PresentationIcon className="w-4 h-4" /> Import PDF Slides
+                  </button>
+                </div>
               </div>
             </div>
 
