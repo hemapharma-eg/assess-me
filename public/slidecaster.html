@@ -1247,7 +1247,7 @@
                 </div>
                 <div className="p-6 flex justify-end gap-3 bg-slate-50 border-t border-slate-100">
                   <button onClick={() => setFinalVideoUrl(null)} className="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-200 transition-all">Back to Editor</button>
-                  <a href={finalVideoUrl} download={`Video.${finalExtensionState}`} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-all"><DownloadIcon className="w-5 h-5"/> Download Video</a>
+                  <a href={finalVideoUrl} download={`${projectName.replace(/\s+/g, '_')}_Video.mp4`} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-all"><DownloadIcon className="w-5 h-5"/> Download Video</a>
                 </div>
               </div>
             </div>
