@@ -961,6 +961,9 @@
           videoTrack.stop();
           audioTrack.stop();
 
+          // Wait for the reader loops to finish to prevent encoding after flush
+          await Promise.all([p1, p2]);
+
           // Wait for encoders and muxer
           await Promise.all([videoEncoder.flush(), audioEncoder.flush()]);
           muxer.finalize();
