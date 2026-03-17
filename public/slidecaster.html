@@ -241,6 +241,15 @@
           const numPages = pdf.numPages;
           if (numPages === 0) return;
 
+          const currentNonEmptyCount = (slides.length === 1 && !slides[0].imageFile && !slides[0].script) ? 0 : slides.length;
+          if (currentNonEmptyCount + numPages > 10) {
+            alert(`You can only have up to 10 slides per project. Trying to add ${numPages} slides to your existing ${currentNonEmptyCount} slides exceeds the limit.`);
+            if (pdfInputRef.current) {
+              pdfInputRef.current.value = '';
+            }
+            return;
+          }
+
           const newSlides = [];
           for (let i = 1; i <= numPages; i++) {
             const page = await pdf.getPage(i);
@@ -443,6 +452,10 @@
       };
 
       const handleAddSlide = () => {
+        if (slides.length >= 10) {
+          alert("You can only have up to 10 slides per project.");
+          return;
+        }
         setSlides(prev => [...prev, { 
           id: Date.now() + Math.random(), 
           imageFile: null, 
@@ -479,6 +492,15 @@
       const handleBulkImageUpload = (e) => {
         const files = e.target.files ? Array.from(e.target.files) : [];
         if (files.length === 0) return;
+
+        const currentNonEmptyCount = (slides.length === 1 && !slides[0].imageFile && !slides[0].script) ? 0 : slides.length;
+        if (currentNonEmptyCount + files.length > 10) {
+          alert(`You can only have up to 10 slides per project. Trying to add ${files.length} slides to your existing ${currentNonEmptyCount} slides exceeds the limit.`);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          return;
+        }
 
         const newSlides = files.map((file, index) => ({
           id: Date.now() + index + Math.random(),
@@ -533,6 +555,12 @@
       };
 
       const autoGenerateScript = async (id) => {
+        const currentlyGeneratingCount = slides.filter(s => s.isGeneratingScript).length;
+        if (currentlyGeneratingCount >= 3) {
+          alert("You cannot generate more than 3 AI scripts at the same time. Please wait until at least one finishes.");
+          return;
+        }
+
         const slide = slides.find(s => s.id === id);
         if (!slide || !slide.imageFile) {
           alert("Please upload an image for this slide first.");
@@ -578,6 +606,12 @@
       };
 
       const generateAudioForSlide = async (id) => {
+        const currentlyGeneratingVoiceCount = slides.filter(s => s.isGenerating).length;
+        if (currentlyGeneratingVoiceCount >= 3) {
+          alert("You cannot generate more than 3 voices at the same time. Please wait until at least one finishes.");
+          return;
+        }
+
         const slide = slides.find(s => s.id === id);
         if (!slide || !(slide.script || "").trim()) return;
 
@@ -1101,16 +1135,19 @@
           <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg z-20">
             <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
               <div className="flex flex-col">
-                <div className="text-sm text-slate-500 font-medium">Total Slides: <span className="text-slate-900">{slides.length}</span></div>
+                <div className="text-sm text-slate-500 font-medium">Total Slides: <span className="text-slate-900">{slides.length}</span><span className="text-slate-400"> / 10</span></div>
                 {!slides.every(s => s.audioUrl) && <div className="text-[10px] text-rose-500 font-semibold animate-pulse uppercase tracking-wider">Generate all voices to compile</div>}
               </div>
-              <button 
-                onClick={compileVideo} 
-                disabled={isCompiling || slides.length === 0 || !slides.every(s => s.audioUrl)} 
-                className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white font-semibold px-8 py-3 rounded-xl shadow-lg transition-all flex items-center gap-2 group"
-              >
-                {isCompiling ? <><LoaderIcon className="w-5 h-5 animate-spin"/> {compilationProgress}</> : <><VideoIcon className="w-5 h-5 group-hover:scale-110 transition-transform"/> Compile Video</>}
-              </button>
+              <div className="flex flex-col items-end">
+                <span className="text-xs text-slate-500 mb-1 font-medium">Note: Compilation may take up to 1 minute per slide.</span>
+                <button 
+                  onClick={compileVideo} 
+                  disabled={isCompiling || slides.length === 0 || !slides.every(s => s.audioUrl)} 
+                  className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white font-semibold px-8 py-3 rounded-xl shadow-lg transition-all flex items-center gap-2 group"
+                >
+                  {isCompiling ? <><LoaderIcon className="w-5 h-5 animate-spin"/> {compilationProgress}</> : <><VideoIcon className="w-5 h-5 group-hover:scale-110 transition-transform"/> Compile Video</>}
+                </button>
+              </div>
             </div>
           </footer>
 
