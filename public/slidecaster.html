@@ -13,7 +13,7 @@
   <script src="https://unpkg.com/lucide-react@0.344.0/dist/umd/lucide-react.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-  <script src="https://unpkg.com/fix-webm-duration@1.0.6/fix-webm-duration.js"></script>
+  <script src="https://unpkg.com/mp4-muxer/build/mp4-muxer.js"></script>
   
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
@@ -217,8 +217,7 @@
       const [isCompiling, setIsCompiling] = useState(false);
       const [compilationProgress, setCompilationProgress] = useState("");
       const [finalVideoUrl, setFinalVideoUrl] = useState(null);
-      const finalExtension = "webm"; // Actually state is used, maybe let's check
-      const [finalExtensionState, setFinalExtension] = useState("webm");
+      const [finalExtensionState, setFinalExtension] = useState("mp4");
 
       const fileInputRef = useRef(null);
       const pdfInputRef = useRef(null);
@@ -799,46 +798,97 @@
           if (!getStream) throw new Error("Canvas video export not supported.");
           
           const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          const audioCtx = new AudioContextClass();
+          const audioCtx = new AudioContextClass({ sampleRate: 44100 });
           const dest = audioCtx.createMediaStreamDestination();
 
           const canvasStream = getStream.call(canvas, 30); 
-          const combinedStream = new MediaStream([
-            ...canvasStream.getVideoTracks(),
-            ...dest.stream.getAudioTracks()
-          ]);
-
-          let options = { mimeType: 'video/webm;codecs=vp8,opus' };
           
-          const possibleMimes = [
-            'video/mp4;codecs=avc1,mp4a.40.2',
-            'video/webm;codecs=vp8,opus',
-            'video/webm;codecs=vp9,opus',
-            'video/webm'
-          ];
-          
-          for (const mime of possibleMimes) {
-            if (MediaRecorder.isTypeSupported(mime)) {
-              options = { mimeType: mime };
-              break;
-            }
-          }
+          const Mp4Muxer = window.Mp4Muxer;
+          if (!Mp4Muxer) throw new Error("MP4 Muxer library not loaded.");
 
-          const recorder = new MediaRecorder(combinedStream, options);
-          const chunks = [];
-          recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
-          const recordPromise = new Promise(resolve => {
-            recorder.onstop = () => resolve(new Blob(chunks, { type: options.mimeType }));
+          let muxer = new Mp4Muxer.Muxer({
+            target: new Mp4Muxer.ArrayBufferTarget(),
+            video: { codec: 'avc', width: canvas.width, height: canvas.height },
+            audio: { codec: 'aac', sampleRate: 44100, numberOfChannels: 1 },
+            fastStart: 'in-memory'
           });
 
-          // Manual data slice for robustness
-          const startTime = Date.now();
-          recorder.start(500); 
+          const videoEncoder = new VideoEncoder({
+            output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+            error: e => console.error(e)
+          });
+          videoEncoder.configure({
+            codec: 'avc1.42001f', // Baseline profile level 3.1
+            width: canvas.width,
+            height: canvas.height,
+            bitrate: 2_500_000,
+            framerate: 30
+          });
+
+          const audioEncoder = new AudioEncoder({
+            output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+            error: e => console.error(e)
+          });
+          audioEncoder.configure({
+            codec: 'mp4a.40.2', // AAC-LC
+            sampleRate: 44100,
+            numberOfChannels: 1,
+            bitrate: 128000
+          });
+
+          const videoTrack = canvasStream.getVideoTracks()[0];
+          const audioTrack = dest.stream.getAudioTracks()[0];
+
+          const videoProcessor = new MediaStreamTrackProcessor({ track: videoTrack });
+          const videoReader = videoProcessor.readable.getReader();
+
+          const audioProcessor = new MediaStreamTrackProcessor({ track: audioTrack });
+          const audioReader = audioProcessor.readable.getReader();
+
+          let isRecording = true;
+          let vFrameCount = 0;
+          
+          const readVideo = async () => {
+            try {
+              while (isRecording) {
+                const { done, value } = await videoReader.read();
+                if (done) break;
+                if (value) {
+                  if (videoEncoder.state === "configured") {
+                    videoEncoder.encode(value, { keyFrame: vFrameCount % 60 === 0 });
+                    vFrameCount++;
+                  }
+                  value.close();
+                }
+              }
+            } catch (e) {
+              console.error("Video reader loop stopped", e);
+            }
+          };
+
+          const readAudio = async () => {
+            try {
+              while (isRecording) {
+                const { done, value } = await audioReader.read();
+                if (done) break;
+                if (value) {
+                  if (audioEncoder.state === "configured") {
+                    audioEncoder.encode(value);
+                  }
+                  value.close();
+                }
+              }
+            } catch (e) {
+              console.error("Audio reader loop stopped", e);
+            }
+          };
+
+          // Start reading stream frames immediately
+          const p1 = readVideo();
+          const p2 = readAudio();
           
           if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-          let isRecording = true;
           let currentSlideVisual = null;
 
           const renderLoop = () => {
@@ -905,20 +955,19 @@
 
           setCompilationProgress("Saving video...");
           await new Promise(r => setTimeout(r, 500)); 
+          
+          // Stop stream capture
           isRecording = false; 
-          recorder.stop();
-          const duration = Date.now() - startTime;
-          let finalBlob = await recordPromise;
+          videoTrack.stop();
+          audioTrack.stop();
 
-          if (finalBlob.type.includes('webm') && typeof ysFixWebmDuration !== 'undefined') {
-            setCompilationProgress("Fixing video duration for Windows Media Player...");
-            finalBlob = await new Promise(resolve => {
-               ysFixWebmDuration(finalBlob, duration, fixedBlob => resolve(fixedBlob));
-            });
-          }
+          // Wait for encoders and muxer
+          await Promise.all([videoEncoder.flush(), audioEncoder.flush()]);
+          muxer.finalize();
+          
+          let finalBlob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
 
-          const extension = finalBlob.type.includes('mp4') ? 'mp4' : 'webm';
-          setFinalExtension(extension);
+          setFinalExtension('mp4');
           setFinalVideoUrl(URL.createObjectURL(finalBlob));
           if (audioCtx.state !== 'closed') await audioCtx.close();
 
