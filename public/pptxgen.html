@@ -66,9 +66,9 @@
             <div class="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
                 <i class="fa-solid fa-file-powerpoint text-white text-2xl"></i>
             </div>
-            <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker <span class="text-[10px] font-normal text-slate-400">v1.3</span></h1>
+            <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker <span class="text-[10px] font-normal text-slate-400">v1.5</span></h1>
             <p class="text-slate-600 mb-6 text-sm leading-relaxed">
-                AI extracts your PDF content, builds visual diagrams, and generates practice MCQs â€” all in a ready-to-use PowerPoint.
+                AI extracts your PDF content, builds visual diagrams, and generates practice MCQs — all in a ready-to-use PowerPoint.
             </p>
             <div class="mb-6 text-left bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <h3 class="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
@@ -266,7 +266,7 @@
                 }
                 const listData = await listRes.json();
                 availableModels = (listData.models || [])
-                    .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+                    .filter(m => m.name && m.supportedGenerationMethods?.includes('generateContent'))
                     .map(m => m.name.replace('models/', ''));
             } catch (e) {
                 return { ok: false, step: 'Key Check', error: e.message };
@@ -294,15 +294,15 @@
                         body: JSON.stringify({ contents: [{ parts: [{ text: 'Say OK' }] }] })
                     });
                     if (testRes.ok) {
-                        console.log(`[PDFtoPPTX] âœ… ${model} works!`);
+                        console.log(`[PDFtoPPTX] Success! ${model} works!`);
                         return { ok: true, useModel: model };
                     }
                     const body = await testRes.text().catch(() => '');
-                    lastError = `${model} â†’ HTTP ${testRes.status}: ${body.substring(0, 200)}`;
-                    console.warn(`[PDFtoPPTX] âŒ ${lastError}`);
+                    lastError = `${model} → HTTP ${testRes.status}: ${body.substring(0, 200)}`;
+                    console.warn(`[PDFtoPPTX] Error: ${lastError}`);
                 } catch (e) {
-                    lastError = `${model} â†’ ${e.message}`;
-                    console.warn(`[PDFtoPPTX] âŒ ${lastError}`);
+                    lastError = `${model} → ${e.message}`;
+                    console.warn(`[PDFtoPPTX] Error: ${lastError}`);
                 }
             }
 
@@ -319,7 +319,7 @@
         // Initial check and start polling
         checkKeyInput();
         setInterval(checkKeyInput, 200);
-        console.log("[SlideMaker v1.3] Button polling active...");
+        console.log("[SlideMaker v1.5] Button polling active...");
 
         apiKeyInput.addEventListener('input', checkKeyInput);
         apiKeyInput.addEventListener('keyup', checkKeyInput);
@@ -327,26 +327,40 @@
         apiKeyInput.addEventListener('paste', () => setTimeout(checkKeyInput, 50));
 
         btnSaveKey.addEventListener('click', async () => {
-            const key = apiKeyInput.value.trim();
-            if (!key) return;
+            try {
+                const key = apiKeyInput.value.trim();
+                if (!key) return;
 
-            btnSaveKey.disabled = true;
-            btnSaveKey.textContent = 'Validating Key & Discovering Models...';
+                console.log("[SlideMaker v1.5] Click! Validating...");
+                btnSaveKey.disabled = true;
+                btnSaveKey.textContent = 'Checking API Key & Models...';
 
-            const result = await validateAndTestKey(key);
-            if (!result.ok) {
-                alert(`âŒ API Test Failed at "${result.step}":\n\n${result.error}\n\nPlease verify your key in Google AI Studio.`);
+                const result = await validateAndTestKey(key);
+                if (!result.ok) {
+                    alert("❌ API Test Failure:\n\n" + result.error);
+                    btnSaveKey.disabled = false;
+                    btnSaveKey.textContent = 'Save Key & Start';
+                    return;
+                }
+
+                userApiKey = key;
+                workingModel = result.useModel;
+                console.log("[SlideMaker v1.5] Success! Using model:", workingModel);
+                
+                keyDisplay.textContent = key.substring(0, 6) + '...' + key.slice(-4);
+                
+                // FORCE UI TRANSITION
+                landingPage.style.display = 'none';
+                appContainer.style.display = 'flex';
+                appContainer.classList.remove('hidden');
+                
+                console.log("[SlideMaker v1.5] Landing hidden, App shown.");
+            } catch (err) {
+                console.error("[SlideMaker v1.5] CRITICAL CLICK ERROR:", err);
+                alert("❌ Critical Error: " + err.message);
                 btnSaveKey.disabled = false;
                 btnSaveKey.textContent = 'Save Key & Start';
-                return;
             }
-
-            userApiKey = key;
-            workingModel = result.useModel;
-            console.log(`[PDFtoPPTX] Using model: ${workingModel}`);
-            keyDisplay.textContent = key.substring(0, 6) + '...' + key.slice(-4);
-            landingPage.classList.add('hidden');
-            appContainer.classList.remove('hidden');
         });
 
         btnChangeKey.addEventListener('click', async () => {
@@ -354,13 +368,13 @@
             if (newKey !== null && newKey.trim() !== "") {
                 const result = await validateAndTestKey(newKey.trim());
                 if (!result.ok) {
-                    alert(`âŒ New key failed at "${result.step}":\n\n${result.error}`);
+                    alert(`❌ New key failed: ${result.error}`);
                     return;
                 }
                 userApiKey = newKey.trim();
                 workingModel = result.useModel;
                 keyDisplay.textContent = userApiKey.substring(0, 6) + '...' + userApiKey.slice(-4);
-                alert(`âœ… API Key updated! Using model: ${result.useModel}`);
+                alert(`✅ API Key updated! Using model: ${result.useModel}`);
             }
         });
 
@@ -371,7 +385,7 @@
             setTimeout(() => errorBox.classList.add('hidden'), 10000);
         }
 
-        // Navigation functions â€” FIX: use style.display = 'flex' for loading/success steps
+        // Navigation functions — FIX: use style.display = 'flex' for loading/success steps
         function showStep(stepElement) {
             [step1, stepLoading, stepSuccess].forEach(el => {
                 el.classList.add('hidden');
@@ -545,7 +559,7 @@
                 customBlock = `
 5. **HIGHEST PRIORITY - USER CUSTOMIZATION**: The user provided specific instructions for how the presentation should look. You MUST follow them:
 ---
-`${customInstructions}
+${customInstructions}
 ---`;
             }
             
@@ -648,7 +662,7 @@ ${text}`;
             let pptx = new PptxGenJS();
             
             pptx.layout = 'LAYOUT_16x9';
-            pptx.author = 'AI PDF to PPTX';
+            pptx.author = 'SlideMaker';
             pptx.company = 'Generated via Gemini AI';
             pptx.title = data.presentation_title || 'Presentation';
 
@@ -785,7 +799,7 @@ ${text}`;
                             });
                         }
                         else {
-                            slide.addText(labels.join('\nâ€¢ '), {
+                            slide.addText(labels.join('\n• '), {
                                 shape: pptx.ShapeType.rect,
                                 x: visualX, y: 1.8, w: 4.0, h: 2.5,
                                 fill: { color: theme.shapeBg },
