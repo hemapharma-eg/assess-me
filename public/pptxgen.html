@@ -215,6 +215,7 @@
         let generatedPptx = null;
         let slideData = null;
         let userApiKey = '';
+        let workingModel = 'gemini-2.0-flash'; // Will be auto-discovered
 
         // Landing Page Elements
         const landingPage = document.getElementById('landing-page');
@@ -242,25 +243,104 @@
         const errorBox = document.getElementById('error-box');
         const errorMessage = document.getElementById('error-message');
 
+        // --- Model Discovery: tests models to find one that works ---
+        async function validateAndTestKey(key) {
+            // Step 1: List available models
+            let availableModels = [];
+            try {
+                const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {
+                    headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' },
+                    cache: 'no-store'
+                });
+                if (!listRes.ok) {
+                    const body = await listRes.text().catch(() => '');
+                    return { ok: false, step: 'Key Check', error: `HTTP ${listRes.status}: ${body.substring(0, 200)}` };
+                }
+                const listData = await listRes.json();
+                availableModels = (listData.models || [])
+                    .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+                    .map(m => m.name.replace('models/', ''));
+            } catch (e) {
+                return { ok: false, step: 'Key Check', error: e.message };
+            }
+
+            if (availableModels.length === 0) {
+                return { ok: false, step: 'Model Discovery', error: 'No models found that support generateContent.' };
+            }
+
+            // Step 2: Try models in priority order
+            const preferred = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+            const modelsToTry = [
+                ...preferred.filter(p => availableModels.includes(p)),
+                ...availableModels.filter(m => !preferred.includes(m) && m.includes('flash'))
+            ];
+            const uniqueModels = [...new Set(modelsToTry)];
+
+            let lastError = '';
+            for (const model of uniqueModels) {
+                try {
+                    const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' },
+                        cache: 'no-store',
+                        body: JSON.stringify({ contents: [{ parts: [{ text: 'Say OK' }] }] })
+                    });
+                    if (testRes.ok) {
+                        console.log(`[PDFtoPPTX] ✅ ${model} works!`);
+                        return { ok: true, useModel: model };
+                    }
+                    const body = await testRes.text().catch(() => '');
+                    lastError = `${model} → HTTP ${testRes.status}: ${body.substring(0, 200)}`;
+                    console.warn(`[PDFtoPPTX] ❌ ${lastError}`);
+                } catch (e) {
+                    lastError = `${model} → ${e.message}`;
+                    console.warn(`[PDFtoPPTX] ❌ ${lastError}`);
+                }
+            }
+
+            return { ok: false, step: 'API Test', error: `All ${uniqueModels.length} models failed.\n\nLast error: ${lastError}` };
+        }
+
         // --- Landing Page Logic ---
         apiKeyInput.addEventListener('input', () => {
             btnSaveKey.disabled = !apiKeyInput.value.trim();
         });
 
-        btnSaveKey.addEventListener('click', () => {
+        btnSaveKey.addEventListener('click', async () => {
             const key = apiKeyInput.value.trim();
             if (!key) return;
+
+            btnSaveKey.disabled = true;
+            btnSaveKey.textContent = 'Validating Key & Discovering Models...';
+
+            const result = await validateAndTestKey(key);
+            if (!result.ok) {
+                alert(`❌ API Test Failed at "${result.step}":\n\n${result.error}\n\nPlease verify your key in Google AI Studio.`);
+                btnSaveKey.disabled = false;
+                btnSaveKey.textContent = 'Save Key & Start';
+                return;
+            }
+
             userApiKey = key;
+            workingModel = result.useModel;
+            console.log(`[PDFtoPPTX] Using model: ${workingModel}`);
             keyDisplay.textContent = key.substring(0, 6) + '...' + key.slice(-4);
             landingPage.classList.add('hidden');
             appContainer.classList.remove('hidden');
         });
 
-        btnChangeKey.addEventListener('click', () => {
+        btnChangeKey.addEventListener('click', async () => {
             const newKey = prompt("Enter your new Gemini API Key:", userApiKey);
             if (newKey !== null && newKey.trim() !== "") {
+                const result = await validateAndTestKey(newKey.trim());
+                if (!result.ok) {
+                    alert(`❌ New key failed at "${result.step}":\n\n${result.error}`);
+                    return;
+                }
                 userApiKey = newKey.trim();
+                workingModel = result.useModel;
                 keyDisplay.textContent = userApiKey.substring(0, 6) + '...' + userApiKey.slice(-4);
+                alert(`✅ API Key updated! Using model: ${result.useModel}`);
             }
         });
 
@@ -407,18 +487,19 @@
             }
         }
 
-        // --- Exponential Backoff Fetch Helper ---
-        async function fetchWithRetry(url, options, maxRetries = 3) {
-            const delays = [2000, 4000, 8000];
+        // --- Exponential Backoff Fetch Helper (longer waits for free tier) ---
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            const delays = [5000, 15000, 30000, 60000, 60000];
             for (let i = 0; i < maxRetries; i++) {
                 try {
                     const response = await fetch(url, options);
                     if (response.ok || response.status === 400 || response.status === 403 || response.status === 404) {
                         return response;
                     }
-                    // On 429, retry
+                    // On 429, retry with longer waits
                     if (response.status === 429 && i < maxRetries - 1) {
-                        updateProgress(`Rate limited, retrying in ${delays[i]/1000}s...`, progressBar.style.width);
+                        const waitSec = Math.round(delays[i] / 1000);
+                        updateProgress(`Rate limited by Google. Auto-retrying in ${waitSec}s... (${i + 1}/${maxRetries})`, progressBar.style.width);
                         await new Promise(resolve => setTimeout(resolve, delays[i]));
                         continue;
                     }
@@ -430,12 +511,13 @@
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
                 }
             }
-            throw new Error("Network request failed or timed out.");
+            throw new Error("Network request failed after multiple retries. Please wait a minute and try again.");
         }
 
-        // --- Gemini API Call (uses user's own key) ---
+        // --- Gemini API Call (uses auto-discovered model) ---
         async function generateSlidesWithGemini(text) {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${userApiKey}`;
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${workingModel}:generateContent?key=${userApiKey}`;
+            console.log(`[PDFtoPPTX] Generating slides using model: ${workingModel}`);
             
             const prompt = `You are an expert executive presentation designer and educational instructor. I will provide you with text extracted from a PDF document.
 Your task is to synthesize this document and create a professional PowerPoint presentation outline.
