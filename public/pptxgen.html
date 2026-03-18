@@ -607,16 +607,8 @@
             const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${workingModel}:generateContent?key=${userApiKey}`;
             console.log(`[SlideMaker] Generating slides using model: ${workingModel}`);
 
-            const customInstructions = document.getElementById('custom-prompt').value.trim();
-            let customBlock = '';
-            if (customInstructions) {
-                customBlock = `
-5. **HIGHEST PRIORITY - USER CUSTOMIZATION**: The user provided specific instructions for how the presentation should look. You MUST follow them:
----
-${customInstructions}
----`;
-            }
-            
+
+
             const isLong = presentationDepth === 'long';
             const slideLimit = isLong ? 25 : 8;
             const depthDesc = isLong ? "Focus on detailed and comprehensive coverage of all major topics in the document. Provide depth and analysis." : "Focus on high-level results, key takeaways, and a quick summary of the document.";
