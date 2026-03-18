@@ -2229,61 +2229,61 @@ function TeacherPortal({ setRole, user, showToast }) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative">
       {isProfileIncomplete && <ProfileCompletionOverlay profile={profile} setProfile={setProfile} user={user} />}
-      {/* Top Header */}
-      <header className="bg-white border-b px-4 md:px-6 h-16 flex items-center justify-between sticky top-0 z-50 shadow-sm print:hidden">
-        <div className="flex items-center gap-10">
+      {/* Top Header - Row 1: Logo + User Info */}
+      <header className="bg-white border-b px-4 md:px-6 sticky top-0 z-50 shadow-sm print:hidden">
+        <div className="h-14 flex items-center justify-between">
           <h1 className="text-xl font-black text-blue-600 flex items-center gap-2 tracking-tighter">
             <Database size={20} /> ClassLabX <span className="text-[10px] bg-blue-100 px-2 py-0.5 rounded-full tracking-widest uppercase text-blue-800">Cloud Sync</span>
           </h1>
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex gap-1">
-            {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback', 'PDF to PPTX', 'SlideCaster'].map(t => (
+          <div className="flex items-center gap-4">
+            <div className="hidden lg:flex flex-col items-end mr-1">
+              <span className="text-[10px] font-black text-slate-800 leading-none">{profile?.full_name}</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">{user?.email}</span>
+            </div>
+            {profile && (
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
+                <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Plan:</span>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{(profile.subscription || 'free').replace('_', ' ')}</span>
+              </div>
+            )}
+            <PoliciesHeaderLinks />
+            {session && !session.is_async && (
               <button
-                key={t} onClick={() => handleTabChange(t.toLowerCase())}
-                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
+                onClick={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
+                className="flex items-center gap-2 px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-100 animate-pulse"
               >
-                {t}
+                <Wifi size={14} className="text-white" />
+                LIVE — {session.quiz?.title || 'Session'}
               </button>
-            ))}
-          </nav>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="hidden lg:flex flex-col items-end mr-1">
-            <span className="text-[10px] font-black text-slate-800 leading-none">{profile?.full_name}</span>
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">{user?.email}</span>
-          </div>
-          {profile && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Plan:</span>
-              <span className={`text-[10px] font-black uppercase tracking-widest ${profile.subscription === 'free' ? 'text-slate-500' : 'text-blue-600'}`}>{(profile.subscription || 'free').replace('_', ' ')}</span>
-            </div>
-          )}
-          <PoliciesHeaderLinks />
-          {session && !session.is_async && (
-            <button
-              onClick={() => { const t = getSessionTab(); if (t) setActiveTab(t); }}
-              className="flex items-center gap-2 px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-100 animate-pulse"
-            >
-              <Wifi size={14} className="text-white" />
-              LIVE — {session.quiz?.title || 'Session'}
+            )}
+            {roomCode && (
+              <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest flex items-center gap-2">
+                <Wifi size={14} className={session ? 'text-green-400 animate-pulse' : 'text-slate-500'} />
+                <span className="hidden sm:inline">ROOM:</span> {roomCode}
+              </div>
+            )}
+            <button onClick={handleSignOut} className="bg-slate-100 hover:bg-red-50 p-2 text-slate-500 hover:text-red-500 rounded-full transition-colors">
+              <LogOut size={20} />
             </button>
-          )}
-          {roomCode && (
-            <div className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest flex items-center gap-2">
-              <Wifi size={14} className={session ? 'text-green-400 animate-pulse' : 'text-slate-500'} />
-              <span className="hidden sm:inline">ROOM:</span> {roomCode}
-            </div>
-          )}
-          <button onClick={handleSignOut} className="bg-slate-100 hover:bg-red-50 p-2 text-slate-500 hover:text-red-500 rounded-full transition-colors">
-            <LogOut size={20} />
-          </button>
+          </div>
         </div>
+        {/* Row 2: Desktop Navigation */}
+        <nav className="hidden md:flex gap-1 pb-2 overflow-x-auto no-scrollbar">
+          {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback', 'SlideMaker', 'SlideCaster'].map(t => (
+            <button
+              key={t} onClick={() => handleTabChange(t.toLowerCase())}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
+            >
+              {t}
+            </button>
+          ))}
+        </nav>
       </header>
 
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full print:hidden">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['classes', 'quizzes', 'polls', 'attendance', 'feedback', 'pdf to pptx', 'slidecaster'].map(tab => (
+          {['classes', 'quizzes', 'polls', 'attendance', 'feedback', 'slidemaker', 'slidecaster'].map(tab => (
             <button
               key={tab} onClick={() => handleTabChange(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -2344,9 +2344,9 @@ function TeacherPortal({ setRole, user, showToast }) {
         )}
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
         {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
-        {activeTab === 'pdf to pptx' && (
+        {activeTab === 'slidemaker' && (
           <div className="w-full h-[calc(100vh-80px)] min-h-[800px] rounded-[2.5rem] overflow-hidden border border-slate-200 bg-white shadow-2xl">
-            <iframe src="/pptxgen.html" className="w-full h-full border-none" title="PDF to PPTX" />
+            <iframe src="/pptxgen.html" className="w-full h-full border-none" title="SlideMaker" />
           </div>
         )}
         {activeTab === 'slidecaster' && (
