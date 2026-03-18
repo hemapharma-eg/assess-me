@@ -309,9 +309,10 @@
         }
 
         // --- Landing Page Logic ---
-        apiKeyInput.addEventListener('input', () => {
-            btnSaveKey.disabled = !apiKeyInput.value.trim();
-        });
+        const enableBtn = () => { btnSaveKey.disabled = !apiKeyInput.value.trim(); };
+        apiKeyInput.addEventListener('input', enableBtn);
+        apiKeyInput.addEventListener('change', enableBtn);
+        apiKeyInput.addEventListener('paste', () => setTimeout(enableBtn, 50));
 
         btnSaveKey.addEventListener('click', async () => {
             const key = apiKeyInput.value.trim();
