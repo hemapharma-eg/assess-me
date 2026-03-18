@@ -2346,7 +2346,7 @@ function TeacherPortal({ setRole, user, showToast }) {
         {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
         {activeTab === 'slidemaker' && (
           <div className="w-full h-[calc(100vh-80px)] min-h-[800px] rounded-[2.5rem] overflow-hidden border border-slate-200 bg-white shadow-2xl">
-            <iframe src="/pptxgen.html" className="w-full h-full border-none" title="SlideMaker" />
+            <iframe src="/pptxgen.html?v=1.3" className="w-full h-full border-none" title="SlideMaker v1.3" />
           </div>
         )}
         {activeTab === 'slidecaster' && (

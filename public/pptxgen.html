@@ -66,7 +66,7 @@
             <div class="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
                 <i class="fa-solid fa-file-powerpoint text-white text-2xl"></i>
             </div>
-            <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker</h1>
+            <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker <span class="text-[10px] font-normal text-slate-400">v1.3</span></h1>
             <p class="text-slate-600 mb-6 text-sm leading-relaxed">
                 AI extracts your PDF content, builds visual diagrams, and generates practice MCQs â€” all in a ready-to-use PowerPoint.
             </p>
@@ -96,7 +96,7 @@
                 />
             </div>
             <div class="flex flex-col gap-3">
-                <button id="btn-save-key" disabled class="w-full bg-primary hover:bg-secondary disabled:bg-blue-300 text-white font-semibold py-3 rounded-xl transition-all shadow-md">
+                <button id="btn-save-key" class="w-full bg-primary hover:bg-secondary disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-all shadow-md">
                     Save Key & Start
                 </button>
             </div>
@@ -310,18 +310,21 @@
         }
 
         // --- Landing Page Logic ---
-        // Bulletproof: poll input value every 300ms to catch paste, autofill, drag-drop, etc.
+        // Bulletproof: Force initial state and poll continuously
         const checkKeyInput = () => {
             const hasValue = apiKeyInput.value.trim().length > 0;
-            if (btnSaveKey.disabled === hasValue) {
-                btnSaveKey.disabled = !hasValue;
-            }
+            btnSaveKey.disabled = !hasValue;
         };
-        setInterval(checkKeyInput, 300);
+        
+        // Initial check and start polling
+        checkKeyInput();
+        setInterval(checkKeyInput, 200);
+        console.log("[SlideMaker v1.3] Button polling active...");
+
         apiKeyInput.addEventListener('input', checkKeyInput);
         apiKeyInput.addEventListener('keyup', checkKeyInput);
         apiKeyInput.addEventListener('change', checkKeyInput);
-        apiKeyInput.addEventListener('paste', () => { setTimeout(checkKeyInput, 0); setTimeout(checkKeyInput, 100); });
+        apiKeyInput.addEventListener('paste', () => setTimeout(checkKeyInput, 50));
 
         btnSaveKey.addEventListener('click', async () => {
             const key = apiKeyInput.value.trim();
