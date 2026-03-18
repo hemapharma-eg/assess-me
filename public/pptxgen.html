@@ -68,7 +68,7 @@
             </div>
             <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker</h1>
             <p class="text-slate-600 mb-6 text-sm leading-relaxed">
-                AI extracts your PDF content, builds visual diagrams, and generates practice MCQs — all in a ready-to-use PowerPoint.
+                AI extracts your PDF content, builds visual diagrams, and generates practice MCQs â€” all in a ready-to-use PowerPoint.
             </p>
             <div class="mb-6 text-left bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <h3 class="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
@@ -293,15 +293,15 @@
                         body: JSON.stringify({ contents: [{ parts: [{ text: 'Say OK' }] }] })
                     });
                     if (testRes.ok) {
-                        console.log(`[PDFtoPPTX] ✅ ${model} works!`);
+                        console.log(`[PDFtoPPTX] âœ… ${model} works!`);
                         return { ok: true, useModel: model };
                     }
                     const body = await testRes.text().catch(() => '');
-                    lastError = `${model} → HTTP ${testRes.status}: ${body.substring(0, 200)}`;
-                    console.warn(`[PDFtoPPTX] ❌ ${lastError}`);
+                    lastError = `${model} â†’ HTTP ${testRes.status}: ${body.substring(0, 200)}`;
+                    console.warn(`[PDFtoPPTX] âŒ ${lastError}`);
                 } catch (e) {
-                    lastError = `${model} → ${e.message}`;
-                    console.warn(`[PDFtoPPTX] ❌ ${lastError}`);
+                    lastError = `${model} â†’ ${e.message}`;
+                    console.warn(`[PDFtoPPTX] âŒ ${lastError}`);
                 }
             }
 
@@ -322,7 +322,7 @@
 
             const result = await validateAndTestKey(key);
             if (!result.ok) {
-                alert(`❌ API Test Failed at "${result.step}":\n\n${result.error}\n\nPlease verify your key in Google AI Studio.`);
+                alert(`âŒ API Test Failed at "${result.step}":\n\n${result.error}\n\nPlease verify your key in Google AI Studio.`);
                 btnSaveKey.disabled = false;
                 btnSaveKey.textContent = 'Save Key & Start';
                 return;
@@ -341,13 +341,13 @@
             if (newKey !== null && newKey.trim() !== "") {
                 const result = await validateAndTestKey(newKey.trim());
                 if (!result.ok) {
-                    alert(`❌ New key failed at "${result.step}":\n\n${result.error}`);
+                    alert(`âŒ New key failed at "${result.step}":\n\n${result.error}`);
                     return;
                 }
                 userApiKey = newKey.trim();
                 workingModel = result.useModel;
                 keyDisplay.textContent = userApiKey.substring(0, 6) + '...' + userApiKey.slice(-4);
-                alert(`✅ API Key updated! Using model: ${result.useModel}`);
+                alert(`âœ… API Key updated! Using model: ${result.useModel}`);
             }
         });
 
@@ -358,7 +358,7 @@
             setTimeout(() => errorBox.classList.add('hidden'), 10000);
         }
 
-        // Navigation functions — FIX: use style.display = 'flex' for loading/success steps
+        // Navigation functions â€” FIX: use style.display = 'flex' for loading/success steps
         function showStep(stepElement) {
             [step1, stepLoading, stepSuccess].forEach(el => {
                 el.classList.add('hidden');
@@ -527,19 +527,24 @@
             console.log(`[SlideMaker] Generating slides using model: ${workingModel}`);
 
             const customInstructions = document.getElementById('custom-prompt').value.trim();
-            const customBlock = customInstructions 
-                ? `\n\nADDITIONAL USER INSTRUCTIONS (follow these as closely as possible):\n${customInstructions}\n` 
-                : '';
+            let customBlock = '';
+            if (customInstructions) {
+                customBlock = `
+5. **HIGHEST PRIORITY - USER CUSTOMIZATION**: The user provided specific instructions for how the presentation should look. You MUST follow them:
+---
+`${customInstructions}
+---`;
+            }
             
             const prompt = `You are an expert executive presentation designer and educational instructor. I will provide you with text extracted from a PDF document.
 Your task is to synthesize this document and create a professional PowerPoint presentation outline.
 
-CRITICAL INSTRUCTIONS (MUST OBEY TO PREVENT CRASHES):
-1. MAX 15 SLIDES: You MUST limit the presentation to a MAXIMUM of 15 slides total. Do NOT exceed this limit, or the JSON will be truncated and fail.
+CRITICAL INSTRUCTIONS (MUST OBEY):
+1. MAX 15 SLIDES: You MUST limit the presentation to a MAXIMUM of 15 slides total. Do NOT exceed this limit.
 2. BULLET POINTS: Keep bullets extremely concise (max 10-15 words per bullet). DO NOT write long paragraphs.
 3. VISUAL DIAGRAMS: Whenever appropriate, suggest a "visual_type" to accompany the text. Use "process" for sequential steps, "grid" for 4 related items, "comparison" for contrasting 2 things, or "none" if text-only is best. Provide 2-4 short labels for the visuals in "visual_labels".
-4. PRACTICE MCQs: At the end of the presentation, create exactly 3 Multiple Choice Questions based on the document.
-${customBlock}
+4. PRACTICE MCQs: At the end of the presentation, create exactly 3 Multiple Choice Questions based on the document.${customBlock}
+
 Document Text:
 ${text}`;
 
@@ -767,7 +772,7 @@ ${text}`;
                             });
                         }
                         else {
-                            slide.addText(labels.join('\n• '), {
+                            slide.addText(labels.join('\nâ€¢ '), {
                                 shape: pptx.ShapeType.rect,
                                 x: visualX, y: 1.8, w: 4.0, h: 2.5,
                                 fill: { color: theme.shapeBg },
