@@ -56,6 +56,19 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Depth Cards */
+        .depth-card.active {
+            border-color: #2563eb !important;
+            background-color: #eff6ff !important;
+        }
+        .depth-card.active i { color: #2563eb !important; }
+        .depth-card.active .font-bold { color: #1e3a8a !important; }
+        .depth-card.active div:last-child div:last-child { color: #3b82f6 !important; }
+        .depth-card:hover:not(.active) {
+            border-color: #dbeafe;
+            background-color: #f8fafc;
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800">
@@ -66,7 +79,7 @@
             <div class="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
                 <i class="fa-solid fa-file-powerpoint text-white text-2xl"></i>
             </div>
-            <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker <span class="text-[10px] font-normal text-slate-400">v1.5</span></h1>
+            <h1 class="text-2xl font-bold text-slate-900 mb-3"><span class="text-primary">Slide</span>Maker <span class="text-[10px] font-normal text-slate-400">v1.6</span></h1>
             <p class="text-slate-600 mb-6 text-sm leading-relaxed">
                 AI extracts your PDF content, builds visual diagrams, and generates practice MCQs — all in a ready-to-use PowerPoint.
             </p>
@@ -146,10 +159,29 @@
                 </div>
 
                 <div class="mt-6">
-                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-2">
-                        <i class="fa-solid fa-palette text-primary text-xs"></i> Custom Instructions <span class="text-xs font-normal text-slate-400">(Optional)</span>
+                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-3">
+                        <i class="fa-solid fa-layer-group text-primary text-xs"></i> 2. Select Presentation Depth:
                     </label>
-                    <textarea id="custom-prompt" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-400 resize-none" placeholder="e.g. Use a medical theme with green colors, add a summary slide at the end, keep it under 8 slides..."></textarea>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button id="btn-depth-short" class="depth-card active flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left">
+                            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-bolt text-primary"></i>
+                            </div>
+                            <div>
+                                <div class="font-bold text-slate-900 text-sm">Short & Precise</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Up to 8 slides + 3-5 MCQs. Ideal for quick overviews.</div>
+                            </div>
+                        </button>
+                        <button id="btn-depth-long" class="depth-card flex items-center gap-3 p-4 rounded-xl border-2 border-slate-100 transition-all text-left">
+                            <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-scroll text-slate-400"></i>
+                            </div>
+                            <div>
+                                <div class="font-bold text-slate-700 text-sm">Long & Comprehensive</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Up to 25 slides + 3-5 MCQs. Perfect for deep dives.</div>
+                            </div>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="mt-6 flex justify-end">
@@ -224,6 +256,7 @@
         let slideData = null;
         let userApiKey = '';
         let workingModel = 'gemini-2.0-flash'; // Will be auto-discovered
+        let presentationDepth = 'short'; // v1.6: 'short' or 'long'
 
         // Landing Page Elements
         const landingPage = document.getElementById('landing-page');
@@ -354,14 +387,35 @@
                 appContainer.style.display = 'flex';
                 appContainer.classList.remove('hidden');
                 
-                console.log("[SlideMaker v1.5] Landing hidden, App shown.");
+                console.log("[SlideMaker v1.6] Landing hidden, App shown.");
             } catch (err) {
-                console.error("[SlideMaker v1.5] CRITICAL CLICK ERROR:", err);
+                console.error("[SlideMaker v1.6] CRITICAL CLICK ERROR:", err);
                 alert("❌ Critical Error: " + err.message);
                 btnSaveKey.disabled = false;
                 btnSaveKey.textContent = 'Save Key & Start';
             }
         });
+
+        // v1.6: Depth Selection Handling
+        const btnShort = document.getElementById('btn-depth-short');
+        const btnLong = document.getElementById('btn-depth-long');
+
+        function setDepth(depth) {
+            presentationDepth = depth;
+            if (depth === 'short') {
+                btnShort.classList.add('active');
+                btnLong.classList.remove('active');
+                btnLong.classList.add('border-slate-100');
+            } else {
+                btnLong.classList.add('active');
+                btnShort.classList.remove('active');
+                btnShort.classList.add('border-slate-100');
+            }
+            console.log(`[SlideMaker v1.6] Depth set to: ${depth}`);
+        }
+
+        btnShort.addEventListener('click', () => setDepth('short'));
+        btnLong.addEventListener('click', () => setDepth('long'));
 
         btnChangeKey.addEventListener('click', async () => {
             const newKey = prompt("Enter your new Gemini API Key:", userApiKey);
@@ -563,14 +617,18 @@ ${customInstructions}
 ---`;
             }
             
+            const isLong = presentationDepth === 'long';
+            const slideLimit = isLong ? 25 : 8;
+            const depthDesc = isLong ? "Focus on detailed and comprehensive coverage of all major topics in the document. Provide depth and analysis." : "Focus on high-level results, key takeaways, and a quick summary of the document.";
+            
             const prompt = `You are an expert executive presentation designer and educational instructor. I will provide you with text extracted from a PDF document.
 Your task is to synthesize this document and create a professional PowerPoint presentation outline.
 
 CRITICAL INSTRUCTIONS (MUST OBEY):
-1. MAX 15 SLIDES: You MUST limit the presentation to a MAXIMUM of 15 slides total. Do NOT exceed this limit.
+1. MAX ${slideLimit} SLIDES: You MUST limit the presentation to a MAXIMUM of ${slideLimit} slides total (excluding the knowledge check section). ${depthDesc}
 2. BULLET POINTS: Keep bullets extremely concise (max 10-15 words per bullet). DO NOT write long paragraphs.
 3. VISUAL DIAGRAMS: Whenever appropriate, suggest a "visual_type" to accompany the text. Use "process" for sequential steps, "grid" for 4 related items, "comparison" for contrasting 2 things, or "none" if text-only is best. Provide 2-4 short labels for the visuals in "visual_labels".
-4. PRACTICE MCQs: At the end of the presentation, create exactly 3 Multiple Choice Questions based on the document.${customBlock}
+4. PRACTICE MCQs: At the end of the presentation, generate exactly 3 to 5 Multiple Choice Questions based on the document to test the user's knowledge.
 
 Document Text:
 ${text}`;
