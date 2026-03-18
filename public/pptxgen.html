@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI PDF to PowerPoint Converter</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- PDF.js for client-side PDF text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- PptxGenJS for client-side PPTX generation -->
+    <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS/dist/pptxgen.bundle.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#1e40af',
+                        accent: '#f59e0b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; }
+        
+        .drag-active {
+            border-color: #2563eb !important;
+            background-color: #eff6ff !important;
+        }
+
+        /* Custom spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #2563eb;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <!-- Landing Page: API Key Setup -->
+    <div id="landing-page" class="min-h-screen flex items-center justify-center p-6 text-slate-800">
+        <div class="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 border border-slate-100 text-center">
+            <div class="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
+                <i class="fa-solid fa-file-powerpoint text-white text-2xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-slate-900 mb-3">PDF to <span class="text-primary">PPTX</span> Converter</h1>
+            <p class="text-slate-600 mb-6 text-sm leading-relaxed">
+                AI extracts your PDF content, builds visual diagrams, and generates practice MCQs — all in a ready-to-use PowerPoint.
+            </p>
+            <div class="mb-6 text-left bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <h3 class="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-primary text-xs"></i> First time setup (Completely Free):
+                </h3>
+                <ol class="text-xs text-slate-600 space-y-2 ml-4 list-decimal leading-relaxed">
+                    <li>Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-primary font-bold hover:underline">Google AI Studio</a></li>
+                    <li>Click <strong>"Create API key"</strong> (new users may need to click "Create project" first)</li>
+                    <li>Copy the key and paste it below. <strong>(Done! You won't need to do this again)</strong></li>
+                </ol>
+                <div class="mt-3 p-2 bg-rose-50 border border-rose-100 rounded-lg flex items-start gap-2">
+                    <span class="text-rose-500 font-bold text-[10px] bg-white px-1.5 py-0.5 rounded border border-rose-200 uppercase">Warning</span>
+                    <p class="text-[10px] text-rose-700 font-medium leading-tight">Your API key is private like a password. <strong>Do not share it with anyone.</strong></p>
+                </div>
+            </div>
+
+            <div class="mb-8 text-left">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">Gemini API Key</label>
+                <input 
+                    id="api-key-input"
+                    type="password" 
+                    placeholder="AIzaSy..."
+                    class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                />
+            </div>
+            <div class="flex flex-col gap-3">
+                <button id="btn-save-key" disabled class="w-full bg-primary hover:bg-secondary disabled:bg-blue-300 text-white font-semibold py-3 rounded-xl transition-all shadow-md">
+                    Save Key & Start
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Container (hidden initially) -->
+    <div id="app-container" class="hidden flex flex-col items-center justify-center p-4 sm:p-8 min-h-screen">
+        <!-- Header -->
+        <header class="text-center mb-8 max-w-2xl">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-100 rounded-full mb-4">
+                <i class="fa-solid fa-file-pdf text-2xl text-primary mx-2"></i>
+                <i class="fa-solid fa-arrow-right text-slate-400 mx-2"></i>
+                <i class="fa-solid fa-file-powerpoint text-2xl text-orange-600 mx-2"></i>
+            </div>
+            <h1 class="text-4xl font-bold tracking-tight text-slate-900 mb-2">PDF to <span class="text-primary">PPTX</span></h1>
+            <p class="text-slate-600 text-lg">AI extracts the <strong>entire</strong> content, builds visual diagrams, and generates practice MCQs.</p>
+            <div class="mt-3 flex items-center justify-center gap-2">
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                    <span class="font-bold text-slate-400 uppercase tracking-wider">Key:</span>
+                    <span id="key-display" class="font-mono text-slate-600">None</span>
+                    <button id="btn-change-key" class="font-bold text-primary hover:text-secondary uppercase tracking-wider ml-1 hover:underline text-[10px]">Change</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Card Container -->
+        <main class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-3xl overflow-hidden">
+            
+            <!-- Step 1: PDF Upload -->
+            <div id="step-1" class="p-6 sm:p-10 border-b border-slate-100 block">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center">
+                        <span class="bg-primary text-white w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 shadow-md">1</span>
+                        <h2 class="text-2xl font-semibold">Upload Document</h2>
+                    </div>
+                </div>
+
+                <div id="drop-zone" class="mt-6 flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-blue-50 hover:border-primary transition-all duration-200">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+                        <i class="fa-solid fa-cloud-arrow-up text-5xl text-primary mb-4 opacity-80"></i>
+                        <p class="mb-2 text-lg text-slate-700 font-semibold"><span class="font-bold">Click to upload</span> or drag and drop</p>
+                        <p class="text-sm text-slate-500">PDF documents only (Max 50MB recommended)</p>
+                        <p id="file-name-display" class="mt-4 text-sm font-bold text-emerald-600 hidden"></p>
+                    </div>
+                    <input id="pdf-upload" type="file" accept="application/pdf" class="hidden" />
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button id="btn-generate" class="bg-primary hover:bg-secondary text-white font-medium py-3 px-8 rounded-lg shadow-lg shadow-blue-500/30 transition-all flex items-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Generate Full Presentation
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Loading / Processing -->
+            <div id="step-loading" class="p-10 hidden flex-col items-center justify-center py-20 text-center">
+                <div class="relative flex items-center justify-center mb-6">
+                    <div class="spinner"></div>
+                    <i class="fa-solid fa-brain absolute text-primary text-xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800 mb-2">Analyzing & Creating</h2>
+                <p id="loading-status" class="text-slate-500 font-medium">Reading entire PDF document...</p>
+                
+                <div class="w-full max-w-md bg-slate-200 rounded-full h-2.5 mt-6 mb-2">
+                    <div id="progress-bar" class="bg-primary h-2.5 rounded-full transition-all duration-500" style="width: 10%"></div>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">This may take 1-2 minutes for larger documents.</p>
+            </div>
+
+            <!-- Step 3: Success / Download -->
+            <div id="step-success" class="p-10 hidden flex-col items-center justify-center py-16 text-center border-t-4 border-emerald-500">
+                <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
+                    <i class="fa-solid fa-check text-4xl text-emerald-600"></i>
+                </div>
+                <h2 class="text-3xl font-bold text-slate-800 mb-3">Presentation Ready!</h2>
+                <p class="text-slate-600 mb-8 max-w-md">Your comprehensive PowerPoint is ready! It includes detailed bullets, visual diagrams, and an interactive MCQ practice section.</p>
+                
+                <div class="flex gap-4">
+                    <button id="btn-download" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg shadow-emerald-500/30 transition-all flex items-center text-lg">
+                        <i class="fa-solid fa-download mr-2"></i> Download .PPTX
+                    </button>
+                    <button id="btn-start-over" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-3 px-6 rounded-lg transition-colors">
+                        Create Another
+                    </button>
+                </div>
+                <p id="download-warning" class="text-xs text-red-500 mt-4 hidden">If the download didn't start automatically, try opening this tool in a new browser tab.</p>
+            </div>
+            
+            <!-- Error Box -->
+            <div id="error-box" class="hidden bg-red-50 border-l-4 border-red-500 p-4 m-6 rounded-r">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fa-solid fa-circle-exclamation text-red-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p id="error-message" class="text-sm text-red-700 font-medium">An error occurred.</p>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="mt-12 text-center text-slate-500 text-sm pb-8">
+            <p>Powered by Google Gemini AI. Runs entirely in your browser.</p>
+        </footer>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // --- PDF.js Worker Setup ---
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // State variables
+        let selectedFile = null;
+        let generatedPptx = null;
+        let slideData = null;
+        let userApiKey = '';
+
+        // Landing Page Elements
+        const landingPage = document.getElementById('landing-page');
+        const appContainer = document.getElementById('app-container');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const btnSaveKey = document.getElementById('btn-save-key');
+        const keyDisplay = document.getElementById('key-display');
+        const btnChangeKey = document.getElementById('btn-change-key');
+
+        // UI Elements
+        const step1 = document.getElementById('step-1');
+        const stepLoading = document.getElementById('step-loading');
+        const stepSuccess = document.getElementById('step-success');
+        
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('pdf-upload');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const btnGenerate = document.getElementById('btn-generate');
+        
+        const loadingStatus = document.getElementById('loading-status');
+        const progressBar = document.getElementById('progress-bar');
+        
+        const btnDownload = document.getElementById('btn-download');
+        const btnStartOver = document.getElementById('btn-start-over');
+        const errorBox = document.getElementById('error-box');
+        const errorMessage = document.getElementById('error-message');
+
+        // --- Landing Page Logic ---
+        apiKeyInput.addEventListener('input', () => {
+            btnSaveKey.disabled = !apiKeyInput.value.trim();
+        });
+
+        btnSaveKey.addEventListener('click', () => {
+            const key = apiKeyInput.value.trim();
+            if (!key) return;
+            userApiKey = key;
+            keyDisplay.textContent = key.substring(0, 6) + '...' + key.slice(-4);
+            landingPage.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+        });
+
+        btnChangeKey.addEventListener('click', () => {
+            const newKey = prompt("Enter your new Gemini API Key:", userApiKey);
+            if (newKey !== null && newKey.trim() !== "") {
+                userApiKey = newKey.trim();
+                keyDisplay.textContent = userApiKey.substring(0, 6) + '...' + userApiKey.slice(-4);
+            }
+        });
+
+        // Error handling
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorBox.classList.remove('hidden');
+            setTimeout(() => errorBox.classList.add('hidden'), 10000);
+        }
+
+        // Navigation functions — FIX: use style.display = 'flex' for loading/success steps
+        function showStep(stepElement) {
+            [step1, stepLoading, stepSuccess].forEach(el => {
+                el.classList.add('hidden');
+                el.style.display = '';
+            });
+            stepElement.classList.remove('hidden');
+            if (stepElement !== step1) {
+                stepElement.style.display = 'flex';
+            }
+            errorBox.classList.add('hidden');
+        }
+
+        // File Drag & Drop Logic
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-active'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-active'), false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            handleFiles(files);
+        });
+
+        fileInput.addEventListener('change', function() {
+            handleFiles(this.files);
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+            
+            if (file.type !== 'application/pdf') {
+                showError("Please select a valid PDF file.");
+                return;
+            }
+
+            selectedFile = file;
+            fileNameDisplay.textContent = `Selected: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+            fileNameDisplay.classList.remove('hidden');
+            btnGenerate.disabled = false;
+        }
+
+        // Main Processing Flow
+        btnGenerate.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            if (!userApiKey) {
+                showError("No API key set. Please reload and enter your Gemini API key.");
+                return;
+            }
+            
+            showStep(stepLoading);
+            
+            try {
+                // 1. Extract Text
+                updateProgress("Preparing to read PDF...", "10%");
+                const pdfText = await extractTextFromPDF(selectedFile);
+                
+                if (!pdfText.trim()) {
+                    throw new Error("Could not extract any text from the PDF. It might be an image-based PDF without OCR.");
+                }
+
+                // 2. Call Gemini API
+                updateProgress("AI is structuring slides, drawing diagrams, and writing MCQs...", "50%");
+                slideData = await generateSlidesWithGemini(pdfText);
+
+                // 3. Generate PPTX
+                updateProgress("Rendering PowerPoint and visual elements...", "85%");
+                generatedPptx = createPPTX(slideData);
+                
+                // 4. Success
+                updateProgress("Done!", "100%");
+                setTimeout(() => showStep(stepSuccess), 500);
+
+            } catch (error) {
+                console.error(error);
+                showError(error.message || "An unexpected error occurred during generation.");
+                showStep(step1); 
+            }
+        });
+
+        // Helper to update progress UI
+        function updateProgress(text, width) {
+            loadingStatus.textContent = text;
+            progressBar.style.width = width;
+        }
+
+        // --- PDF Text Extraction ---
+        async function extractTextFromPDF(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                let fullText = "";
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += `--- Page ${i} ---\n` + pageText + "\n\n";
+                    
+                    page.cleanup(); 
+                    
+                    if (i % 2 === 0 || i === pdf.numPages) {
+                        let pct = Math.floor((i / pdf.numPages) * 35) + 10;
+                        updateProgress(`Reading PDF... Page ${i} of ${pdf.numPages}`, `${pct}%`);
+                        await new Promise(r => setTimeout(r, 10));
+                    }
+
+                    if (fullText.length > 120000) {
+                        fullText = fullText.substring(0, 120000) + "\n\n[DOCUMENT TRUNCATED HERE DUE TO MAX SIZE LIMITS]";
+                        break;
+                    }
+                }
+                
+                return fullText;
+            } catch (err) {
+                console.error("PDF Parsing Error:", err);
+                throw new Error("Failed to read PDF file. It might be corrupted or heavily encrypted.");
+            }
+        }
+
+        // --- Exponential Backoff Fetch Helper ---
+        async function fetchWithRetry(url, options, maxRetries = 3) {
+            const delays = [2000, 4000, 8000];
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok || response.status === 400 || response.status === 403 || response.status === 404) {
+                        return response;
+                    }
+                    // On 429, retry
+                    if (response.status === 429 && i < maxRetries - 1) {
+                        updateProgress(`Rate limited, retrying in ${delays[i]/1000}s...`, progressBar.style.width);
+                        await new Promise(resolve => setTimeout(resolve, delays[i]));
+                        continue;
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                }
+                if (i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, delays[i]));
+                }
+            }
+            throw new Error("Network request failed or timed out.");
+        }
+
+        // --- Gemini API Call (uses user's own key) ---
+        async function generateSlidesWithGemini(text) {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${userApiKey}`;
+            
+            const prompt = `You are an expert executive presentation designer and educational instructor. I will provide you with text extracted from a PDF document.
+Your task is to synthesize this document and create a professional PowerPoint presentation outline.
+
+CRITICAL INSTRUCTIONS (MUST OBEY TO PREVENT CRASHES):
+1. MAX 15 SLIDES: You MUST limit the presentation to a MAXIMUM of 15 slides total. Do NOT exceed this limit, or the JSON will be truncated and fail.
+2. BULLET POINTS: Keep bullets extremely concise (max 10-15 words per bullet). DO NOT write long paragraphs.
+3. VISUAL DIAGRAMS: Whenever appropriate, suggest a "visual_type" to accompany the text. Use "process" for sequential steps, "grid" for 4 related items, "comparison" for contrasting 2 things, or "none" if text-only is best. Provide 2-4 short labels for the visuals in "visual_labels".
+4. PRACTICE MCQs: At the end of the presentation, create exactly 3 Multiple Choice Questions based on the document.
+
+Document Text:
+${text}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { 
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            presentation_title: { type: "STRING" },
+                            presentation_subtitle: { type: "STRING" },
+                            slides: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        title: { type: "STRING" },
+                                        bullets: {
+                                            type: "ARRAY",
+                                            items: { type: "STRING" }
+                                        },
+                                        speaker_notes: { type: "STRING" },
+                                        visual_type: { type: "STRING", description: "Must be one of: 'none', 'process', 'grid', 'comparison'" },
+                                        visual_labels: {
+                                            type: "ARRAY",
+                                            items: { type: "STRING" },
+                                            description: "2 to 4 short phrases to populate the shapes in the visual diagram"
+                                        }
+                                    },
+                                    required: ["title", "bullets", "visual_type"]
+                                }
+                            },
+                            mcqs: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        question: { type: "STRING" },
+                                        options: {
+                                            type: "ARRAY",
+                                            items: { type: "STRING" },
+                                            description: "Exactly 4 options"
+                                        },
+                                        correct_answer: { type: "STRING" },
+                                        explanation: { type: "STRING" }
+                                    },
+                                    required: ["question", "options", "correct_answer", "explanation"]
+                                }
+                            }
+                        },
+                        required: ["presentation_title", "slides", "mcqs"]
+                    }
+                }
+            };
+
+            const response = await fetchWithRetry(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                let errorMsg = "API Request Failed.";
+                if (response.status === 400) errorMsg = "Invalid API Key or Bad Request.";
+                if (response.status === 403) errorMsg = "Permission Denied. Check your API key.";
+                if (response.status === 404) errorMsg = "Model not found. Your API key might not have access to this model.";
+                if (response.status === 429) errorMsg = "API Rate Limit Exceeded. Try again later.";
+                if (errData.error && errData.error.message) errorMsg = errData.error.message;
+                throw new Error(errorMsg);
+            }
+
+            const data = await response.json();
+            
+            try {
+                let responseText = data.candidates[0].content.parts[0].text;
+                let cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                return JSON.parse(cleanJson);
+            } catch (err) {
+                console.error("Failed to parse Gemini JSON:", err);
+                throw new Error("The AI response was too large and got cut off. Please try uploading a slightly smaller PDF.");
+            }
+        }
+
+        // --- PptxGenJS Generation with Visuals & MCQs ---
+        function createPPTX(data) {
+            let pptx = new PptxGenJS();
+            
+            pptx.layout = 'LAYOUT_16x9';
+            pptx.author = 'AI PDF to PPTX';
+            pptx.company = 'Generated via Gemini AI';
+            pptx.title = data.presentation_title || 'Presentation';
+
+            const theme = {
+                primary: '1E3A8A',
+                secondary: '3B82F6',
+                accent: 'F59E0B',
+                text: '1F2937',
+                bg: 'F9FAFB',
+                shapeBg: 'E0E7FF'
+            };
+
+            pptx.defineSlideMaster({
+                title: 'TITLE_SLIDE',
+                background: { color: theme.primary },
+                objects: [
+                    { rect: { x: '0%', y: '85%', w: '100%', h: '15%', fill: { color: theme.secondary } } },
+                    { rect: { x: '0%', y: '80%', w: '100%', h: '5%', fill: { color: theme.accent } } },
+                ]
+            });
+
+            pptx.defineSlideMaster({
+                title: 'CONTENT_SLIDE',
+                background: { color: theme.bg },
+                objects: [
+                    { rect: { x: 0, y: 0, w: '100%', h: 0.8, fill: { color: theme.primary } } },
+                    { rect: { x: 0, y: '95%', w: '100%', h: '5%', fill: { color: theme.secondary } } },
+                    { text: { options: { x: '90%', y: '95%', w: '10%', h: '5%', align: 'center', color: 'FFFFFF', fontSize: 10 }, text: '(slide)' } }
+                ]
+            });
+
+            pptx.defineSlideMaster({
+                title: 'MCQ_SLIDE',
+                background: { color: 'FFFFFF' },
+                objects: [
+                    { rect: { x: 0, y: 0, w: '100%', h: 1.0, fill: { color: '047857' } } },
+                    { text: { options: { x: 0.5, y: 0.2, w: '90%', h: 0.6, fontSize: 28, bold: true, color: 'FFFFFF', align: 'left' }, text: 'Knowledge Check' } },
+                    { rect: { x: 0, y: '95%', w: '100%', h: '5%', fill: { color: '047857' } } }
+                ]
+            });
+
+            // --- Title Slide ---
+            let titleSlide = pptx.addSlide({ masterName: 'TITLE_SLIDE' });
+            titleSlide.addText(data.presentation_title, { 
+                x: 0.5, y: 2.5, w: '90%', h: 1.5, 
+                fontSize: 48, bold: true, color: 'FFFFFF', 
+                align: 'center', valign: 'middle', fontFace: 'Arial'
+            });
+
+            if (data.presentation_subtitle) {
+                titleSlide.addText(data.presentation_subtitle, { 
+                    x: 1, y: 4.2, w: '80%', h: 1, 
+                    fontSize: 24, color: theme.accent, 
+                    align: 'center', valign: 'top', fontFace: 'Arial'
+                });
+            }
+
+            // --- Content Slides ---
+            if (data.slides && Array.isArray(data.slides)) {
+                data.slides.forEach(slideInfo => {
+                    let slide = pptx.addSlide({ masterName: 'CONTENT_SLIDE' });
+
+                    slide.addText(slideInfo.title, { 
+                        x: 0.5, y: 0.1, w: '90%', h: 0.6, 
+                        fontSize: 28, bold: true, color: 'FFFFFF', 
+                        align: 'left', valign: 'middle', fontFace: 'Arial'
+                    });
+
+                    let hasVisual = slideInfo.visual_type && slideInfo.visual_type !== 'none';
+                    let textWidth = hasVisual ? '45%' : '90%';
+                    let visualX = hasVisual ? 5.3 : 0;
+                    let labels = slideInfo.visual_labels || ["Point 1", "Point 2", "Point 3"];
+
+                    if (slideInfo.bullets && Array.isArray(slideInfo.bullets)) {
+                        let bulletItems = slideInfo.bullets.map(bullet => ({
+                            text: bullet,
+                            options: { bullet: true, color: theme.text, fontSize: 16, breakLine: true }
+                        }));
+                        slide.addText(bulletItems, { 
+                            x: 0.5, y: 1.2, w: textWidth, h: 3.8, 
+                            align: 'left', valign: 'top', 
+                            lineSpacing: 22,
+                            fontFace: 'Arial'
+                        });
+                    }
+
+                    if (hasVisual) {
+                        let vType = slideInfo.visual_type.toLowerCase();
+                        
+                        if (vType === 'process') {
+                            for(let i=0; i < Math.min(3, labels.length); i++) {
+                                let yPos = 1.3 + (i * 1.3);
+                                slide.addText(labels[i] || `Step ${i+1}`, {
+                                    shape: pptx.ShapeType.rightArrow,
+                                    x: visualX, y: yPos, w: 4.0, h: 1.0, 
+                                    fill: { color: i===0 ? theme.primary : (i===1 ? theme.secondary : theme.accent) },
+                                    line: { color: 'FFFFFF', width: 2 },
+                                    align: 'center', valign: 'middle',
+                                    color: 'FFFFFF', fontSize: 16, bold: true
+                                });
+                            }
+                        } 
+                        else if (vType === 'grid') {
+                            const positions = [
+                                {x: visualX, y: 1.4}, {x: visualX + 2.1, y: 1.4},
+                                {x: visualX, y: 3.3}, {x: visualX + 2.1, y: 3.3}
+                            ];
+                            for(let i=0; i < Math.min(4, labels.length); i++) {
+                                slide.addText(labels[i], {
+                                    shape: pptx.ShapeType.roundRect,
+                                    x: positions[i].x, y: positions[i].y, w: 1.9, h: 1.7,
+                                    fill: { color: theme.shapeBg },
+                                    line: { color: theme.secondary, width: 2 },
+                                    rectRadius: 0.2,
+                                    align: 'center', valign: 'middle',
+                                    color: theme.primary, fontSize: 16, bold: true
+                                });
+                            }
+                        }
+                        else if (vType === 'comparison') {
+                            slide.addText(labels[0] || "Item A", {
+                                shape: pptx.ShapeType.rect,
+                                x: visualX, y: 1.4, w: 1.9, h: 3.6,
+                                fill: { color: theme.shapeBg },
+                                align: 'center', valign: 'middle',
+                                color: theme.primary, fontSize: 18, bold: true
+                            });
+                            slide.addText(labels[1] || "Item B", {
+                                shape: pptx.ShapeType.rect,
+                                x: visualX + 2.1, y: 1.4, w: 1.9, h: 3.6,
+                                fill: { color: theme.primary },
+                                align: 'center', valign: 'middle',
+                                color: 'FFFFFF', fontSize: 18, bold: true
+                            });
+                        }
+                        else {
+                            slide.addText(labels.join('\n• '), {
+                                shape: pptx.ShapeType.rect,
+                                x: visualX, y: 1.8, w: 4.0, h: 2.5,
+                                fill: { color: theme.shapeBg },
+                                line: { color: theme.secondary, width: 3 },
+                                align: 'center', valign: 'middle',
+                                color: theme.primary, fontSize: 18, bold: true
+                            });
+                        }
+                    }
+
+                    if (slideInfo.speaker_notes) {
+                        slide.addNotes(slideInfo.speaker_notes);
+                    }
+                });
+            }
+
+            // --- MCQ Section ---
+            if (data.mcqs && Array.isArray(data.mcqs) && data.mcqs.length > 0) {
+                let mcqIntroSlide = pptx.addSlide({ masterName: 'TITLE_SLIDE' });
+                mcqIntroSlide.addText("Knowledge Check", { 
+                    x: 0.5, y: 2.5, w: '90%', h: 1.5, 
+                    fontSize: 48, bold: true, color: 'FFFFFF', align: 'center' 
+                });
+
+                data.mcqs.forEach((mcq, index) => {
+                    let slide = pptx.addSlide({ masterName: 'MCQ_SLIDE' });
+
+                    slide.addText(`Q${index + 1}: ${mcq.question}`, { 
+                        x: 0.5, y: 1.2, w: '90%', h: 1.0, 
+                        fontSize: 22, bold: true, color: theme.text, fontFace: 'Arial'
+                    });
+
+                    if (mcq.options && Array.isArray(mcq.options)) {
+                        let optY = 2.4;
+                        const letters = ['A', 'B', 'C', 'D'];
+                        mcq.options.forEach((opt, oIdx) => {
+                            if(oIdx > 3) return;
+                            
+                            slide.addText(letters[oIdx], {
+                                shape: pptx.ShapeType.ellipse,
+                                x: 0.5, y: optY, w: 0.4, h: 0.4,
+                                fill: { color: 'E5E7EB' },
+                                align: 'center', valign: 'middle',
+                                color: '374151', fontSize: 14, bold: true
+                            });
+                            
+                            slide.addText(opt, { 
+                                x: 1.1, y: optY, w: '80%', h: 0.4, 
+                                fontSize: 18, color: theme.text, fontFace: 'Arial', valign: 'middle'
+                            });
+                            optY += 0.7;
+                        });
+                    }
+
+                    slide.addShape(pptx.ShapeType.rect, {
+                        x: 0.5, y: 5.5, w: '90%', h: 1.2,
+                        fill: { color: 'ECFDF5' },
+                        line: { color: '10B981', width: 2 }
+                    });
+                    
+                    slide.addText([
+                        { text: "Answer: ", options: { bold: true, color: '047857' } },
+                        { text: mcq.correct_answer + "\n", options: { color: '047857' } },
+                        { text: mcq.explanation, options: { fontSize: 14, color: '065F46' } }
+                    ], { 
+                        x: 0.7, y: 5.6, w: '86%', h: 1.0, 
+                        valign: 'top', fontFace: 'Arial'
+                    });
+                });
+            }
+
+            return pptx;
+        }
+
+        // --- Download Handler ---
+        btnDownload.addEventListener('click', () => {
+            if (generatedPptx && slideData) {
+                let filename = (slideData.presentation_title || "Comprehensive_Presentation")
+                    .replace(/[^a-z0-9]/gi, '_')
+                    .toLowerCase() + '.pptx';
+                
+                try {
+                    generatedPptx.writeFile({ fileName: filename })
+                    .catch(err => {
+                        console.error("Download Blocked:", err);
+                        document.getElementById('download-warning').classList.remove('hidden');
+                    });
+                } catch (e) {
+                    console.error("Download Blocked:", e);
+                    document.getElementById('download-warning').classList.remove('hidden');
+                }
+            }
+        });
+
+        // --- Start Over Handler ---
+        btnStartOver.addEventListener('click', () => {
+            selectedFile = null;
+            generatedPptx = null;
+            slideData = null;
+            fileInput.value = '';
+            fileNameDisplay.classList.add('hidden');
+            btnGenerate.disabled = true;
+            document.getElementById('download-warning').classList.add('hidden');
+            showStep(step1);
+        });
+
+    </script>
+</body>
+</html>

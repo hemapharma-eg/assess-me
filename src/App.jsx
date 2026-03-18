@@ -2237,7 +2237,7 @@ function TeacherPortal({ setRole, user, showToast }) {
           </h1>
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-1">
-            {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback', 'SlideCaster'].map(t => (
+            {['Classes', 'Quizzes', 'Polls', 'Attendance', 'Feedback', 'PDF to PPTX', 'SlideCaster'].map(t => (
               <button
                 key={t} onClick={() => handleTabChange(t.toLowerCase())}
                 className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === t.toLowerCase() ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -2283,7 +2283,7 @@ function TeacherPortal({ setRole, user, showToast }) {
       {/* MOBILE Navigation */}
       <div className="md:hidden flex p-3 border-b bg-white shadow-sm sticky top-16 z-40 w-full print:hidden">
         <div className="flex justify-between items-center bg-white rounded-full p-2 border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-2">
-          {['classes', 'quizzes', 'polls', 'attendance', 'feedback', 'slidecaster'].map(tab => (
+          {['classes', 'quizzes', 'polls', 'attendance', 'feedback', 'pdf to pptx', 'slidecaster'].map(tab => (
             <button
               key={tab} onClick={() => handleTabChange(tab)}
               className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
@@ -2344,6 +2344,11 @@ function TeacherPortal({ setRole, user, showToast }) {
         )}
         {activeTab === 'attendance' && <AttendanceTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
         {activeTab === 'feedback' && <FeedbackTabMain user={user} profile={profile} classes={classes} reports={reports} asyncReports={asyncReports} onLaunch={onLaunch} session={session} responses={responses} roomCode={roomCode} onEnd={onEnd} updateReportStatus={updateReportStatus} saOverrides={saOverrides} setSaOverrides={setSaOverrides} goToLiveSession={() => { const t = getSessionTab(); if (t) setActiveTab(t); }} showToast={showToast} />}
+        {activeTab === 'pdf to pptx' && (
+          <div className="w-full h-[calc(100vh-80px)] min-h-[800px] rounded-[2.5rem] overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <iframe src="/pptxgen.html" className="w-full h-full border-none" title="PDF to PPTX" />
+          </div>
+        )}
         {activeTab === 'slidecaster' && (
           <div className="w-full h-[calc(100vh-80px)] min-h-[800px] rounded-[2.5rem] overflow-hidden border border-slate-200 bg-white shadow-2xl">
             <iframe src="/slidecaster.html" className="w-full h-full border-none" title="SlideCaster" />
