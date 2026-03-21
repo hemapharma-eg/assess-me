@@ -144,18 +144,29 @@
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center">
                         <span class="bg-primary text-white w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 shadow-md">1</span>
-                        <h2 class="text-2xl font-semibold">Upload Document</h2>
+                        <h2 class="text-2xl font-semibold">Provide Content</h2>
                     </div>
                 </div>
 
-                <div id="drop-zone" class="mt-6 flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-blue-50 hover:border-primary transition-all duration-200">
-                    <div class="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
-                        <i class="fa-solid fa-cloud-arrow-up text-5xl text-primary mb-4 opacity-80"></i>
-                        <p class="mb-2 text-lg text-slate-700 font-semibold"><span class="font-bold">Click to upload</span> or drag and drop</p>
-                        <p class="text-sm text-slate-500">PDF documents only (Max 50MB recommended)</p>
-                        <p id="file-name-display" class="mt-4 text-sm font-bold text-emerald-600 hidden"></p>
+                <div class="flex gap-4 mb-6 relative border-b border-slate-200">
+                    <button id="tab-pdf" class="flex-1 py-3 font-bold text-center border-b-2 border-primary text-primary transition-colors hover:bg-slate-50">Upload PDF</button>
+                    <button id="tab-prompt" class="flex-1 py-3 font-bold text-center border-b-2 border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors">Write Prompt</button>
+                </div>
+
+                <div id="pdf-input-container">
+                    <div id="drop-zone" class="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-blue-50 hover:border-primary transition-all duration-200">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+                            <i class="fa-solid fa-cloud-arrow-up text-5xl text-primary mb-4 opacity-80"></i>
+                            <p class="mb-2 text-lg text-slate-700 font-semibold"><span class="font-bold">Click to upload</span> or drag and drop</p>
+                            <p class="text-sm text-slate-500">PDF documents only (Max 50MB recommended)</p>
+                            <p id="file-name-display" class="mt-4 text-sm font-bold text-emerald-600 hidden"></p>
+                        </div>
+                        <input id="pdf-upload" type="file" accept="application/pdf" class="hidden" />
                     </div>
-                    <input id="pdf-upload" type="file" accept="application/pdf" class="hidden" />
+                </div>
+
+                <div id="prompt-input-container" class="hidden">
+                    <textarea id="prompt-textarea" class="w-full h-64 p-4 border-2 border-slate-300 rounded-xl bg-slate-50 hover:bg-white hover:border-primary focus:bg-white focus:border-primary focus:ring-4 focus:ring-blue-50 outline-none transition-all resize-none text-slate-700" placeholder="Type or paste the text or prompt you want to convert into slides..."></textarea>
                 </div>
 
                 <div class="mt-6">
@@ -271,6 +282,13 @@
         const stepLoading = document.getElementById('step-loading');
         const stepSuccess = document.getElementById('step-success');
         
+        let inputMode = 'pdf';
+        const tabPdf = document.getElementById('tab-pdf');
+        const tabPrompt = document.getElementById('tab-prompt');
+        const pdfInputContainer = document.getElementById('pdf-input-container');
+        const promptInputContainer = document.getElementById('prompt-input-container');
+        const promptTextarea = document.getElementById('prompt-textarea');
+
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('pdf-upload');
         const fileNameDisplay = document.getElementById('file-name-display');
@@ -482,6 +500,38 @@
             handleFiles(this.files);
         });
 
+        function checkGenerateEnabled() {
+            if (inputMode === 'pdf') {
+                btnGenerate.disabled = !selectedFile;
+            } else {
+                btnGenerate.disabled = promptTextarea.value.trim().length === 0;
+            }
+        }
+
+        tabPdf.addEventListener('click', () => {
+            inputMode = 'pdf';
+            tabPdf.classList.add('border-primary', 'text-primary');
+            tabPdf.classList.remove('border-transparent', 'text-slate-500');
+            tabPrompt.classList.remove('border-primary', 'text-primary');
+            tabPrompt.classList.add('border-transparent', 'text-slate-500');
+            pdfInputContainer.classList.remove('hidden');
+            promptInputContainer.classList.add('hidden');
+            checkGenerateEnabled();
+        });
+
+        tabPrompt.addEventListener('click', () => {
+            inputMode = 'prompt';
+            tabPrompt.classList.add('border-primary', 'text-primary');
+            tabPrompt.classList.remove('border-transparent', 'text-slate-500');
+            tabPdf.classList.remove('border-primary', 'text-primary');
+            tabPdf.classList.add('border-transparent', 'text-slate-500');
+            promptInputContainer.classList.remove('hidden');
+            pdfInputContainer.classList.add('hidden');
+            checkGenerateEnabled();
+        });
+
+        promptTextarea.addEventListener('input', checkGenerateEnabled);
+
         function handleFiles(files) {
             if (files.length === 0) return;
             const file = files[0];
@@ -494,12 +544,14 @@
             selectedFile = file;
             fileNameDisplay.textContent = `Selected: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
             fileNameDisplay.classList.remove('hidden');
-            btnGenerate.disabled = false;
+            checkGenerateEnabled();
         }
 
         // Main Processing Flow
         btnGenerate.addEventListener('click', async () => {
-            if (!selectedFile) return;
+            if (inputMode === 'pdf' && !selectedFile) return;
+            if (inputMode === 'prompt' && promptTextarea.value.trim().length === 0) return;
+            
             if (!userApiKey) {
                 showError("No API key set. Please reload and enter your Gemini API key.");
                 return;
@@ -508,17 +560,24 @@
             showStep(stepLoading);
             
             try {
-                // 1. Extract Text
-                updateProgress("Preparing to read PDF...", "10%");
-                const pdfText = await extractTextFromPDF(selectedFile);
+                let textToProcess = '';
                 
-                if (!pdfText.trim()) {
-                    throw new Error("Could not extract any text from the PDF. It might be an image-based PDF without OCR.");
+                if (inputMode === 'pdf') {
+                    // 1. Extract Text
+                    updateProgress("Preparing to read PDF...", "10%");
+                    textToProcess = await extractTextFromPDF(selectedFile);
+                    
+                    if (!textToProcess.trim()) {
+                        throw new Error("Could not extract any text from the PDF. It might be an image-based PDF without OCR.");
+                    }
+                } else {
+                    updateProgress("Preparing text prompt...", "10%");
+                    textToProcess = promptTextarea.value.trim();
                 }
 
                 // 2. Call Gemini API
                 updateProgress("AI is structuring slides, drawing diagrams, and writing MCQs...", "50%");
-                slideData = await generateSlidesWithGemini(pdfText);
+                slideData = await generateSlidesWithGemini(textToProcess);
 
                 // 3. Generate PPTX
                 updateProgress("Rendering PowerPoint and visual elements...", "85%");
@@ -950,8 +1009,9 @@ ${text}`;
             generatedPptx = null;
             slideData = null;
             fileInput.value = '';
+            promptTextarea.value = '';
             fileNameDisplay.classList.add('hidden');
-            btnGenerate.disabled = true;
+            checkGenerateEnabled();
             document.getElementById('download-warning').classList.add('hidden');
             showStep(step1);
         });
